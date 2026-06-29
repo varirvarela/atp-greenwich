@@ -94,8 +94,15 @@ function runEloTests() {
   const results = [];
 
   function test(name, actual, expected, tolerance) {
-    const tol  = tolerance || 0;
-    const pass = Math.abs(actual - expected) <= tol;
+    const tol = tolerance || 0;
+    let pass;
+    if (typeof actual === 'string') {
+      pass = actual === expected;
+    } else if (typeof actual === 'boolean') {
+      pass = actual === expected;
+    } else {
+      pass = Math.abs(actual - expected) <= tol;
+    }
     results.push({ name, pass, actual, expected });
     if (!pass) console.error('FAIL:', name, '— got', actual, 'expected', expected);
   }
