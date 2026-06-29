@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+scripts/node_modules/
+
+# Build outputs
+dist/
+dist-admin/
+dist-companion/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Admin app build — never commit built admin to public repo
+dist-admin/
+
+# Backup files
+scripts/backup-*.json

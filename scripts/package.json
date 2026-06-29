@@ -1,0 +1,11 @@
+{
+  "name": "atp-greenwich-scripts",
+  "version": "0.01.0",
+  "description": "Server-side scripts for ATP Greenwich (GitHub Actions + Cloudflare Worker)",
+  "type": "commonjs",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "node-fetch": "^2.7.0",
+    "web-push": "^3.6.0"
+  }
+}

@@ -1,0 +1,39 @@
+# .github/workflows/backup.yml
+# Nightly Firebase Realtime Database snapshot saved as GitHub Actions artifact.
+# Runs at 3am UTC every day.
+
+name: Nightly Firebase Backup
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install firebase-admin
+        run: npm install firebase-admin
+        working-directory: scripts
+
+      - name: Run backup
+        run: node backup.js
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firebase-backup-${{ github.run_number }}
+          path: scripts/backup-*.json
+          retention-days: 30
