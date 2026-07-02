@@ -1,0 +1,18 @@
+{
+  "name": "ATP Greenwich",
+  "short_name": "ATP",
+  "description": "Amateur Tennis and Parrilla — private league for friends.",
+  "start_url": "/atp-greenwich/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f3ec",
+  "theme_color": "#f7f3ec",
+  "icons": [
+    {
+      "src": "/atp-greenwich/images/atp-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

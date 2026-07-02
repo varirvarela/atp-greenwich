@@ -27,4 +27,9 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  test: {
+    globals: true,           // describe / it / expect available without importing
+    environment: 'node',     // pure functions — no browser needed
+    include: ['src/**/*.test.js'],
+  },
 });

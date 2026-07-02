@@ -31,3 +31,7 @@ dist-admin/
 
 # Backup files
 scripts/backup-*.json
+
+# Playwright test output (generated on each run, not source)
+test-results/
+playwright-report/

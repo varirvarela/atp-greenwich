@@ -1,0 +1,652 @@
+ATP GREENWICH — PLAYER APP TEST SEQUENCE
+Phase 1B + 3 + 4 + 5 + Vitest + Playwright + Emulator | Updated: 2026-07-02 (rev 8)
+═══════════════════════════════════════════════════════════════════════
+
+
+TEST TYPE LEGEND
+────────────────
+[VITEST]   Fully automated. Runs in terminal via `npm test`. No browser needed.
+[CONSOLE]  Semi-automated. Paste command in browser DevTools console (F12 > Console).
+[MANUAL]   Human eyes required. Open the app in a browser and interact.
+[ADMIN]    Requires opening Firebase console and editing a value directly.
+
+
+═══════════════════════════════════════════════════════════════════════
+TEST INVENTORY — ALL TESTS AT A GLANCE
+═══════════════════════════════════════════════════════════════════════
+
+VITEST (npm test) — 93 tests, ~1.5s, no browser needed
+  elo.test.js       37 tests   calculateElo, expectedScore, getStartingElo,
+                               eloTierLabel, eloTrend
+  scoring.test.js   56 tests   calculateStanding, buildLeagueTable, isQualified,
+                               getQualifiedPlayers, matchCountBetween, canPlayAgainst
+
+PLAYWRIGHT (npm run test:e2e) — 65 tests, real browser, Firebase Emulator (port 9000)
+  e2e/registration.spec.js  9 tests   form validation, submit, F1-13 admin status change (Flow 1)
+  e2e/invite.spec.js        8 tests   code errors, verification, registration, code marked used (Flow 2)
+  e2e/login.spec.js         6 tests   email/alias login, wrong pwd, unknown email, Enter key (Flow 3)
+  e2e/app-shell.spec.js     7 tests   DEV badge, tab routing, profile fields (Flow 4)
+  e2e/avatar.spec.js        9 tests   modal open/close, SVG clipping fix, shuffle, confirm (Flow 5)
+  e2e/session.spec.js       4 tests   session persist, tampered creds, sign out (Flow 6)
+  e2e/matches.spec.js      12 tests   sections, confirm/dispute/enter/skip, propose (Flow 7)
+  e2e/standings.spec.js     5 tests   league table, ELO rankings, You label (Flow 8)
+  e2e/feed.spec.js          5 tests   badge, matches, ELO deltas, accent border, empty state (Flow 9)
+  All tests use the Firebase Emulator — zero writes to real Firebase.
+  Playwright starts both the emulator (port 9000) and Vite (port 5174) automatically.
+
+HOW THE EMULATOR WORKS:
+  firebase.json declares the RTDB emulator on port 9000.
+  VITE_USE_EMULATOR=true tells firebase.js to call connectDatabaseEmulator.
+  playwright.config.js passes that env var to the Vite child process.
+  window._atpTest.adminWrite/adminRead replace [ADMIN] Firebase console steps in tests.
+  Data resets between test suites via clearData() / beforeAll / afterAll hooks.
+  To run the emulator standalone: npm run emulator
+
+CONSOLE HELPERS — still available for manual exploration
+  window.runEloTests()             ELO sanity check (redundant — covered by Vitest)
+  window.runScoringTests()         Scoring sanity check (redundant — covered by Vitest)
+  window._atpTest.seedTestData()   Writes TEST-1234 and USED-9999 invite codes
+  window._atpTest.seedLeague()     Writes full dummy season/league/players/matches
+  window._atpTest.clearLeague()    Deletes dummy data
+  window._atpTest.app()            Jumps into app shell as "Dev Player"
+  window._atpTest.avatarPicker()   Jumps into avatar picker screen
+  window._atpTest.adminWrite(path, value)   Direct Firebase write (emulator-safe)
+  window._atpTest.adminRead(path)           Direct Firebase read (emulator-safe)
+  window._atpTest.seedLoginPlayer()         Seeds testlogin@atp.test / Test1234!
+
+MANUAL FLOWS — none remain for functional testing
+
+
+═══════════════════════════════════════════════════════════════════════
+DEV vs PROD — HOW TO STAY SAFE
+═══════════════════════════════════════════════════════════════════════
+
+RULE: `npm run dev` → DEV mode.  `npm run build` → PROD build.
+
+DEV mode prefixes all Firebase paths with `_dev/`. Prod writes to root.
+They NEVER mix.
+
+HOW TO KNOW WHICH MODE YOU ARE IN:
+  - A yellow "DEV" badge appears in the top-left of the app bar.
+  - No badge = production build.
+
+SETUP FOR MANUAL FLOWS (run once before testing):
+  1. npm run dev
+  2. Open http://localhost:5173/atp-greenwich/
+  3. [CONSOLE] window._atpTest.seedTestData()    — for Flows 1 + 2
+  4. [CONSOLE] window._atpTest.seedLeague()      — for Flows 7 + 8 + 9
+  5. [CONSOLE] window._atpTest.app()             — jump into app shell
+
+TO RESET DEV DATA:
+  [CONSOLE] window._atpTest.clearLeague()  then re-run seedLeague()
+
+
+═══════════════════════════════════════════════════════════════════════
+VITEST — AUTOMATED UNIT TESTS
+═══════════════════════════════════════════════════════════════════════
+
+Run:   npm test           (single run, CI-style)
+       npm run test:watch  (watch mode — re-runs on every save)
+
+──────────────────────────────────────────────────────────────────────
+[VITEST] src/shared/elo.test.js  (37 tests)
+──────────────────────────────────────────────────────────────────────
+
+  calculateElo
+    equal ratings (1200 vs 1200)
+      ✓ winner gains exactly 16
+      ✓ loser loses exactly 16
+      ✓ new rating A = 1216
+      ✓ new rating B = 1184
+    underdog wins (1000 vs 1400, A wins)
+      ✓ underdog gains more than 20 points
+      ✓ favourite loses more than 20 points
+      ✓ underdog new rating increases
+    favourite wins (1400 vs 1000, A wins)
+      ✓ favourite gains less than 10 points
+      ✓ underdog loses less than 10 points
+    slight underdog wins (1180 vs 1220, A wins)
+      ✓ underdog gains more than 16
+      ✓ new rating exceeds 1196
+    slight favourite wins (1220 vs 1180, A wins)
+      ✓ favourite gains less than 16
+    B wins (walkover)
+      ✓ B gains 16
+      ✓ new rating B = 1216
+    custom K-factor
+      ✓ K=16 equal ratings — winner gains 8
+    ELO conservation
+      ✓ deltaA + deltaB always equals zero (2 cases)
+    expectedA field
+      ✓ equal ratings — expectedA is 0.5
+      ✓ higher-rated A has expectedA > 0.5
+
+  expectedScore
+      ✓ equal ratings → 0.5
+      ✓ much higher A → close to 1
+      ✓ much lower A → close to 0
+
+  getStartingElo
+      ✓ beginner_new → 800
+      ✓ beginner → 1000
+      ✓ intermediate → 1200
+      ✓ advanced → 1400
+      ✓ expert → 1600
+      ✓ unknown level → 1000
+      ✓ undefined → 1000
+
+  eloTierLabel
+      ✓ ≥ 1600 → Expert
+      ✓ 1650 → Expert
+      ✓ 1400 → Advanced
+      ✓ 1399 → Intermediate
+      ✓ 1200 → Intermediate
+      ✓ 1199 → Beginner
+      ✓ 1000 → Beginner
+      ✓  999 → Newcomer
+      ✓    0 → Newcomer
+
+  eloTrend
+      ✓ three positive deltas summing > 10 → up
+      ✓ three negative deltas summing < -10 → down
+      ✓ mixed deltas within ±10 → neutral
+      ✓ empty history → neutral
+      ✓ null history → neutral
+      ✓ only uses last 3 entries — old losses ignored if recent gains are strong
+
+──────────────────────────────────────────────────────────────────────
+[VITEST] src/shared/scoring.test.js  (56 tests)
+──────────────────────────────────────────────────────────────────────
+
+  calculateStanding
+    single win
+      ✓ matchesWon = 1
+      ✓ matchesPlayed = 1
+      ✓ gamesWon = 13 (6+7)
+      ✓ gamesLost = 8 (3+5)
+      ✓ gameDiff = 5
+      ✓ winRate = 1
+      ✓ points = 1
+    single loss
+      ✓ matchesWon = 0
+      ✓ gamesWon = 7 (3+4)
+      ✓ gamesLost = 12 (6+6)
+      ✓ gameDiff = -5
+      ✓ winRate = 0
+    from B side — same match, B perspective
+      ✓ B lost — matchesWon = 0
+      ✓ B gamesWon = 8 (opponent side of sets)
+      ✓ B gamesLost = 13
+    win/loss mix
+      ✓ matchesPlayed = 2
+      ✓ matchesWon = 1
+      ✓ winRate = 0.5
+    pending/non-confirmed matches are ignored
+      ✓ only 1 match counted
+    empty match list
+      ✓ zero wins
+      ✓ zero played
+      ✓ winRate = 0
+      ✓ gameDiff = 0
+    3-set match
+      ✓ gamesWon = 16
+      ✓ gamesLost = 13
+      ✓ gameDiff = 3
+
+  buildLeagueTable
+      ✓ returns one row per member uid
+      ✓ all rows have rank, uid, and standing
+      ✓ player with more wins ranks higher
+      ✓ tied players share the same rank
+      ✓ rank skips after a tie (1,1,3 not 1,1,2)
+      ✓ handles null/empty allMatches gracefully
+      ✓ tiebreak: same wins but better gameDiff ranks higher
+
+  isQualified
+      ✓ meets both thresholds → qualified
+      ✓ exact minimums → qualified
+      ✓ not enough matches → not qualified
+      ✓ not enough wins → not qualified
+      ✓ uses default thresholds when config omitted
+
+  getQualifiedPlayers
+      ✓ returns only qualified players
+      ✓ caps at bracketSize
+
+  matchCountBetween
+      ✓ counts all non-cancelled statuses between A and B
+      ✓ counts regardless of playerA/playerB order
+      ✓ does not count matches involving a third player
+      ✓ returns 0 when no matches exist between the pair
+      ✓ handles empty match object
+      ✓ handles null match object
+
+  canPlayAgainst
+      ✓ 0 matches → can play
+      ✓ 1 match → can still play
+      ✓ 2 matches → cap reached, cannot play
+      ✓ cap on A vs B does not affect A vs C
+
+
+═══════════════════════════════════════════════════════════════════════
+CONSOLE HELPERS — SEMI-AUTOMATED CHECKS
+═══════════════════════════════════════════════════════════════════════
+Prerequisite: npm run dev → open http://localhost:5173/atp-greenwich/
+
+[CONSOLE] C1 — window.runEloTests()
+  Expected: all ELO tests pass in console, no FAIL lines printed
+
+[CONSOLE] C2 — window.runScoringTests()
+  Expected: all scoring tests pass in console, no FAIL lines printed
+
+[CONSOLE] C3 — window._atpTest.seedTestData()
+  Expected: invite codes TEST-1234 (used:false) and USED-9999 (used:true)
+  written to _dev/invite_codes/ in Firebase
+
+[CONSOLE] C4 — window._atpTest.seedLeague()
+  Expected: 5 checkmarks in console; _dev/config, _dev/seasons, _dev/players/
+  all written with 1 season, 1 league, 4 players, 5 matches in varied states
+
+[CONSOLE] C5 — window._atpTest.clearLeague()
+  Expected: _dev/config, _dev/seasons, _dev/players/test_* all nullified;
+  invite codes preserved
+
+[CONSOLE] C6 — window._atpTest.app()
+  Expected: app shell loads immediately as "Dev Player" (uid: dev_test_uid)
+
+[CONSOLE] C7 — window._atpTest.avatarPicker()
+  Expected: avatar picker screen loads; pick and confirm an avatar → app shell loads
+
+
+═══════════════════════════════════════════════════════════════════════
+MANUAL FLOWS
+═══════════════════════════════════════════════════════════════════════
+Prerequisite: npm run dev → open http://localhost:5173/atp-greenwich/
+              Seed data run if noted in flow prerequisites.
+
+────────────────────────────────────────────────────────────────────
+FLOW 1 — REQUEST ACCESS
+────────────────────────────────────────────────────────────────────
+Prerequisite: [CONSOLE] window._atpTest.seedTestData()
+
+[MANUAL] F1-01  Landing screen appears with "Request Access", "I have an invite code",
+                "Already a member? Sign in"
+                Expected: 3 buttons visible, ATP Greenwich branding, ONE hero image
+                (serve or parrilla — random each load). Refresh a few times — image alternates.
+
+[MANUAL] F1-02  Tap "Request Access"
+                Expected: form with Full Name, Email, Alias, Password, Confirm Password
+
+[MANUAL] F1-03  Enter an email that already exists in Firebase
+                (check _dev/email_index/ for an existing key)
+                Expected: email field red, hint "This email is already registered. Sign in instead?"
+
+[MANUAL] F1-04  Enter a brand-new email not in Firebase
+                Expected: email field green, hint "Email available"
+
+[MANUAL] F1-05  Type a short password (e.g. "abc")
+                Expected: strength bar shows Weak (red)
+
+[MANUAL] F1-06  Type a medium password (e.g. "Tennis1")
+                Expected: strength bar shows Medium (orange, 6+ chars)
+
+[MANUAL] F1-07  Type a strong password (e.g. "Tennis1!greenwich")
+                Expected: strength bar shows Strong (green, 10+ chars)
+
+[MANUAL] F1-08  Type something different in Confirm Password while passwords don't match
+                Expected: red error "Passwords do not match." appears immediately
+
+[MANUAL] F1-09  Correct Confirm Password to match
+                Expected: error disappears, confirm field gets green border
+
+[MANUAL] F1-10  In Alias, type an alias already used by another player
+                Expected: after 500ms, field red, hint "Alias already taken — choose another."
+                Submit button stays disabled
+
+[MANUAL] F1-11  Clear alias, type a new unique alias (2+ chars)
+                Expected: after 500ms, field green, hint "Alias available"
+                All fields valid → submit button enables
+
+[MANUAL] F1-12  Submit the form
+                Expected: Waiting for Approval screen with player's first name, pulse-dot animation
+
+[ADMIN]  F1-13  Firebase console: _dev/players/{uid}/status → change "invited" to "onboarding"
+                (find uid via _dev/email_index/{emailKey})
+                Expected: waiting screen auto-advances to Self Assessment without refreshing
+
+[MANUAL] F1-14  Self Assessment — verify exactly 3 skill level cards:
+                Beginner / Intermediate / Advanced
+                Expected: 3 cards visible (not 5)
+
+[MANUAL] F1-15  Tap each card one at a time
+                Expected: only the last-tapped card is highlighted; Continue button enables
+
+[MANUAL] F1-16  Tap "Continue" (no leagues configured)
+                Expected: avatar picker loads directly (league step skipped)
+
+[MANUAL] F1-17  Three style tabs appear: Adventurer, Big Smile, Pixel Art
+                Expected: tabs visible, preview shows 136px circular avatar
+
+[MANUAL] F1-18  Tap each style tab
+                Expected: preview animates (scale + fade), shows different avatar style
+
+[MANUAL] F1-19  Tap "Shuffle" several times
+                Expected: preview updates with new random avatar each time; no errors
+
+[MANUAL] F1-20  Tap "This is me →"
+                Expected: "Checking…" briefly → app shell loads
+
+[ADMIN]  F1-21  Firebase console: _dev/players/{uid}/
+                Expected: status="active", avatarId="style::seed", eloRating=1000,
+                selfAssessment present
+
+[ADMIN]  F1-22  Firebase console: _dev/email_index/
+                Expected: entry exists for this player's email
+
+
+────────────────────────────────────────────────────────────────────
+FLOW 2 — INVITE CODE REGISTRATION
+────────────────────────────────────────────────────────────────────
+Prerequisite: [CONSOLE] window._atpTest.seedTestData()
+
+[MANUAL] F2-01  Open: http://localhost:5173/atp-greenwich/?code=USED-9999
+                Expected: Invite code screen with USED-9999 pre-filled
+
+[MANUAL] F2-02  Tap "Verify Code"
+                Expected: error "This code has already been used."
+
+[MANUAL] F2-03  Open: http://localhost:5173/atp-greenwich/?code=FAKE-0000
+                Expected: Invite code screen with FAKE-0000 pre-filled
+
+[MANUAL] F2-04  Tap "Verify Code"
+                Expected: error "Code not found. Double-check and try again."
+
+[MANUAL] F2-05  Open: http://localhost:5173/atp-greenwich/?code=TEST-1234
+                Expected: Invite code screen with TEST-1234 pre-filled, button enabled
+
+[MANUAL] F2-06  Tap "Verify Code"
+                Expected: button changes to "Continue →", "Code verified ✓" badge shown
+
+[MANUAL] F2-07  Tap "Continue →"
+                Expected: "Set up your profile" with Full Name, Alias, Email (optional),
+                Password, Confirm Password
+
+[MANUAL] F2-08  In Alias, type an alias already used by an existing player
+                Expected: after 500ms, field red, "Alias already taken — choose another."
+                Submit stays disabled
+
+[MANUAL] F2-09  Clear alias, type a unique alias
+                Expected: after 500ms, field green, "Alias available"
+
+[MANUAL] F2-10  Leave Email blank — fill Name, valid alias, matching passwords
+                Expected: "Create Account" enables; blank email is allowed
+
+[MANUAL] F2-11  Fill Email with an already-registered address
+                Expected: field red, "This email is already registered." button disabled
+
+[MANUAL] F2-12  Enter a new unregistered email
+                Expected: field green, "Email available"
+
+[MANUAL] F2-13  Enter mismatching passwords
+                Expected: real-time mismatch error appears immediately
+
+[MANUAL] F2-14  Correct passwords, submit
+                Expected: Self Assessment screen (same 3-level cards as F1-14)
+
+[MANUAL] F2-15  Select a level → Continue → Avatar picker → confirm avatar
+                Expected: app shell loads
+
+[ADMIN]  F2-16  Firebase console: _dev/invite_codes/TEST-1234/
+                Expected: used = true
+
+[ADMIN]  F2-17  Firebase console: _dev/players/ — find new player uid
+                Expected: name, alias, email (if entered), passwordHash,
+                status="active", avatarId, eloRating all present
+
+
+────────────────────────────────────────────────────────────────────
+FLOW 3 — LOGIN
+────────────────────────────────────────────────────────────────────
+Prerequisite: Flow 1 or 2 completed (active player exists)
+
+[MANUAL] F3-01  DevTools > Application > Local Storage > delete atp_player_creds → reload
+                Expected: landing screen appears
+
+[MANUAL] F3-02  Tap "Already a member? Sign in"
+                Expected: login screen with "Email or Username" and "Password" fields
+
+[MANUAL] F3-03  Enter correct email + correct password (from Flow 1 or 2)
+                Expected: app shell loads
+
+[MANUAL] F3-04  Clear localStorage, reload → enter correct email + WRONG password
+                Expected: "Incorrect password." error
+
+[MANUAL] F3-05  Clear localStorage, reload → enter email that does not exist
+                Expected: "Account not found. Check your email or username."
+
+[MANUAL] F3-06  Clear localStorage, reload → enter alias (not email) + correct password
+                Expected: app shell loads (alias lookup fallback works)
+
+[MANUAL] F3-07  In password field, press Enter instead of tapping Sign In
+                Expected: same login attempt fires
+
+
+────────────────────────────────────────────────────────────────────
+FLOW 4 — APP SHELL & PROFILE TAB
+────────────────────────────────────────────────────────────────────
+
+[CONSOLE] F4-01  window._atpTest.app()
+                 Expected: app shell loads as "Dev Player"
+                 Yellow "DEV" badge visible in top bar (confirms dev mode)
+
+[MANUAL]  F4-02  Tap Feed, Matches, Standings tabs
+                 Expected: each shows a spinner briefly then either data (if
+                 seedLeague was run) or an appropriate empty state.
+                 Bracket tab shows "Coming in Phase 6" placeholder.
+
+[MANUAL]  F4-03  Tap "Profile" tab
+                 Expected:
+                   - Avatar circle (80px, adventurer style)
+                   - Name "Dev Player", alias "@devplayer"
+                   - ELO rating "1220", tier badge "Intermediate"
+                   - Season stats "—" for Wins/Losses/Played
+                   - "Stats available in Phase 4" badge
+                   - Email, status "active", self-assessed level
+                   - "Change avatar" button (teal, below avatar)
+                   - "Sign Out" button at bottom
+
+
+────────────────────────────────────────────────────────────────────
+FLOW 5 — CHANGE AVATAR
+────────────────────────────────────────────────────────────────────
+
+[MANUAL] F5-01  Profile tab → tap "Change avatar"
+                Expected: bottom sheet slides up with style tabs, 136px preview,
+                Shuffle button, "This is me →"
+
+[MANUAL] F5-02  Adventurer style → tap Shuffle several times
+                Expected: preview updates — avatar fills the circle (no top-left clipping)
+
+[MANUAL] F5-03  Switch to Big Smile and Pixel Art styles
+                Expected: each style fills the circle correctly
+
+[MANUAL] F5-04  Tap "This is me →"
+                Expected: "Checking…" briefly → modal closes → profile avatar updates
+                without page reload
+
+[MANUAL] F5-05  Verify profile header shows new avatar immediately
+
+[MANUAL] F5-06  Reload page, log back in
+                Expected: new avatar persists
+
+[ADMIN]  F5-07  Firebase console: _dev/players/{uid}/avatarId = new value
+                localStorage: atp_player_creds.avatarId = same value
+
+[MANUAL] F5-08  Open Change Avatar → tap outside the dim overlay
+                Expected: modal closes, avatar unchanged
+
+[MANUAL] F5-09  Open Change Avatar → tap X button
+                Expected: modal closes, avatar unchanged
+
+
+────────────────────────────────────────────────────────────────────
+FLOW 6 — SESSION PERSISTENCE & SIGN OUT
+────────────────────────────────────────────────────────────────────
+
+[MANUAL] F6-01  Log in → close tab → reopen http://localhost:5173/atp-greenwich/
+                Expected: app boots directly to app shell (no login screen)
+
+[MANUAL] F6-02  DevTools > Local Storage > edit atp_player_creds → change pwdHash to "tampered"
+                Reload
+                Expected: redirects to onboarding (tampered credentials rejected)
+
+[MANUAL] F6-03  Log in → Profile → tap "Sign Out"
+                Expected: confirmation dialog "Sign out of ATP Greenwich?" appears
+
+[MANUAL] F6-04  Confirm sign out
+                Expected: localStorage cleared, redirects to landing screen
+
+
+────────────────────────────────────────────────────────────────────
+FLOW 7 — MATCHES TAB  (Phase 3)
+────────────────────────────────────────────────────────────────────
+Prerequisite: [CONSOLE] seedLeague() + app()
+
+[MANUAL] P3-01  Tap "Matches" tab
+                Expected: "A Division" badge at top. Three sections:
+                  "Needs your action" — 2 cards (confirm result + upload photo)
+                  "In progress"       — 1 card (scheduled vs marco)
+                  "Recent results"    — 1 card (confirmed win vs marco)
+
+[MANUAL] P3-02  Verify the "Confirm result?" card (sofia entered match_test_002)
+                Expected: badge "Confirm result?", button "Confirm Result",
+                score shown from your perspective
+
+[MANUAL] P3-03  Tap "Confirm Result" on the sofia match
+                Expected: modal with sofia's scores, two buttons:
+                  "Yes, this is correct ✓"  and  "Dispute result"
+
+[MANUAL] P3-04  Tap "Dispute result" → confirm "Yes, reset this match"
+                Expected: match reverts to Scheduled, card moves to "In progress"
+
+[MANUAL] P3-05  Tap "Enter Result" on the scheduled match with marco
+                Expected: modal with "You" / "Marco" winner cards, Set 1 + Set 2 inputs,
+                "+ Add 3rd set" button, "Submit Result" disabled until complete
+
+[MANUAL] P3-06  Select "You" as winner, Set 1: 6-3, Set 2: 7-5 → tap "Submit Result"
+                Expected: modal closes, match moves to "In progress" (awaiting confirmation)
+
+[MANUAL] P3-07  Tap "Confirm Result" on the photo_pending match (match_test_003)
+                Expected: Upload photo modal with illustration, "Choose / Take Photo" button,
+                "Confirm & Update ELO" (disabled until photo chosen),
+                "Skip — admin will confirm" button
+
+[MANUAL] P3-08  Tap "Skip — admin will confirm"
+                Expected: match moves to "Recent results" (confirmed)
+                Both players' ELO updated in _dev/players/
+
+[MANUAL] P3-09  Tap "+ Propose Match" FAB (bottom right)
+                Expected: modal lists league opponents with match count badges (e.g. "1/2")
+
+[MANUAL] P3-10  Tap an opponent at cap (2/2)
+                Expected: card greyed out, not selectable
+
+[MANUAL] P3-11  Tap an eligible opponent → "Propose Match"
+                Expected: modal closes, new Scheduled match appears in "In progress"
+
+[MANUAL] P3-12  Switch to Standings tab then back to Matches
+                Expected: tab switch silent (no errors), match list re-renders correctly
+
+
+────────────────────────────────────────────────────────────────────
+FLOW 8 — STANDINGS TAB  (Phase 4)
+────────────────────────────────────────────────────────────────────
+Prerequisite: [CONSOLE] seedLeague() + app()
+
+[MANUAL] P4-01  Tap "Standings" tab
+                Expected: spinner briefly, then "League Table" and "ELO Rankings" sections
+
+[MANUAL] P4-02  League Table
+                Expected: "A Division" badge, columns #  Player  W  P  GD
+                4 rows (devplayer, marco, sofia, brunoc); your row tinted; "You" label shown
+                Ranks match wins: sofia first (1W confirmed)
+
+[MANUAL] P4-03  ELO Rankings
+                Expected: 4 active players sorted descending by ELO
+                sofia 1262 → devplayer 1220 → marco 1166 → brunoc 1138
+                Your row highlighted, "You" label, tier labels under each name
+
+[MANUAL] P4-04  Confirm a match via Flow 7 → return to Standings
+                Expected: league table updates in real time (winning player's W increases)
+
+
+────────────────────────────────────────────────────────────────────
+FLOW 9 — FEED TAB  (Phase 5)
+────────────────────────────────────────────────────────────────────
+Prerequisite: [CONSOLE] seedLeague() + app()
+
+[MANUAL] P5-01  Tap "Feed" tab
+                Expected: spinner briefly, then "A Division" badge and confirmed match list
+
+[MANUAL] P5-02  Two confirmed matches visible (match_test_004 and match_test_005)
+                Expected:
+                  match_test_004: You vs Marco, 6-3 7-5, You highlighted + checkmark
+                    ELO deltas: You +14, Marco -14
+                  match_test_005: Sofia vs Bruno, 6-4 6-2
+                    ELO deltas: Sofia +12, Bruno -12
+                  Time-ago labels present (e.g. "1d ago")
+
+[MANUAL] P5-03  Matches involving you have an orange left border accent
+                Matches not involving you have no accent
+
+[MANUAL] P5-04  Confirm a new match (via Flow 7) → return to Feed
+                Expected: new result appears at top in real time
+
+[MANUAL] P5-05  [CONSOLE] clearLeague() then app() → tap Feed
+                Expected: empty state message shown, not a blank screen
+
+
+═══════════════════════════════════════════════════════════════════════
+REGRESSION QUICK-CHECK  (after any code change)
+═══════════════════════════════════════════════════════════════════════
+
+AUTOMATED — run these first, no manual steps needed:
+  npm test              → 93 Vitest tests pass (elo + scoring, ~1.5s)
+  npm run test:e2e      → 65 Playwright tests pass (browser + emulator, ~6min)
+  npm run test:all      → both suites in sequence
+
+VISUAL ONLY — cannot be automated, requires human eyes:
+  F1-01  Hero image loads and alternates randomly on refresh
+  F1-17  Avatar picker shows 136px circular preview (not clipped)
+  F1-18  Style tab switch animates (scale + fade)
+  F5-06  Avatar persists after page reload
+
+
+═══════════════════════════════════════════════════════════════════════
+KNOWN BEHAVIORS (not bugs)
+═══════════════════════════════════════════════════════════════════════
+- Invite code error for USED-9999 only appears after tapping "Verify Code" — correct.
+- Avatar "Checking…" only fires on "This is me →", not on every shuffle — correct.
+- Chunk size warning during build is expected — DiceBear SVG libraries are large.
+- Feed and Standings listeners are cleaned up on tab switch (no memory leak).
+- Standings ELO rankings only show players with status="active" and a set eloRating.
+- clearLeague() preserves invite codes (_dev/invite_codes/); only league/player data cleared.
+
+
+═══════════════════════════════════════════════════════════════════════
+FIREBASE PATHS REFERENCE
+═══════════════════════════════════════════════════════════════════════
+DEV paths (npm run dev):
+  _dev/players/{uid}/
+  _dev/email_index/{emailKey}/
+  _dev/invite_codes/{code}/
+  _dev/config/defaultSeason
+  _dev/seasons/{sid}/leagues/
+  _dev/seasons/{sid}/leagues/{lid}/members/{uid}
+  _dev/seasons/{sid}/leagues/{lid}/matches/{mid}
+
+PROD paths (npm run build):  same paths, no _dev/ prefix.
+
+MATCH STATUS FLOW:
+  scheduled → result_pending → photo_pending → confirmed
+  (dispute resets result_pending → scheduled)

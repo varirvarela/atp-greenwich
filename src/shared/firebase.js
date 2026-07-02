@@ -3,7 +3,7 @@
 // Imported by all three apps (player, admin, companion).
 
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, get, update, push, remove, onValue, off } from 'firebase/database';
+import { getDatabase, connectDatabaseEmulator, ref, set, get, update, push, remove, onValue, off } from 'firebase/database';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -23,11 +23,28 @@ const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 const storage = getStorage(app);
 
+// Point the SDK at the local emulator when running Playwright e2e tests.
+// Set by playwright.config.js via webServer.env: { VITE_USE_EMULATOR: 'true' }.
+// Never active in production builds (import.meta.env.VITE_USE_EMULATOR is undefined).
+if (import.meta.env.VITE_USE_EMULATOR === 'true') {
+  try { connectDatabaseEmulator(db, '127.0.0.1', 9000); } catch {}
+}
+
+// ─── Dev / prod isolation ────────────────────────────────────────────────────
+// In dev mode (npm run dev), all data is written under the '_dev/' prefix so
+// test data never touches the production nodes.
+// In production builds (npm run build) DEV_ROOT is '' — no prefix, real paths.
+//
+// HOW TO STAY IN DEV:   use `npm run dev`   → DEV_ROOT = '_dev/'
+// HOW TO USE PROD DATA: use `npm run build` → DEV_ROOT = ''
+// Visual indicator: a yellow DEV badge appears in the app top bar during dev.
+const DEV_ROOT = import.meta.env.DEV ? '_dev/' : '';
+
 // ─── Global ref helpers ──────────────────────────────────────────────────────
 // Use these for root-level nodes (players, config, email_index, etc.)
 
 function dbRef(path) {
-  return ref(db, path);
+  return ref(db, DEV_ROOT + path);
 }
 
 // ─── Season + League scoped ref helper ──────────────────────────────────────
@@ -45,7 +62,7 @@ function dbRef(path) {
 
 function sRef(sid, lid, path) {
   if (!sid) throw new Error('sRef: sid is required');
-  let base = 'seasons/' + sid;
+  let base = DEV_ROOT + 'seasons/' + sid;
   if (lid) base += '/leagues/' + lid;
   if (path) base += '/' + path;
   return ref(db, base);
@@ -58,7 +75,7 @@ function sRef(sid, lid, path) {
 // pRef(uid, path) → players/{uid}/{path}
 
 function pRef(uid, path) {
-  let base = 'players';
+  let base = DEV_ROOT + 'players';
   if (uid) base += '/' + uid;
   if (path) base += '/' + path;
   return ref(db, base);
@@ -71,12 +88,11 @@ function pRef(uid, path) {
 // matchId: the match document ID
 // Returns: public download URL string
 async function uploadMatchPhoto(matchId, file) {
-  const ext  = file.name.split('.').pop() || 'jpg';
-  const path = 'match-photos/' + matchId + '.' + ext;
-  const ref  = storageRef(storage, path);
-  const snap = await uploadBytes(ref, file);
-  const url  = await getDownloadURL(snap.ref);
-  return url;
+  const ext      = file.name.split('.').pop() || 'jpg';
+  const path     = DEV_ROOT + 'match-photos/' + matchId + '.' + ext;
+  const photoRef = storageRef(storage, path);
+  const snap     = await uploadBytes(photoRef, file);
+  return getDownloadURL(snap.ref);
 }
 
 // ─── Convenience wrappers ────────────────────────────────────────────────────
@@ -122,10 +138,15 @@ function dbListen(refOrPath, callback) {
 
 // Multi-path atomic update — use this whenever you need to write to
 // multiple nodes at once (e.g. confirm match + update ELO + update standing).
-// updates: flat object with full paths as keys
-// Example: { 'players/uid1/eloRating': 1224, 'seasons/sid/leagues/lid/members/uid1/standing/matchesWon': 5 }
+// updates: flat object with full paths as keys.
+// In dev mode, all paths are automatically prefixed with '_dev/'.
 async function dbMultiUpdate(updates) {
-  return update(ref(db), updates);
+  if (!DEV_ROOT) return update(ref(db), updates);
+  const prefixed = {};
+  for (const [k, v] of Object.entries(updates)) {
+    prefixed[DEV_ROOT + k] = v;
+  }
+  return update(ref(db), prefixed);
 }
 
 // ─── Exports ─────────────────────────────────────────────────────────────────
