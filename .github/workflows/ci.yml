@@ -1,0 +1,54 @@
+name: CI
+
+# Runs on every push to main and on every pull request targeting main.
+# Both test suites must pass before code is considered ready to deploy.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Firebase RTDB emulator requires Java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Chromium only — the app targets mobile Chrome
+      - name: Install Playwright browser
+        run: npx playwright install chromium --with-deps
+
+      # Fast unit tests first — fail early if core logic is broken
+      - name: Unit tests (Vitest)
+        run: npm test
+
+      # Browser + emulator tests — Playwright starts both servers automatically
+      # CI=true makes Playwright always start fresh servers (reuseExistingServer: false)
+      - name: E2E tests (Playwright + Firebase emulator)
+        run: npm run test:e2e
+
+      # On failure, upload the HTML report so you can inspect what broke
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
