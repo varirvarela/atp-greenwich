@@ -8,13 +8,26 @@
     "dev:admin": "vite --config vite.admin.config.js",
     "dev:companion": "vite --config vite.companion.config.js",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "vitest run && playwright test",
+    "emulator": "firebase emulators:start --only database --project atp-greenwich"
   },
   "dependencies": {
-    "firebase": "^10.12.0",
-    "lucide": "^0.383.0"
+    "@dicebear/adventurer": "^9.4.2",
+    "@dicebear/big-smile": "^9.4.2",
+    "@dicebear/core": "^9.4.2",
+    "@dicebear/pixel-art": "^9.4.2",
+    "firebase": "^10.12.0"
   },
   "devDependencies": {
-    "vite": "^5.2.0"
+    "@playwright/test": "^1.61.1",
+    "firebase-tools": "^15.22.4",
+    "vite": "^5.2.0",
+    "vitest": "^4.1.9"
   }
 }
