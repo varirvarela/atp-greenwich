@@ -6,7 +6,14 @@ const admin = require('firebase-admin');
 const fs    = require('fs');
 
 async function main() {
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!raw || raw.trim() === '') {
+    throw new Error(
+      'FIREBASE_SERVICE_ACCOUNT secret is missing or empty. ' +
+      'Go to GitHub repo → Settings → Secrets → Actions and add it as a single-line JSON string.'
+    );
+  }
+  const serviceAccount = JSON.parse(raw);
 
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
