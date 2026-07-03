@@ -1,5 +1,5 @@
 ATP GREENWICH — PLAYER APP TEST SEQUENCE
-Phase 1B + 3 + 4 + 5 + Vitest + Playwright + Emulator | Updated: 2026-07-02 (rev 8)
+Phase 1B + 3 + 4 + 5 + 6 + Admin App + Companion App | Updated: 2026-07-03 (rev 9)
 ═══════════════════════════════════════════════════════════════════════
 
 
@@ -54,7 +54,7 @@ CONSOLE HELPERS — still available for manual exploration
   window._atpTest.adminRead(path)           Direct Firebase read (emulator-safe)
   window._atpTest.seedLoginPlayer()         Seeds testlogin@atp.test / Test1234!
 
-MANUAL FLOWS — none remain for functional testing
+MANUAL FLOWS — Phase 6 (bracket), Admin App, Companion App require manual testing
 
 
 ═══════════════════════════════════════════════════════════════════════
@@ -439,18 +439,18 @@ FLOW 4 — APP SHELL & PROFILE TAB
                  Expected: app shell loads as "Dev Player"
                  Yellow "DEV" badge visible in top bar (confirms dev mode)
 
-[MANUAL]  F4-02  Tap Feed, Matches, Standings tabs
+[MANUAL]  F4-02  Tap Feed, Matches, Standings, Bracket tabs
                  Expected: each shows a spinner briefly then either data (if
                  seedLeague was run) or an appropriate empty state.
-                 Bracket tab shows "Coming in Phase 6" placeholder.
+                 Bracket tab shows qualification tracker (Phase 6 live).
 
 [MANUAL]  F4-03  Tap "Profile" tab
                  Expected:
                    - Avatar circle (80px, adventurer style)
                    - Name "Dev Player", alias "@devplayer"
                    - ELO rating "1220", tier badge "Intermediate"
-                   - Season stats "—" for Wins/Losses/Played
-                   - "Stats available in Phase 4" badge
+                   - Season stats card loads from Firebase: shows Wins/Losses/Played
+                     (spinner briefly, then real numbers — or 0/0/0 if no matches)
                    - Email, status "active", self-assessed level
                    - "Change avatar" button (teal, below avatar)
                    - "Sign Out" button at bottom
@@ -606,6 +606,307 @@ Prerequisite: [CONSOLE] seedLeague() + app()
                 Expected: empty state message shown, not a blank screen
 
 
+────────────────────────────────────────────────────────────────────
+FLOW 10 — BRACKET TAB  (Phase 6)
+────────────────────────────────────────────────────────────────────
+Prerequisite: [CONSOLE] seedLeague() + app()
+  seedLeague() writes scoringConfig: minMatches=1, minWins=1, bracketSize=4
+  It also seeds 2 confirmed matches so the tracker has real data.
+
+[MANUAL] P6-01  Tap "Bracket" tab
+                Expected: "Bracket" title in top bar, spinner briefly, then
+                "Qualification Tracker" heading with "A Division" badge
+
+[MANUAL] P6-02  Qualification tracker table shows all league members
+                Expected: 4 rows (devplayer, marco, sofia, brunoc)
+                Columns: Player  W  P  Status badge
+                sofia: 1W / 1P → green "Qualified" badge (1W ≥ minWins=1, 1P ≥ minMatches=1)
+                devplayer: 1W / 1P → green "Qualified" badge
+                marco: 0W / 1P → orange "0w to go" or "On track" badge
+                brunoc: 0W / 0P → grey "On track" badge
+
+[MANUAL] P6-03  Bracket not yet generated → no bracket draw visible
+                Expected: only the qualification tracker table is shown
+                No "Draw" or rounds section appears
+
+[MANUAL] P6-04  Confirm an additional match via Flow 7 → return to Bracket tab
+                Expected: tracker updates in real time (no page refresh needed)
+
+[MANUAL] P6-05  (Post admin bracket generation — requires Admin App)
+                After admin generates bracket via Admin App → open Bracket tab
+                Expected: rounds draw appears below or replacing tracker
+                Each round shows match cards with player names and "TBD" slots
+                for unplayed matches
+
+[MANUAL] P6-06  After admin sets a bracket match result → refresh Bracket tab
+                Expected: winner shown with trophy/badge in their match card
+                Completed match shows score if entered
+
+[MANUAL] P6-07  After all bracket rounds complete → Bracket tab
+                Expected: champion card shown at top with player name and
+                "Champion" badge or equivalent celebration treatment
+
+[MANUAL] P6-08  No season configured edge case
+                [CONSOLE] window._atpTest.clearLeague() then app() → Bracket tab
+                Expected: empty-state message, no crash
+
+
+────────────────────────────────────────────────────────────────────
+ADMIN APP FLOWS
+────────────────────────────────────────────────────────────────────
+Prerequisite: npm run dev:admin → open http://localhost:5174/
+  (Admin app runs on port 5174; separate from player app on 5173)
+  [CONSOLE] window._atpTest.seedLeague() in the PLAYER app tab first to
+  populate test data, then switch to the admin tab.
+
+HOW TO START:
+  npm run dev:admin   (or use the existing terminal tab)
+  Open http://localhost:5174/
+
+──────────────────────────────────────────────────────────────────
+ADMIN LOGIN
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] A-01  Open http://localhost:5174/
+               Expected: "ATP Greenwich Admin" login screen with password field
+               and "Sign In" button
+
+[MANUAL] A-02  Enter wrong password
+               Expected: error message shown, access denied
+
+[MANUAL] A-03  Enter correct password: atpgreenwich2026
+               Expected: admin dashboard shell loads with sidebar nav:
+               Players | Leagues | Invite Codes | Matches | Bracket | Settings
+
+──────────────────────────────────────────────────────────────────
+ADMIN — PLAYERS SECTION
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] A-04  Click "Players" in sidebar
+               Expected: list of all players from _dev/players/
+               Each card shows: name, alias, status badge, ELO rating
+               4 test players visible after seedLeague()
+
+[MANUAL] A-05  Player at status "invited" shows "Approve" button
+               Tap "Approve" → Expected: status changes to "onboarding", button disappears
+
+[MANUAL] A-06  Player at status "onboarding" shows "Set Active" button
+               Tap "Set Active" → Expected: status changes to "active"
+
+[MANUAL] A-07  Tap "Edit ELO" on any active player
+               Expected: inline input appears with current ELO pre-filled
+               Change value → save → Expected: ELO updates in Firebase and card re-renders
+
+──────────────────────────────────────────────────────────────────
+ADMIN — LEAGUES SECTION
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] A-08  Click "Leagues" in sidebar
+               Expected: current season shown (season_2026 / "2026 Season")
+               League "A Division" listed with member count
+
+[MANUAL] A-09  "Create Season" form: enter a season ID and name → submit
+               Expected: new season appears in the list; Firebase _dev/seasons/{id} written
+
+[MANUAL] A-10  "Create League" form: enter league name under existing season → submit
+               Expected: new league appears under that season
+
+[MANUAL] A-11  Add member to league: select player from dropdown → "Add"
+               Expected: player appears in the league member list
+
+[MANUAL] A-12  Remove member: tap "Remove" next to a member
+               Expected: member removed from league; _dev/seasons/.../members updated
+
+──────────────────────────────────────────────────────────────────
+ADMIN — INVITE CODES SECTION
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] A-13  Click "Invite Codes" in sidebar
+               Expected: list of existing invite codes with used/unused badges
+
+[MANUAL] A-14  Tap "Generate Code"
+               Expected: new invite code appears (e.g. XXXX-NNNN format)
+               Written to _dev/invite_codes/ with used:false
+
+[MANUAL] A-15  Tap "Revoke" on an unused code
+               Expected: code removed from list; deleted from Firebase
+
+──────────────────────────────────────────────────────────────────
+ADMIN — MATCHES SECTION
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] A-16  Click "Matches" in sidebar
+               Expected: matches grouped by status:
+                 Open (scheduled / result_pending / photo_pending)
+                 Disputed
+                 Confirmed
+
+[MANUAL] A-17  Tap "Override Result" on an open match
+               Expected: modal with player names, winner selector,
+               set score inputs (Set 1, Set 2, optional Set 3), "Confirm" button
+
+[MANUAL] A-18  Select winner and enter valid scores → "Confirm"
+               Expected: modal closes, match status → "confirmed"
+               Both players' ELO recalculated and updated in Firebase
+               Toast notification: "Match result saved"
+
+[MANUAL] A-19  Tap "Cancel Match" on a scheduled match
+               Expected: confirmation prompt → match removed or status set to cancelled
+
+──────────────────────────────────────────────────────────────────
+ADMIN — BRACKET SECTION
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] A-20  Click "Bracket" in sidebar
+               Expected: current qualification standings table (same data as
+               player Bracket tab tracker)
+               "Generate Bracket" button visible
+
+[MANUAL] A-21  Tap "Generate Bracket"
+               Expected: bracket draw generated with standard tennis seeding
+               (1 vs N, 2 vs N-1, etc.)
+               Bracket written to _dev/seasons/season_2026/leagues/league_a/bracket/
+               Player Bracket tab (in player app) should now show the draw
+
+[MANUAL] A-22  Tap "Set Result" on a first-round match
+               Expected: modal with two player names, winner radio buttons, "Confirm"
+
+[MANUAL] A-23  Confirm a bracket result
+               Expected: winner advances to next round; TBD slot filled with their name
+               Loser's card shows their score and is greyed
+
+[MANUAL] A-24  Advance all matches to final → set final result
+               Expected: champion card shown; bracket status → "complete"
+               Player Bracket tab shows champion card
+
+──────────────────────────────────────────────────────────────────
+ADMIN — SETTINGS SECTION
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] A-25  Click "Settings" in sidebar
+               Expected: "Change Password" form (current, new, confirm)
+               and "Default Season" field
+
+[MANUAL] A-26  Change password (new password ≥ 8 chars) → save
+               Expected: success toast; new password works on next login
+
+[MANUAL] A-27  Enter new password < 8 chars → save
+               Expected: validation error, password not saved
+
+[MANUAL] A-28  Set Default Season to a different season ID → save
+               Expected: _dev/config/defaultSeason updated in Firebase
+
+[MANUAL] A-29  Sign out from sidebar "Sign Out" button
+               Expected: localStorage cleared, returns to admin login screen
+
+
+────────────────────────────────────────────────────────────────────
+COMPANION APP FLOWS  (Phase 7 — Courtside Score Entry)
+────────────────────────────────────────────────────────────────────
+Prerequisite: npm run dev:companion → open http://localhost:5175/
+  (Companion app runs on port 5175; mobile-optimized, use DevTools mobile view)
+  [CONSOLE] window._atpTest.seedLeague() in the PLAYER app tab first.
+
+HOW TO START:
+  npm run dev:companion   (or use the existing terminal tab)
+  Open http://localhost:5175/
+  Recommended: DevTools > Toggle device toolbar → iPhone 14 Pro or similar
+
+──────────────────────────────────────────────────────────────────
+COMPANION — LOGIN
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] CP-01  Open http://localhost:5175/
+                Expected: mobile-optimized login screen:
+                "ATP Greenwich" heading, "Courtside Entry" subtitle,
+                password field, "Enter" button
+
+[MANUAL] CP-02  Enter wrong password
+                Expected: error message below field
+
+[MANUAL] CP-03  Enter correct password: atpgreenwich2026
+                Expected: match list screen loads
+
+──────────────────────────────────────────────────────────────────
+COMPANION — MATCH LIST
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] CP-04  Match list screen
+                Expected: sticky top bar "ATP Greenwich · Matches"
+                All open matches across all leagues listed
+                (scheduled, result_pending, photo_pending)
+                Each row shows: player A vs player B, status badge, division
+
+[MANUAL] CP-05  Tap any match row
+                Expected: navigates to score entry screen for that match
+
+──────────────────────────────────────────────────────────────────
+COMPANION — SCORE ENTRY
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] CP-06  Score entry screen
+                Expected: top bar with "← Back" and match title
+                Player A and Player B avatar cards (84px circles) side by side
+                "Winner" tap-to-select on each player card
+                Set 1 inputs: A score | B score (numeric, no spinners)
+                Set 2 inputs: A score | B score
+                "+ Add 3rd Set" button
+                "Submit Result" button (disabled until winner + at least Set 1 entered)
+
+[MANUAL] CP-07  Tap a player's winner card
+                Expected: that card gets a highlighted/selected state
+                "Submit Result" button remains disabled (still need scores)
+
+[MANUAL] CP-08  Enter Set 1 scores (e.g. 6-3)
+                Expected: numeric keyboard on mobile (inputmode=numeric)
+                No up/down spinner arrows visible
+
+[MANUAL] CP-09  Enter Set 2 scores (e.g. 7-5)
+                Expected: "Submit Result" button enables
+
+[MANUAL] CP-10  Tap "+ Add 3rd Set"
+                Expected: Set 3 inputs appear
+                Tap "− Remove 3rd Set" → Set 3 inputs disappear
+
+[MANUAL] CP-11  Tap "Submit Result" with winner + 2 sets entered
+                Expected: spinner briefly, then success screen
+
+──────────────────────────────────────────────────────────────────
+COMPANION — SUCCESS SCREEN
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] CP-12  Success screen
+                Expected: winner's name prominently shown
+                ELO delta for both players (e.g. "+14 ELO" / "−14 ELO")
+                "← Back to Matches" button
+
+[MANUAL] CP-13  Firebase state after submission
+                Expected:
+                  Match status → "confirmed"
+                  match.adminOverride = true
+                  match.result.winner = winning player UID
+                  match.result.sets = [[A1,B1],[A2,B2]] (and 3rd if entered)
+                  Both players' eloRating updated in _dev/players/
+
+[MANUAL] CP-14  Tap "← Back to Matches"
+                Expected: returns to match list; confirmed match no longer appears
+                (only open matches shown)
+
+[MANUAL] CP-15  Tap "← Back" on score entry without submitting
+                Expected: no changes to Firebase; returns to match list
+
+──────────────────────────────────────────────────────────────────
+COMPANION — SESSION PERSISTENCE
+──────────────────────────────────────────────────────────────────
+
+[MANUAL] CP-16  After login, close tab → reopen http://localhost:5175/
+                Expected: boots directly to match list (password not re-required)
+                (session stored in localStorage.atp_companion_creds)
+
+[MANUAL] CP-17  Clear localStorage → reload
+                Expected: returns to login screen
+
+
 ═══════════════════════════════════════════════════════════════════════
 REGRESSION QUICK-CHECK  (after any code change)
 ═══════════════════════════════════════════════════════════════════════
@@ -620,6 +921,10 @@ VISUAL ONLY — cannot be automated, requires human eyes:
   F1-17  Avatar picker shows 136px circular preview (not clipped)
   F1-18  Style tab switch animates (scale + fade)
   F5-06  Avatar persists after page reload
+  P6-05  Bracket draw renders correctly with player names + TBD slots
+  A-21   Bracket seeding is correct (1 vs N, 2 vs N-1 ordering)
+  CP-06  Companion score entry is usable on a mobile-sized screen
+  CP-08  No spinner arrows on numeric inputs (webkit-appearance:none applied)
 
 
 ═══════════════════════════════════════════════════════════════════════
@@ -631,6 +936,11 @@ KNOWN BEHAVIORS (not bugs)
 - Feed and Standings listeners are cleaned up on tab switch (no memory leak).
 - Standings ELO rankings only show players with status="active" and a set eloRating.
 - clearLeague() preserves invite codes (_dev/invite_codes/); only league/player data cleared.
+- Admin app and Companion app both share the same admin password (atpgreenwich2026 default).
+- Companion app uses adminOverride:true on submitted results — matches bypass the photo step.
+- Bracket tab (player app) live-updates during qualification phase via dbListen; static render once bracket is generated.
+- Admin app is never deployed; it runs locally only (npm run dev:admin → localhost:5174).
+- Companion app can be deployed as a PWA but there is no deploy script for it yet.
 
 
 ═══════════════════════════════════════════════════════════════════════
@@ -650,3 +960,19 @@ PROD paths (npm run build):  same paths, no _dev/ prefix.
 MATCH STATUS FLOW:
   scheduled → result_pending → photo_pending → confirmed
   (dispute resets result_pending → scheduled)
+  (admin/companion override: scheduled/pending → confirmed directly, adminOverride:true)
+
+BRACKET PATHS (DEV):
+  _dev/seasons/{sid}/leagues/{lid}/bracket/status       ("active" | "complete")
+  _dev/seasons/{sid}/leagues/{lid}/bracket/rounds/{r}/matches/{m}/playerA
+  _dev/seasons/{sid}/leagues/{lid}/bracket/rounds/{r}/matches/{m}/playerB
+  _dev/seasons/{sid}/leagues/{lid}/bracket/rounds/{r}/matches/{m}/winner
+  _dev/seasons/{sid}/leagues/{lid}/bracket/champion
+  _dev/seasons/{sid}/leagues/{lid}/scoringConfig/minMatches
+  _dev/seasons/{sid}/leagues/{lid}/scoringConfig/minWins
+  _dev/seasons/{sid}/leagues/{lid}/scoringConfig/bracketSize
+
+APPS AND PORTS:
+  Player app   npm run dev          → http://localhost:5173/atp-greenwich/
+  Admin app    npm run dev:admin    → http://localhost:5174/
+  Companion    npm run dev:companion → http://localhost:5175/

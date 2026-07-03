@@ -73,7 +73,12 @@ if (import.meta.env.DEV) {
     await dbMultiUpdate({
       // ── Season ───────────────────────────────────────────────────────────
       'config/defaultSeason': 'season_2026',
+      'seasons/season_2026/name': '2026 Season',
       'seasons/season_2026/leagues/league_a/name': 'A Division',
+      'seasons/season_2026/leagues/league_a/division': 'A',
+      'seasons/season_2026/leagues/league_a/scoringConfig/minMatches': 1,
+      'seasons/season_2026/leagues/league_a/scoringConfig/minWins':    1,
+      'seasons/season_2026/leagues/league_a/scoringConfig/bracketSize': 4,
 
       // ── League members ────────────────────────────────────────────────────
       'seasons/season_2026/leagues/league_a/members/dev_test_uid/joinedAt':    now,

@@ -18,7 +18,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@shared': resolve(__dirname, 'src/shared'),
-      '@admin': resolve(__dirname, 'src/admin'),
+      '@admin':  resolve(__dirname, 'src/admin'),
+      '@player': resolve(__dirname, 'src/player'),
     },
   },
   server: {

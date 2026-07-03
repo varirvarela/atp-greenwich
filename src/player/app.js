@@ -1,14 +1,16 @@
 // src/player/app.js — Main app shell: top bar, bottom nav, tab routing
 // Each tab renders a placeholder; real content arrives in later phases.
 
-import { dbGet, dbRef, dbMultiUpdate, pRef } from '@shared/firebase.js';
+import { dbGet, dbRef, dbMultiUpdate, pRef, sRef } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
 import { eloTierLabel } from '@shared/elo.js';
 import { logTabView } from '@shared/analytics.js';
 import { avatarToSvg, renderAvatarPicker } from '@player/avatars.js';
-import { renderMatchesTab }  from '@player/matches.js';
+import { renderMatchesTab }   from '@player/matches.js';
 import { renderStandingsTab } from '@player/standings.js';
 import { renderFeedTab }      from '@player/feed.js';
+import { renderBracketTab }   from '@player/bracket.js';
+import { buildLeagueTable, calculateStanding } from '@shared/scoring.js';
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 const TABS = [
@@ -156,7 +158,7 @@ export function showApp(container, player, creds, onSignOut) {
         break;
       case 'bracket':
         topRight.textContent = 'Bracket';
-        renderBracketTab(content);
+        _tabCleanup = renderBracketTab(content, _player, _creds) || null;
         break;
       case 'profile':
         topRight.textContent = 'Profile';
@@ -168,31 +170,6 @@ export function showApp(container, player, creds, onSignOut) {
   }
 
   renderShell(activeTab);
-}
-
-// ─── Tab: Bracket ─────────────────────────────────────────────────────────────
-
-function renderBracketTab(el) {
-  el.innerHTML = `
-    <div class="empty-state" style="padding-top:32px;">
-      <div class="empty-state-icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-          <path d="M4 22h16"/>
-          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-        </svg>
-      </div>
-      <div class="empty-state-title">Playoff Bracket</div>
-      <p class="t-small" style="max-width:240px;">
-        The knockout bracket activates when the league season ends.
-      </p>
-      <div class="phase-badge">Coming in Phase 6</div>
-    </div>
-  `;
 }
 
 // ─── Tab: Profile ─────────────────────────────────────────────────────────────
@@ -232,25 +209,11 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged) {
         <div class="badge badge-ace" style="margin-top:8px;font-size:12px;">${escHtml(tier)}</div>
       </div>
 
-      <!-- Stats placeholders -->
-      <div class="card" style="margin-bottom:16px;">
+      <!-- Season stats (loaded async below) -->
+      <div class="card" style="margin-bottom:16px;" id="profile-stats-card">
         <div class="t-label t-muted" style="margin-bottom:12px;">Season Stats</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center;">
-          <div>
-            <div style="font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--text);">—</div>
-            <div class="t-label t-muted" style="margin-top:4px;">Wins</div>
-          </div>
-          <div>
-            <div style="font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--text);">—</div>
-            <div class="t-label t-muted" style="margin-top:4px;">Losses</div>
-          </div>
-          <div>
-            <div style="font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--text);">—</div>
-            <div class="t-label t-muted" style="margin-top:4px;">Played</div>
-          </div>
-        </div>
-        <div class="phase-badge" style="margin-top:14px;width:100%;justify-content:center;">
-          Stats available in Phase 4
+        <div style="text-align:center;padding:8px 0;">
+          <div class="spinner spinner-sm" style="margin:0 auto;"></div>
         </div>
       </div>
 
@@ -291,6 +254,44 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged) {
       localStorage.removeItem('atp_player_creds');
       if (typeof onSignOut === 'function') onSignOut();
     }
+  });
+
+  // Load season stats asynchronously and populate the card
+  _loadSeasonStats(creds.uid).then(stats => {
+    const card = el.querySelector('#profile-stats-card');
+    if (!card) return;
+    const { wins, losses, played } = stats;
+    card.innerHTML = `
+      <div class="t-label t-muted" style="margin-bottom:12px;">Season Stats</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center;">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--text);">
+            ${wins}
+          </div>
+          <div class="t-label t-muted" style="margin-top:4px;">Wins</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--text);">
+            ${losses}
+          </div>
+          <div class="t-label t-muted" style="margin-top:4px;">Losses</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--text);">
+            ${played}
+          </div>
+          <div class="t-label t-muted" style="margin-top:4px;">Played</div>
+        </div>
+      </div>
+    `;
+  }).catch(() => {
+    const card = el.querySelector('#profile-stats-card');
+    if (card) card.innerHTML = `
+      <div class="t-label t-muted" style="margin-bottom:12px;">Season Stats</div>
+      <div style="text-align:center;padding:4px 0;">
+        <span class="t-small t-muted">—</span>
+      </div>
+    `;
   });
 
   const changeBtn = el.querySelector('#btn-change-avatar');
@@ -364,6 +365,33 @@ async function _appCheckNoDuplicate(avatarId, excludeUid) {
   } catch {
     return true; // fail open — never block the user on a network error
   }
+}
+
+// ─── Season stats loader ──────────────────────────────────────────────────────
+
+async function _loadSeasonStats(uid) {
+  try {
+    const sid = await dbGet(dbRef('config/defaultSeason'));
+    if (!sid) return { wins: 0, losses: 0, played: 0 };
+    const leagues = await dbGet(sRef(sid, null, 'leagues'));
+    if (!leagues) return { wins: 0, losses: 0, played: 0 };
+    for (const [lid] of Object.entries(leagues)) {
+      const member = await dbGet(sRef(sid, lid, 'members/' + uid));
+      if (member === null) continue;
+      const matchesObj = await dbGet(sRef(sid, lid, 'matches'));
+      if (!matchesObj) return { wins: 0, losses: 0, played: 0 };
+      const myMatches = Object.values(matchesObj).filter(
+        m => m.status === 'confirmed' && (m.playerA === uid || m.playerB === uid)
+      );
+      const standing = calculateStanding(myMatches, uid);
+      return {
+        wins:   standing.matchesWon,
+        losses: standing.matchesPlayed - standing.matchesWon,
+        played: standing.matchesPlayed,
+      };
+    }
+  } catch {}
+  return { wins: 0, losses: 0, played: 0 };
 }
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
