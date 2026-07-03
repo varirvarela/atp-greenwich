@@ -17,11 +17,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Firebase RTDB emulator requires Java
+      # Firebase RTDB emulator requires Java 21+ (firebase-tools dropped support for older JDKs)
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - uses: actions/setup-node@v4
         with:
