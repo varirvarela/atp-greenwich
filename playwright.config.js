@@ -27,7 +27,7 @@ export default defineConfig({
       command: 'npm run emulator',
       url: 'http://127.0.0.1:9000/.json?ns=atp-greenwich',
       reuseExistingServer: !process.env.CI,
-      timeout: 30000,
+      timeout: 60000, // first CI run downloads the emulator JAR (~30 MB)
     },
     {
       // Vite dev server on port 5174 with emulator flag

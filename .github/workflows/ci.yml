@@ -28,8 +28,24 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
+      # Cache the Firebase emulator JAR so the first-run download only happens once.
+      # Key includes firebase.json so the cache busts when emulator config changes.
+      - name: Cache Firebase emulator binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('firebase.json') }}
+          restore-keys: |
+            firebase-emulators-${{ runner.os }}-
+
       - name: Install dependencies
         run: npm ci
+
+      # Start the emulator once just long enough for it to download its JAR (if not cached)
+      # and verify it can start. The echo exits immediately; the emulator shuts down cleanly.
+      - name: Pre-warm Firebase emulator binary
+        run: npx firebase emulators:exec --only database --project atp-greenwich "echo Emulator ready"
+        timeout-minutes: 5
 
       # Chromium only — the app targets mobile Chrome
       - name: Install Playwright browser
@@ -39,8 +55,9 @@ jobs:
       - name: Unit tests (Vitest)
         run: npm test
 
-      # Browser + emulator tests — Playwright starts both servers automatically
-      # CI=true makes Playwright always start fresh servers (reuseExistingServer: false)
+      # Browser + emulator tests — Playwright starts both servers automatically.
+      # CI=true makes Playwright always start fresh servers (reuseExistingServer: false).
+      # The emulator JAR is now cached so startup is fast.
       - name: E2E tests (Playwright + Firebase emulator)
         run: npm run test:e2e
 
