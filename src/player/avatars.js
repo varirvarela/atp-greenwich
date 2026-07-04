@@ -1,6 +1,6 @@
 // src/player/avatars.js — DiceBear avatar generation for ATP Greenwich
-// avatarId format: "style::seed"  e.g. "adventurer::x7f3k2p9ab4d"
-// Seed is random; same seed + style always produces the same avatar.
+// avatarId format: "style::seed"              — seed-based colors (random)
+//                  "style::seed::hair::skin"   — explicit hair + skin hex colors (no #)
 
 import { createAvatar } from '@dicebear/core';
 import * as adventurer from '@dicebear/adventurer';
@@ -10,17 +10,30 @@ import { escHtml } from '@shared/utils.js';
 
 // ─── Style catalogue ──────────────────────────────────────────────────────────
 const STYLES = {
-  'adventurer': { schema: adventurer, label: 'Adventurer', desc: 'Retro cartoon'  },
-  'big-smile':  { schema: bigSmile,   label: 'Big Smile',  desc: 'Chunky & fun'   },
-  'pixel-art':  { schema: pixelArt,   label: 'Pixel Art',  desc: 'Retro game'     },
+  'adventurer': { schema: adventurer, label: 'Adventurer', desc: 'Retro cartoon' },
+  'big-smile':  { schema: bigSmile,   label: 'Big Smile',  desc: 'Chunky & fun'  },
+  'pixel-art':  { schema: pixelArt,   label: 'Pixel Art',  desc: 'Retro game'    },
 };
 
 export const STYLE_IDS = Object.keys(STYLES);
 
-// ─── Seed generation ──────────────────────────────────────────────────────────
-// Uses crypto.getRandomValues when available (browser), falls back to Math.random.
-// 16 chars from a 31-char alphabet → ~80 bits of entropy → collision essentially impossible.
+// ─── Color palettes per style (DiceBear v9 defaults) ─────────────────────────
+const COLOR_OPTIONS = {
+  'adventurer': {
+    hair: ['ac6511','cb6820','ab2a18','e5d7a3','b9a05f','796a45','6a4e35','562306','0e0e0e','afafaf','3eac2c','85c2c6','dba3be','592454'],
+    skin: ['f2d3b1','ecad80','9e5622','763900'],
+  },
+  'big-smile': {
+    hair: ['220f00','3a1a00','71472d','e2ba87','605de4','238d80','d56c0c','e9b729'],
+    skin: ['ffe4c0','f5d7b1','efcc9f','e2ba87','c99c62','a47539','8c5a2b','643d19'],
+  },
+  'pixel-art': {
+    hair: ['cab188','603a14','83623b','a78961','611c17','603015','612616','28150a','009bbd','bd1700','91cb15'],
+    skin: ['ffdbac','f5cfa0','eac393','e0b687','cb9e6e','b68655','a26d3d','8d5524'],
+  },
+};
 
+// ─── Seed generation ──────────────────────────────────────────────────────────
 export function generateSeed() {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
   let seed = '';
@@ -35,9 +48,7 @@ export function generateSeed() {
 }
 
 // ─── Core render ─────────────────────────────────────────────────────────────
-
 // Returns an HTML string: a circular div wrapping the DiceBear SVG.
-// Safe to put directly into innerHTML.
 export function avatarToSvg(avatarId, size) {
   const sz  = size || 40;
   const raw = _generateRawSvg(avatarId, sz);
@@ -45,39 +56,81 @@ export function avatarToSvg(avatarId, size) {
 }
 
 // ─── Avatar picker component ──────────────────────────────────────────────────
-// Renders the full picker UI into `container`.
-//
-// initialSeed: optional starting seed (pass player uid for personalised first look)
-// onSelect:    callback(avatarId) called when user confirms
-// validateFn:  optional async (avatarId) => true | errorString
-//              return true to proceed; return a string to block + auto-reshuffle
-//
-// takenIds is kept for API compatibility but ignored — random seeds make
-// collisions essentially impossible; validateFn handles the rare duplicate case.
+// initialAvatarId: full avatarId (style::seed or style::seed::hair::skin) or a
+//                  raw seed/uid string. If omitted, starts with adventurer + new seed.
+export function renderAvatarPicker(container, takenIds, onSelect, initialAvatarId, validateFn) {
+  // Parse initial state from avatarId if provided
+  const parts = (initialAvatarId || '').split('::');
+  let currentStyle = STYLES[parts[0]] ? parts[0] : 'adventurer';
+  let currentSeed  = parts[1] || initialAvatarId || generateSeed();
+  // null = Auto (seed-driven); both must be set together or neither
+  let currentHair  = (parts[2] && parts[3]) ? parts[2] : null;
+  let currentSkin  = (parts[2] && parts[3]) ? parts[3] : null;
 
-export function renderAvatarPicker(container, takenIds, onSelect, initialSeed, validateFn) {
-  let currentStyle = 'adventurer';
-  let currentSeed  = initialSeed || generateSeed();
-
-  function avatarId()  { return `${currentStyle}::${currentSeed}`; }
-  function previewSvg(sz) { return _generateRawSvg(avatarId(), sz); }
+  function avatarId() {
+    return (currentHair && currentSkin)
+      ? `${currentStyle}::${currentSeed}::${currentHair}::${currentSkin}`
+      : `${currentStyle}::${currentSeed}`;
+  }
 
   function updatePreview() {
     const el = container.querySelector('#av-preview-inner');
     if (!el) return;
     el.style.opacity = '0';
     el.style.transform = 'scale(0.88)';
-    // brief animation before swapping content
     setTimeout(() => {
-      el.innerHTML = previewSvg(136);
+      el.innerHTML = _generateRawSvg(avatarId(), 136);
       el.style.opacity = '1';
       el.style.transform = 'scale(1)';
     }, 100);
   }
 
+  function _updateSwatchHighlights() {
+    container.querySelectorAll('[data-hair-swatch]').forEach(btn => {
+      const isAuto  = btn.dataset.hairSwatch === 'auto';
+      const isMatch = isAuto ? currentHair === null : btn.dataset.hairSwatch === currentHair;
+      btn.style.outline = isMatch ? '2px solid var(--ace)' : '2px solid transparent';
+      btn.style.outlineOffset = '2px';
+    });
+    container.querySelectorAll('[data-skin-swatch]').forEach(btn => {
+      const isAuto  = btn.dataset.skinSwatch === 'auto';
+      const isMatch = isAuto ? currentSkin === null : btn.dataset.skinSwatch === currentSkin;
+      btn.style.outline = isMatch ? '2px solid var(--ace)' : '2px solid transparent';
+      btn.style.outlineOffset = '2px';
+    });
+  }
+
+  function _colorRow(type, colors, currentVal) {
+    const autoSelected = currentVal === null;
+    return `
+      <div style="margin-bottom:12px;">
+        <div class="t-label t-muted" style="margin-bottom:8px;">
+          ${type === 'hair' ? 'Hair' : 'Skin'} Color
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <button data-${type}-swatch="auto" title="Auto"
+            style="width:26px;height:26px;border-radius:50%;background:conic-gradient(#ac6511 0deg,#f2d3b1 90deg,#0e0e0e 180deg,#9e5622 270deg);
+              border:none;cursor:pointer;padding:0;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.15);
+              outline:${autoSelected ? '2px solid var(--ace)' : '2px solid transparent'};outline-offset:2px;"
+            title="Auto — color from seed">
+          </button>
+          ${colors.map(hex => `
+            <button data-${type}-swatch="${escHtml(hex)}" title="#${escHtml(hex)}"
+              style="width:26px;height:26px;border-radius:50%;background:#${escHtml(hex)};
+                border:none;cursor:pointer;padding:0;flex-shrink:0;
+                box-shadow:0 0 0 1px rgba(0,0,0,.15);
+                outline:${currentVal === hex ? '2px solid var(--ace)' : '2px solid transparent'};outline-offset:2px;">
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   function render() {
+    const palette = COLOR_OPTIONS[currentStyle];
     container.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:20px;padding-bottom:16px;">
+      <div style="display:flex;flex-direction:column;gap:16px;padding-bottom:16px;">
 
         <!-- Style tabs -->
         <div>
@@ -102,7 +155,7 @@ export function renderAvatarPicker(container, takenIds, onSelect, initialSeed, v
             border:3px solid var(--border);background:#f0ebe2;">
             <div id="av-preview-inner"
               style="width:100%;height:100%;transition:opacity 0.12s ease,transform 0.12s ease;">
-              ${previewSvg(136)}
+              ${_generateRawSvg(avatarId(), 136)}
             </div>
           </div>
 
@@ -120,6 +173,12 @@ export function renderAvatarPicker(container, takenIds, onSelect, initialSeed, v
           </button>
         </div>
 
+        <!-- Color pickers -->
+        <div style="padding:0 2px;">
+          ${_colorRow('hair', palette.hair, currentHair)}
+          ${_colorRow('skin', palette.skin, currentSkin)}
+        </div>
+
         <div id="av-conflict-msg" style="display:none;text-align:center;font-size:13px;
           color:var(--ace3);background:var(--ace3-bg);border-radius:8px;padding:8px 12px;">
         </div>
@@ -129,27 +188,67 @@ export function renderAvatarPicker(container, takenIds, onSelect, initialSeed, v
       </div>
     `;
 
-    // Style tab clicks — new seed on style change so preview feels fresh
+    // Style tab clicks
     container.querySelectorAll('[data-style]').forEach(btn => {
       btn.addEventListener('click', () => {
         currentStyle = btn.dataset.style;
         currentSeed  = generateSeed();
+        // Reset colors to Auto when switching styles (palettes differ)
+        currentHair = null;
+        currentSkin = null;
         container.querySelectorAll('[data-style]').forEach(b => {
           b.classList.toggle('active', b.dataset.style === currentStyle);
         });
         _hideConflict();
-        updatePreview();
+        // Re-render color rows since palette changed
+        render();
       });
     });
 
-    // Shuffle — new seed, animate preview
+    // Shuffle — new seed, keep color selection
     container.querySelector('#btn-shuffle').addEventListener('click', () => {
       currentSeed = generateSeed();
       _hideConflict();
       updatePreview();
     });
 
-    // Confirm — validate for duplicates if validateFn provided
+    // Hair color swatches
+    container.querySelectorAll('[data-hair-swatch]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.hairSwatch;
+        if (val === 'auto') {
+          currentHair = null;
+          currentSkin = null;
+        } else {
+          currentHair = val;
+          if (currentSkin === null) {
+            currentSkin = COLOR_OPTIONS[currentStyle].skin[0];
+          }
+        }
+        _updateSwatchHighlights();
+        updatePreview();
+      });
+    });
+
+    // Skin color swatches
+    container.querySelectorAll('[data-skin-swatch]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.skinSwatch;
+        if (val === 'auto') {
+          currentHair = null;
+          currentSkin = null;
+        } else {
+          currentSkin = val;
+          if (currentHair === null) {
+            currentHair = COLOR_OPTIONS[currentStyle].hair[0];
+          }
+        }
+        _updateSwatchHighlights();
+        updatePreview();
+      });
+    });
+
+    // Confirm
     container.querySelector('#btn-confirm').addEventListener('click', async () => {
       if (!validateFn) { onSelect(avatarId()); return; }
 
@@ -162,7 +261,6 @@ export function renderAvatarPicker(container, takenIds, onSelect, initialSeed, v
       if (result === true) {
         onSelect(avatarId());
       } else {
-        // Show conflict message, auto-shuffle to a new seed
         const msgEl = container.querySelector('#av-conflict-msg');
         if (msgEl) {
           msgEl.textContent = typeof result === 'string' ? result : 'Already taken — try another!';
@@ -187,23 +285,37 @@ export function renderAvatarPicker(container, takenIds, onSelect, initialSeed, v
 // ─── Private helpers ─────────────────────────────────────────────────────────
 
 function _generateRawSvg(avatarId, renderSz) {
-  const [styleId, seed] = (avatarId || '').split('::');
+  const parts   = (avatarId || '').split('::');
+  const styleId = parts[0];
+  const seed    = parts[1] || 'default';
+  const hairHex = parts[2] || null;
+  const skinHex = parts[3] || null;
+
   const entry = STYLES[styleId] || STYLES['adventurer'];
-  const opts  = { seed: seed || 'default' };
   const sz    = renderSz || 40;
+
+  const opts = { seed };
+  if (hairHex) opts.hairColor = [hairHex];
+  if (skinHex) opts.skinColor = [skinHex];
+
   try {
     const svg = createAvatar(entry.schema, opts).toString();
-    // Use explicit pixel dimensions so the browser scales the viewBox correctly.
-    // Using width="100%" can cause the SVG to render at its natural viewBox size
-    // (762×762 for adventurer) and overflow the circular container.
-    return svg.replace('<svg ', `<svg width="${sz}" height="${sz}" `);
+    // Robust size injection: strip existing width/height from the <svg> tag, then
+    // add explicit px attributes AND inline style. The style override is needed for
+    // iOS Safari where SVG attribute dimensions can be ignored inside flex containers.
+    return svg.replace(/<svg([^>]*)>/, (_, attrs) => {
+      const cleaned = attrs
+        .replace(/\s+width="[^"]*"/g, '')
+        .replace(/\s+height="[^"]*"/g, '');
+      return `<svg width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;display:block;"${cleaned}>`;
+    });
   } catch {
     return _fallbackSvg(sz);
   }
 }
 
 function _fallbackSvg(sz) {
-  return `<svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;display:block;" viewBox="0 0 ${sz} ${sz}" xmlns="http://www.w3.org/2000/svg">
     <rect width="${sz}" height="${sz}" fill="#f0ebe2"/>
     <circle cx="${sz/2}" cy="${sz*0.38}" r="${sz*0.18}" fill="#c8bfb0"/>
     <ellipse cx="${sz/2}" cy="${sz*0.72}" rx="${sz*0.27}" ry="${sz*0.16}" fill="#c8bfb0"/>

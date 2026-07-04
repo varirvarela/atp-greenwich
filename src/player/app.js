@@ -665,7 +665,7 @@ function showChangeAvatarModal(player, creds, onAvatarChanged) {
     } catch (err) {
       console.error('Failed to save avatar:', err);
     }
-  }, creds.uid, (id) => _appCheckNoDuplicate(id, creds.uid));
+  }, player.avatarId || creds.uid, (id) => _appCheckNoDuplicate(id, creds.uid));
 }
 
 // ─── Edit alias modal ─────────────────────────────────────────────────────────

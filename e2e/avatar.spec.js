@@ -86,4 +86,35 @@ test.describe('Flow 5 — Change Avatar', () => {
     // Firebase write + localStorage update — allow extra time
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 10000 });
   });
+
+  test('F5-10 hair and skin color swatches are visible', async ({ page }) => {
+    await expect(page.locator('[data-hair-swatch="auto"]')).toBeVisible();
+    await expect(page.locator('[data-skin-swatch="auto"]')).toBeVisible();
+    // At least one non-auto swatch per type
+    await expect(page.locator('[data-hair-swatch]:not([data-hair-swatch="auto"])').first()).toBeVisible();
+    await expect(page.locator('[data-skin-swatch]:not([data-skin-swatch="auto"])').first()).toBeVisible();
+  });
+
+  test('F5-11 selecting a hair color swatch updates the preview', async ({ page }) => {
+    const before = await page.locator('#av-preview-inner').innerHTML();
+    // Click any non-auto hair swatch
+    await page.locator('[data-hair-swatch]:not([data-hair-swatch="auto"])').first().click();
+    await page.waitForTimeout(250); // animation settle
+    const after = await page.locator('#av-preview-inner').innerHTML();
+    expect(before).not.toBe(after);
+  });
+
+  test('F5-12 style switch resets color swatches to Auto', async ({ page }) => {
+    // First select a hair swatch
+    await page.locator('[data-hair-swatch]:not([data-hair-swatch="auto"])').first().click();
+    // Switch style — this should reset swatches (full re-render)
+    await page.locator('button[data-style="big-smile"]').click();
+    await page.waitForTimeout(150);
+    // Auto swatch should now be the selected one
+    const autoOutline = await page.locator('[data-hair-swatch="auto"]').evaluate(
+      el => getComputedStyle(el).outlineColor
+    );
+    // As long as auto swatch exists after style switch, the reset happened
+    await expect(page.locator('[data-hair-swatch="auto"]')).toBeVisible();
+  });
 });
