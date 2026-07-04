@@ -49,8 +49,8 @@ test.describe('Flow 13 — App Version & What\'s New', () => {
     await page.evaluate(k => localStorage.setItem(k, '1.0.0'), SEEN_KEY);
     await jumpToApp(page);
     await expect(page.locator('#btn-whats-new-close')).toBeVisible({ timeout: 3000 });
-    // Version badge in modal header
-    await expect(page.locator('.modal-sheet').getByText(/v\d+\.\d+\.\d+/)).toBeVisible();
+    // Version badge in modal header (multiple version labels exist — one per changelog entry)
+    await expect(page.locator('.modal-sheet').getByText(/v\d+\.\d+\.\d+/).first()).toBeVisible();
   });
 
   test('F13-05 Got it button closes modal and updates seen_version', async ({ page }) => {
