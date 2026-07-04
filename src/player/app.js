@@ -860,11 +860,14 @@ async function _loadSeasonStats(uid) {
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
 function _defaultAvatarSvg(sz) {
-  return `<svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}" xmlns="http://www.w3.org/2000/svg">
-    <rect width="${sz}" height="${sz}" rx="${sz / 2}" fill="#f0ebe2"/>
-    <circle cx="${sz / 2}" cy="${sz * 0.38}" r="${sz * 0.18}" fill="#c8bfb0"/>
-    <ellipse cx="${sz / 2}" cy="${sz * 0.75}" rx="${sz * 0.27}" ry="${sz * 0.16}" fill="#c8bfb0"/>
-  </svg>`;
+  return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;background:#f0ebe2;flex-shrink:0;">
+    <svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${sz}" height="${sz}" rx="${sz / 2}" fill="#f0ebe2"/>
+      <circle cx="${sz / 2}" cy="${sz * 0.38}" r="${sz * 0.18}" fill="#c8bfb0"/>
+      <ellipse cx="${sz / 2}" cy="${sz * 0.75}" rx="${sz * 0.27}" ry="${sz * 0.16}" fill="#c8bfb0"/>
+    </svg>
+  </div>`;
 }
 
 function _levelLabel(key) {

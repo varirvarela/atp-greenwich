@@ -86,9 +86,8 @@ test.describe('Flow 11 — Pro10 Match Format', () => {
     await jumpToApp(page);
     await page.locator('button[data-tab="matches"]').click();
 
-    // Pick the bo3 card we just seeded (excludes any Pro 10 cards from P11-03)
-    const bo3Card = page.locator('.match-card').filter({ hasNotText: 'Pro 10' }).first();
-    await bo3Card.locator('button[data-action="enter-result"]').click();
+    // Target the exact seeded match by its ID — avoids any ambiguity with other scheduled cards
+    await page.locator('button[data-action="enter-result"][data-mid="match_bo3_p1104"]').click();
 
     await expect(page.locator('.modal-sheet')).toBeVisible();
     await expect(page.locator('.modal-sheet').getByText(/Set scores/i)).toBeVisible({ timeout: 5000 });
