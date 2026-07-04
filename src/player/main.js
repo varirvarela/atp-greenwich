@@ -12,6 +12,9 @@ import { runScoringTests } from '@shared/scoring.js';
 import { showOnboarding, showAvatarPicker } from '@player/auth.js';
 import { showApp }                   from '@player/app.js';
 
+// Prevents boot() from calling showApp when the test helper already did.
+let _testAppActive = false;
+
 // Expose test helpers in dev mode
 if (import.meta.env.DEV) {
   window.runEloTests     = runEloTests;
@@ -36,6 +39,7 @@ if (import.meta.env.DEV) {
   window._atpTest = {
     // Jump straight to the app shell with fake player data
     app: () => {
+      _testAppActive = true; // stop boot() from re-rendering when its async read finishes
       const app    = document.getElementById('app');
       const creds  = { uid: DEV_PLAYER.uid, email: DEV_PLAYER.email, pwdHash: 'dev', avatarId: DEV_PLAYER.avatarId, adminRole: null };
       localStorage.setItem('atp_player_creds', JSON.stringify(creds));
@@ -306,6 +310,7 @@ async function boot() {
     }
 
     // Valid session — launch app directly
+    if (_testAppActive) return; // test helper already started the app
     initAnalytics(creds.uid);
     logAppOpen(isPWA() ? 'pwa' : 'browser');
     showApp(app, player, creds, onSignOut);

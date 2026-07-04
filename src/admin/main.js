@@ -273,6 +273,18 @@ async function renderPlayers(el) {
     });
   });
 
+  // Decline (remove) pending/onboarding player
+  el.querySelectorAll('[data-action="decline"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name || btn.dataset.uid;
+      if (!confirm(`Decline and remove ${name}? This will permanently delete their account.`)) return;
+      btn.disabled = true;
+      await dbRemove(pRef(btn.dataset.uid));
+      toast('Player declined and removed', 'success');
+      renderPlayers(el);
+    });
+  });
+
   // Edit ELO
   el.querySelectorAll('[data-action="edit-elo"]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -288,10 +300,20 @@ async function renderPlayers(el) {
       renderPlayers(el);
     });
   });
+
+  // View profile / change league
+  el.querySelectorAll('[data-action="view-player"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const uid = btn.dataset.uid;
+      const player = players.find(p => p.uid === uid);
+      if (player) _showPlayerProfileModal(player, () => renderPlayers(el));
+    });
+  });
 }
 
 function _playerCard(p) {
   const statusClass = { invited: 'badge-red', onboarding: 'badge-orange', active: 'badge-green' }[p.status] || 'badge-muted';
+  const displayName = escHtml(p.alias || p.name || p.uid);
   return `
     <div class="admin-card">
       ${avatarToSvg(p.avatarId || null, 36)}
@@ -307,18 +329,143 @@ function _playerCard(p) {
         <span class="badge-admin ${statusClass}">${escHtml(p.status || '?')}</span>
         ${p.status === 'invited' ? `
           <button class="btn-admin btn-teal" data-action="approve" data-uid="${p.uid}">Approve</button>
+          <button class="btn-admin btn-danger" data-action="decline"
+            data-uid="${p.uid}" data-name="${displayName}">Decline</button>
         ` : ''}
         ${p.status === 'onboarding' ? `
           <button class="btn-admin btn-teal" data-action="activate" data-uid="${p.uid}">Set Active</button>
+          <button class="btn-admin btn-danger" data-action="decline"
+            data-uid="${p.uid}" data-name="${displayName}">Decline</button>
         ` : ''}
         ${p.status === 'active' ? `
           <button class="btn-admin btn-secondary" data-action="edit-elo"
-            data-uid="${p.uid}" data-name="${escHtml(p.alias || p.name || p.uid)}"
+            data-uid="${p.uid}" data-name="${displayName}"
             data-elo="${p.eloRating || 1000}">Edit ELO</button>
         ` : ''}
+        <button class="btn-admin btn-ghost" data-action="view-player"
+          data-uid="${p.uid}" style="font-size:11px;">Profile</button>
       </div>
     </div>
   `;
+}
+
+async function _showPlayerProfileModal(player, onDone) {
+  // Fetch all seasons to find which league this player belongs to
+  const [allSeasonsRaw, config] = await Promise.all([
+    dbGet(dbRef('seasons')),
+    dbGet(dbRef('config')),
+  ]);
+  const defaultSid = config && config.defaultSeason;
+  const seasons    = allSeasonsRaw || {};
+
+  // Find current league membership (prefer active season)
+  let currentSid = null, currentLid = null, currentLeagueName = '';
+  const seasonOrder = Object.keys(seasons).sort((a, b) => {
+    if (a === defaultSid) return -1;
+    if (b === defaultSid) return 1;
+    return (seasons[b].createdAt || 0) - (seasons[a].createdAt || 0);
+  });
+  for (const sid of seasonOrder) {
+    const leagues = (seasons[sid] && seasons[sid].leagues) || {};
+    for (const [lid, league] of Object.entries(leagues)) {
+      if (league.members && league.members[player.uid]) {
+        currentSid = sid; currentLid = lid;
+        currentLeagueName = league.name || lid;
+        break;
+      }
+    }
+    if (currentSid) break;
+  }
+
+  // Build league options for the dropdown (from default season)
+  const defaultSeasonLeagues = (defaultSid && seasons[defaultSid] && seasons[defaultSid].leagues) || {};
+  const leagueOptions = Object.entries(defaultSeasonLeagues).map(([lid, l]) => ({
+    sid: defaultSid, lid, name: l.name || lid,
+  }));
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
+    display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;
+  `;
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;
+      width:100%;max-width:420px;box-shadow:0 8px 32px rgba(28,24,20,0.2);">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        ${avatarToSvg(player.avatarId || null, 48)}
+        <div>
+          <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;">
+            ${escHtml(player.name || '(no name)')}
+          </div>
+          ${player.alias ? `<div style="font-size:13px;color:var(--text3);">@${escHtml(player.alias)}</div>` : ''}
+        </div>
+      </div>
+
+      <table style="width:100%;font-size:13px;border-collapse:collapse;margin-bottom:16px;">
+        <tr><td style="color:var(--text3);padding:4px 0;width:110px;">Email</td>
+          <td>${escHtml(player.email || '—')}</td></tr>
+        <tr><td style="color:var(--text3);padding:4px 0;">Status</td>
+          <td>${escHtml(player.status || '—')}</td></tr>
+        <tr><td style="color:var(--text3);padding:4px 0;">ELO Rating</td>
+          <td style="font-family:var(--font-mono);font-weight:700;">${player.eloRating || 1000}</td></tr>
+        <tr><td style="color:var(--text3);padding:4px 0;">Current League</td>
+          <td>${currentLeagueName ? escHtml(currentLeagueName) : '<span style="color:var(--text3);">None</span>'}</td></tr>
+      </table>
+
+      ${leagueOptions.length ? `
+        <div class="admin-input-group">
+          <label class="admin-input-label">Change League (active season)</label>
+          <select id="player-league-select" class="admin-input">
+            <option value="">— no change —</option>
+            ${leagueOptions.map(opt =>
+              `<option value="${escHtml(opt.lid)}"
+                ${currentSid === opt.sid && currentLid === opt.lid ? 'disabled' : ''}>
+                ${escHtml(opt.name)}${currentSid === opt.sid && currentLid === opt.lid ? ' (current)' : ''}
+              </option>`
+            ).join('')}
+          </select>
+        </div>
+      ` : '<p style="font-size:13px;color:var(--text3);">No leagues in active season.</p>'}
+
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        ${leagueOptions.length ? `
+          <button id="btn-save-league" class="btn-admin btn-primary" style="flex:1;">Save</button>
+        ` : ''}
+        <button id="btn-close-profile" class="btn-admin btn-secondary"
+          style="${leagueOptions.length ? '' : 'flex:1;'}">Close</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#btn-close-profile').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  const saveBtn = overlay.querySelector('#btn-save-league');
+  if (!saveBtn) return;
+
+  saveBtn.addEventListener('click', async () => {
+    const select = overlay.querySelector('#player-league-select');
+    const toLid  = select && select.value;
+    if (!toLid) { overlay.remove(); return; }
+
+    saveBtn.disabled = true; saveBtn.textContent = '…';
+
+    const updates = {};
+    // Remove from old league if applicable
+    if (currentSid && currentLid) {
+      updates[`seasons/${currentSid}/leagues/${currentLid}/members/${player.uid}`] = null;
+    }
+    // Add to new league in active season
+    updates[`seasons/${defaultSid}/leagues/${toLid}/members/${player.uid}`] = {
+      joinedAt:     Date.now(),
+      transferredAt: Date.now(),
+    };
+    await dbMultiUpdate(updates);
+    overlay.remove();
+    toast(`${player.alias || player.name} moved to ${leagueOptions.find(o => o.lid === toLid)?.name || toLid}`, 'success');
+    onDone();
+  });
 }
 
 // ─── Leagues ──────────────────────────────────────────────────────────────────
@@ -672,9 +819,19 @@ async function renderInvites(el) {
 
   el.querySelectorAll('[data-action="revoke-code"]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Revoke this invite code?')) return;
+      if (!confirm('Delete this invite code?')) return;
       await dbRemove(dbRef('invite_codes/' + btn.dataset.code));
-      toast('Code revoked', 'success');
+      toast('Code deleted', 'success');
+      renderInvites(el);
+    });
+  });
+
+  el.querySelectorAll('[data-action="toggle-code"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { code, used } = btn.dataset;
+      const markUsed = used !== 'true';
+      await dbUpdate(dbRef('invite_codes/' + code), { used: markUsed });
+      toast(`Code marked as ${markUsed ? 'used' : 'available'}`, 'success');
       renderInvites(el);
     });
   });
@@ -694,10 +851,12 @@ function _inviteCard(c, isUsed) {
         <span class="badge-admin ${isUsed ? 'badge-muted' : 'badge-green'}">
           ${isUsed ? 'Used' : 'Available'}
         </span>
-        ${!isUsed ? `
-          <button class="btn-admin btn-danger" data-action="revoke-code"
-            data-code="${escHtml(c.code)}">Revoke</button>
-        ` : ''}
+        <button class="btn-admin btn-ghost" style="font-size:11px;"
+          data-action="toggle-code" data-code="${escHtml(c.code)}" data-used="${isUsed}">
+          Mark ${isUsed ? 'Available' : 'Used'}
+        </button>
+        <button class="btn-admin btn-danger" data-action="revoke-code"
+          data-code="${escHtml(c.code)}">Delete</button>
       </div>
     </div>
   `;

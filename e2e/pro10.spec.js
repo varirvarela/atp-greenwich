@@ -72,8 +72,21 @@ test.describe('Flow 11 — Pro10 Match Format', () => {
   });
 
   test('P11-04 enter result modal for BO3 match shows Set scores and not Score (0 – 10)', async ({ page }) => {
-    // Find a scheduled match card that is NOT Pro10 (P11-03 may have seeded a Pro10 match
-    // in the same suite, so we must skip that card)
+    // Explicitly seed a BO3 scheduled match so this test has a guaranteed enter-result card
+    await adminWrite(page, 'seasons/season_2026/leagues/league_a/matches/match_bo3_p1104', {
+      playerA:    'dev_test_uid',
+      playerB:    'test_player_002',
+      proposedBy: 'dev_test_uid',
+      proposedAt: 1,
+      format:     'bo3',
+      status:     'scheduled',
+      result:     null,
+    });
+    await goTo(page);
+    await jumpToApp(page);
+    await page.locator('button[data-tab="matches"]').click();
+
+    // Pick the bo3 card we just seeded (excludes any Pro 10 cards from P11-03)
     const bo3Card = page.locator('.match-card').filter({ hasNotText: 'Pro 10' }).first();
     await bo3Card.locator('button[data-action="enter-result"]').click();
 
