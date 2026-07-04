@@ -7,6 +7,7 @@ import { simpleHash, toEmailKey, generateUid, isValidEmail, isValidPassword, esc
 import { getStartingElo } from '@shared/elo.js';
 import { initAnalytics, logAppOpen } from '@shared/analytics.js';
 import { renderAvatarPicker, avatarToSvg } from '@player/avatars.js';
+import { APP_VERSION } from '@shared/changelog.js';
 
 // ─── Module-level auth state ──────────────────────────────────────────────────
 // Accumulated across new-user screens before final localStorage write
@@ -144,7 +145,7 @@ export function showOnboarding(container, onAuthenticated) {
         <button class="btn btn-secondary" id="btn-code">I have an invite code</button>
         <button class="btn btn-ghost" id="btn-login" style="margin-top:4px;">Already a member? Sign in</button>
       </div>
-      <div class="version-label" style="margin-top:24px;">v0.02 — Phase 1B</div>
+      <div class="version-label" style="margin-top:24px;">v${APP_VERSION}</div>
     </div>
   `;
 

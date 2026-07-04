@@ -3,6 +3,7 @@
 // shows all open matches, and lets you enter results on the spot.
 
 import { dbGet, dbRef, dbUpdate, dbMultiUpdate, dbListen, pRef, sRef } from '@shared/firebase.js';
+import { APP_VERSION } from '@shared/changelog.js';
 import { escHtml, simpleHash, timeAgo } from '@shared/utils.js';
 import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
@@ -43,6 +44,8 @@ function showLogin(app) {
           color:#b84008;line-height:1;">ATP</div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:3px;
           text-transform:uppercase;color:#8a7e72;margin-top:6px;">Court Companion</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a7e72;
+          margin-top:6px;">v${APP_VERSION}</div>
       </div>
       <div style="width:100%;max-width:340px;">
         <div style="margin-bottom:10px;">

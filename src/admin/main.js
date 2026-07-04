@@ -3,6 +3,7 @@
 // Auth: single admin password stored in config/adminPasswordHash (or default).
 
 import '@admin/style.css';
+import { APP_VERSION } from '@shared/changelog.js';
 import { dbGet, dbSet, dbRef, dbUpdate, dbPush, dbRemove, dbMultiUpdate, pRef, sRef } from '@shared/firebase.js';
 import { escHtml, simpleHash, generateUid, generateInviteCode, timeAgo } from '@shared/utils.js';
 import { buildLeagueTable, isQualified, getQualifiedPlayers } from '@shared/scoring.js';
@@ -49,6 +50,8 @@ function showAdminLogin(app) {
             color:var(--ace);line-height:1;">ATP</div>
           <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2.5px;
             text-transform:uppercase;color:var(--text3);margin-top:4px;">Admin Dashboard</div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);
+            margin-top:6px;">v${APP_VERSION}</div>
         </div>
         <div class="admin-form-panel">
           <div class="admin-input-group">
@@ -122,6 +125,8 @@ function showAdminShell(app) {
         <div class="admin-brand">
           <div class="admin-logo">ATP</div>
           <div class="admin-sub">Admin Dashboard</div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);
+            margin-top:4px;letter-spacing:.3px;">v${APP_VERSION}</div>
         </div>
         <nav class="admin-nav">
           ${NAV_ITEMS.map(it => `

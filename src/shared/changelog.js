@@ -1,0 +1,74 @@
+// src/shared/changelog.js — App version history for ATP Greenwich
+//
+// HOW TO ADD A RELEASE:
+//   1. Add a new entry at the TOP of CHANGELOG (newest first).
+//   2. Set `version` to the new semver string (e.g. "1.3.0").
+//   3. Set `date` to today (YYYY-MM-DD).
+//   4. List every user-visible change in `changes[]` — one sentence each.
+//   5. Bump the `"version"` field in package.json to match.
+//   6. Deploy. Players will see a "What's New" modal on their next open.
+
+export const CHANGELOG = [
+  {
+    version: '1.2.0',
+    date:    '2026-07-04',
+    changes: [
+      'League switch: play in multiple leagues and switch between them from the top bar',
+      'Match results: winner is now derived automatically from the scores you enter',
+      'Match results: photos are compressed client-side before upload — faster saves',
+      'Activity feed: match photos show as thumbnails inline in each result card',
+      'Activity feed: tap any player name or avatar to see their full match history',
+      'Standings: now shows W–L, sets in favour / against, and games in favour / against',
+      'Avatars: adventurer style no longer clips to the top-left corner',
+      'Match cards: action buttons no longer overflow the card on narrow screens',
+    ],
+  },
+  {
+    version: '1.1.0',
+    date:    '2026-06-30',
+    changes: [
+      'Match results: 3rd set support with optional tiebreak scores per set',
+      'Match results: photo is now required when submitting a result',
+      'Confirmed matches: both players can now adjust a result — ELO is recalculated',
+      'Admin app: fixed touch events being blocked on mobile screens',
+      'Court Companion: new mobile tool for entering scores courtside',
+      'Push notifications: opt-in banner for match challenges and score updates',
+    ],
+  },
+  {
+    version: '1.0.0',
+    date:    '2026-06-15',
+    changes: [
+      'Initial release of ATP Greenwich',
+      'Player registration with invite codes, login, and custom avatar selection',
+      'Match proposals with Best of 3 and Pro 10 formats',
+      'Live activity feed with emoji reactions',
+      'Standings table with ELO rankings',
+      'Playoff bracket qualification tracker',
+    ],
+  },
+];
+
+// Always derived from the top entry — no separate constant to keep in sync.
+export const APP_VERSION = CHANGELOG[0].version;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Compare two semver strings (major.minor.patch). Returns negative if a < b,
+// positive if a > b, 0 if equal.
+export function compareVersions(a, b) {
+  const pa = (a || '0.0.0').split('.').map(Number);
+  const pb = (b || '0.0.0').split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+// Returns all changelog entries strictly newer than `sinceVersion`.
+// If `sinceVersion` is null/undefined, returns nothing (first install).
+export function changesSince(sinceVersion) {
+  if (!sinceVersion) return [];
+  return CHANGELOG.filter(e => compareVersions(e.version, sinceVersion) > 0);
+}

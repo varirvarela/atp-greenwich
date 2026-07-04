@@ -11,6 +11,7 @@ import { renderStandingsTab } from '@player/standings.js';
 import { renderFeedTab }      from '@player/feed.js';
 import { renderBracketTab }   from '@player/bracket.js';
 import { buildLeagueTable, calculateStanding } from '@shared/scoring.js';
+import { APP_VERSION, changesSince } from '@shared/changelog.js';
 
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 const TABS = [
@@ -97,6 +98,8 @@ export function showApp(container, player, creds, onSignOut) {
                 letter-spacing:.8px;text-transform:uppercase;line-height:1.6;">
                 DEV
               </div>` : ''}
+            <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);
+              letter-spacing:.3px;">v${APP_VERSION}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <div id="league-switcher-area" style="display:none;"></div>
@@ -186,6 +189,7 @@ export function showApp(container, player, creds, onSignOut) {
   renderShell(activeTab);
   _setupInstallPrompt(container);
   _setupPushNotifications(creds.uid);
+  _checkWhatsNew();
 
   // League switcher — async; shows in top bar only when player is in 2+ leagues
   (async () => {
@@ -922,6 +926,82 @@ async function _appCheckNoDuplicate(avatarId, excludeUid) {
   } catch {
     return true; // fail open — never block the user on a network error
   }
+}
+
+// ─── What's New ───────────────────────────────────────────────────────────────
+
+const SEEN_VERSION_KEY = 'atp_seen_version';
+
+function _checkWhatsNew() {
+  const lastSeen = localStorage.getItem(SEEN_VERSION_KEY);
+
+  // First install — silently mark as seen, no modal
+  if (!lastSeen) {
+    localStorage.setItem(SEEN_VERSION_KEY, APP_VERSION);
+    return;
+  }
+
+  // Already up to date
+  if (lastSeen === APP_VERSION) return;
+
+  const newEntries = changesSince(lastSeen);
+  if (!newEntries.length) {
+    localStorage.setItem(SEEN_VERSION_KEY, APP_VERSION);
+    return;
+  }
+
+  // Small delay so the app shell is visually settled before the modal appears
+  setTimeout(() => _showWhatsNewModal(newEntries), 600);
+}
+
+function _showWhatsNewModal(entries) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet" style="max-height:85dvh;overflow-y:auto;">
+      <div class="modal-handle"></div>
+
+      <div style="display:flex;align-items:center;gap:10px;padding-bottom:16px;
+        border-bottom:1px solid var(--border);margin-bottom:20px;">
+        <div style="font-size:22px;">🎾</div>
+        <div>
+          <div style="font-size:17px;font-weight:700;">What's New</div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);
+            letter-spacing:.5px;margin-top:2px;">v${APP_VERSION}</div>
+        </div>
+      </div>
+
+      ${entries.map(entry => `
+        <div style="margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;
+              background:var(--ace-bg,rgba(184,64,8,.08));color:var(--ace);
+              padding:2px 8px;border-radius:20px;">v${escHtml(entry.version)}</span>
+            <span style="font-size:11px;color:var(--text3);">${escHtml(entry.date)}</span>
+          </div>
+          <ul style="margin:0;padding:0 0 0 16px;display:flex;flex-direction:column;gap:6px;">
+            ${entry.changes.map(c => `
+              <li style="font-size:13px;line-height:1.5;color:var(--text);">${escHtml(c)}</li>
+            `).join('')}
+          </ul>
+        </div>
+      `).join('')}
+
+      <div style="padding-top:4px;padding-bottom:8px;">
+        <button class="btn btn-primary" id="btn-whats-new-close">Got it</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  function close() {
+    localStorage.setItem(SEEN_VERSION_KEY, APP_VERSION);
+    overlay.remove();
+  }
+
+  overlay.querySelector('#btn-whats-new-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 // ─── Season stats loader ──────────────────────────────────────────────────────

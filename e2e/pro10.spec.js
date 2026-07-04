@@ -90,7 +90,7 @@ test.describe('Flow 11 — Pro10 Match Format', () => {
     await page.locator('button[data-action="enter-result"][data-mid="match_bo3_p1104"]').click();
 
     await expect(page.locator('.modal-sheet')).toBeVisible();
-    await expect(page.locator('.modal-sheet').getByText(/Set scores/i)).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.modal-sheet').getByText(/Set 1/i)).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.modal-sheet').getByText(/Score \(0\s*[–-]\s*10\)/i)).not.toBeVisible();
   });
 });

@@ -29,12 +29,12 @@ test.describe('Flow 8 — Standings Tab', () => {
     await expect(page.getByText('ELO Rankings')).toBeVisible();
   });
 
-  test('P4-02 league table shows A Division badge and column headers', async ({ page }) => {
+  test('P4-02 league table shows A Division badge and inline stats', async ({ page }) => {
     await expect(page.getByText('A Division')).toBeVisible();
-    // Column headers
-    await expect(page.getByText('W').first()).toBeVisible();
-    await expect(page.getByText('P').first()).toBeVisible();
-    await expect(page.getByText('GD').first()).toBeVisible();
+    // Inline W-L and sets/games stats (no column headers — stats are per-row)
+    await expect(page.locator('#league-table-mount').getByText(/\dW–\dL/).first()).toBeVisible();
+    await expect(page.locator('#league-table-mount').getByText('Sets').first()).toBeVisible();
+    await expect(page.locator('#league-table-mount').getByText('Games').first()).toBeVisible();
   });
 
   test('P4-02 league table has a row for all 4 seeded players', async ({ page }) => {
