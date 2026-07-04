@@ -41,7 +41,7 @@ test.describe('Flow 10 — Bracket Tab (Phase 6)', () => {
   });
 
   test('P6-02 current player row shows "You"', async ({ page }) => {
-    await expect(page.getByText('You')).toBeVisible();
+    await expect(page.getByText('You', { exact: true })).toBeVisible();
   });
 
   test('P6-02 two players show Qualified badge (devplayer + sofia)', async ({ page }) => {

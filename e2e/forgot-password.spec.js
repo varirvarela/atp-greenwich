@@ -52,7 +52,7 @@ test.describe('Flow 12 — Forgot Password', () => {
 
     await page.goto(`${BASE}?reset=test_reset_token_001`);
     await page.waitForFunction(() => typeof window._atpTest !== 'undefined', { timeout: 10000 });
-    await expect(page.getByText(/Set new password/i)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: /Set new password/i })).toBeVisible({ timeout: 5000 });
   });
 
   test('FP-06 expired reset token shows Link expired heading', async ({ page }) => {

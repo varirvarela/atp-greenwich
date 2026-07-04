@@ -72,9 +72,10 @@ test.describe('Flow 11 — Pro10 Match Format', () => {
   });
 
   test('P11-04 enter result modal for BO3 match shows Set scores and not Score (0 – 10)', async ({ page }) => {
-    // match_test_001 is seeded as scheduled with no format (defaults to bo3)
-    const scheduledCard = page.locator('button[data-action="enter-result"]').first();
-    await scheduledCard.click();
+    // Find a scheduled match card that is NOT Pro10 (P11-03 may have seeded a Pro10 match
+    // in the same suite, so we must skip that card)
+    const bo3Card = page.locator('.match-card').filter({ hasNotText: 'Pro 10' }).first();
+    await bo3Card.locator('button[data-action="enter-result"]').click();
 
     await expect(page.locator('.modal-sheet')).toBeVisible();
     await expect(page.locator('.modal-sheet').getByText(/Set scores/i)).toBeVisible({ timeout: 5000 });
