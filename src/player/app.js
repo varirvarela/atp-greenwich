@@ -56,10 +56,21 @@ export function showApp(container, player, creds, onSignOut) {
   function onAvatarChanged(newAvatarId) {
     _player = { ..._player, avatarId: newAvatarId };
     _creds  = { ..._creds,  avatarId: newAvatarId };
-    // Re-render the profile tab in place
     const content = container.querySelector('#tab-content');
     if (content && activeTab === 'profile') {
-      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged);
+      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged);
+    }
+  }
+
+  function onAliasChanged(newAlias) {
+    _player = { ..._player, alias: newAlias, username: newAlias };
+    const content = container.querySelector('#tab-content');
+    if (content && activeTab === 'profile') {
+      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged);
+    } else {
+      // Update the alias display in place without full re-render
+      const aliasEl = container.querySelector('#profile-alias-display');
+      if (aliasEl) aliasEl.textContent = '@' + newAlias;
     }
   }
 
@@ -162,7 +173,7 @@ export function showApp(container, player, creds, onSignOut) {
         break;
       case 'profile':
         topRight.textContent = 'Profile';
-        renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged);
+        renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged);
         break;
       default:
         content.innerHTML = '';
@@ -224,7 +235,7 @@ function _setupInstallPrompt(container) {
 
 // ─── Tab: Profile ─────────────────────────────────────────────────────────────
 
-function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged) {
+function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAliasChanged) {
   const tier  = eloTierLabel(player.eloRating || 1000);
   const elo   = player.eloRating || 1000;
   const avatarSvg = player.avatarId
@@ -245,7 +256,19 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged) {
           : ''}
         <div class="profile-name">${escHtml(player.name || 'Player')}</div>
         ${player.alias || player.username
-          ? `<div class="profile-alias">@${escHtml(player.alias || player.username)}</div>`
+          ? `<div style="display:flex;align-items:center;gap:6px;">
+               <div class="profile-alias" id="profile-alias-display">@${escHtml(player.alias || player.username)}</div>
+               ${onAliasChanged ? `
+                 <button id="btn-edit-alias" aria-label="Edit alias"
+                   style="background:transparent;border:none;cursor:pointer;padding:2px;
+                     color:var(--text3);display:flex;align-items:center;line-height:1;">
+                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                     stroke-linejoin="round">
+                     <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                   </svg>
+                 </button>` : ''}
+             </div>`
           : ''}
         ${player.adminRole
           ? `<div class="badge badge-ace" style="margin-top:4px;">${escHtml(player.adminRole)}</div>`
@@ -350,6 +373,13 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged) {
       showChangeAvatarModal(player, creds, onAvatarChanged);
     });
   }
+
+  const editAliasBtn = el.querySelector('#btn-edit-alias');
+  if (editAliasBtn && onAliasChanged) {
+    editAliasBtn.addEventListener('click', () => {
+      showEditAliasModal(player, creds, onAliasChanged);
+    });
+  }
 }
 
 // ─── Change avatar modal ──────────────────────────────────────────────────────
@@ -400,6 +430,122 @@ function showChangeAvatarModal(player, creds, onAvatarChanged) {
       console.error('Failed to save avatar:', err);
     }
   }, creds.uid, (id) => _appCheckNoDuplicate(id, creds.uid));
+}
+
+// ─── Edit alias modal ─────────────────────────────────────────────────────────
+
+function showEditAliasModal(player, creds, onAliasChanged) {
+  const currentAlias = (player.alias || player.username || '').toLowerCase();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
+        <div style="font-size:16px;font-weight:700;">Change Alias</div>
+        <button class="btn-icon" id="btn-close-alias-modal" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-group">
+        <label class="input-label" for="alias-edit-input">Alias</label>
+        <input class="input" id="alias-edit-input" type="text"
+          value="${escHtml(player.alias || player.username || '')}"
+          maxlength="30" autocomplete="off" autocapitalize="none"
+          autocorrect="off" spellcheck="false">
+        <div id="alias-edit-hint" class="input-hint" style="font-size:12px;color:var(--text3);
+          margin-top:4px;">Letters, numbers, and underscores.</div>
+      </div>
+      <div style="padding-top:16px;">
+        <button class="btn btn-primary" id="btn-save-alias" disabled>Save</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  function closeModal() { overlay.remove(); }
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  overlay.querySelector('#btn-close-alias-modal').addEventListener('click', closeModal);
+
+  const input   = overlay.querySelector('#alias-edit-input');
+  const hint    = overlay.querySelector('#alias-edit-hint');
+  const saveBtn = overlay.querySelector('#btn-save-alias');
+  let aliasValid = false;
+  let debounce   = null;
+
+  input.focus();
+  input.select();
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounce);
+    aliasValid = false;
+    saveBtn.disabled = true;
+    hint.style.color = 'var(--text3)';
+
+    const val = input.value.trim();
+
+    if (val.toLowerCase() === currentAlias) {
+      hint.textContent = 'This is your current alias.';
+      return;
+    }
+    if (val.length < 2) {
+      hint.textContent = 'At least 2 characters required.';
+      return;
+    }
+
+    hint.textContent = 'Checking…';
+
+    debounce = setTimeout(async () => {
+      try {
+        const all = await dbGet(dbRef('players'));
+        const taken = all
+          ? Object.entries(all)
+              .filter(([id]) => id !== creds.uid)
+              .some(([, p]) =>
+                (p.alias    || '').toLowerCase() === val.toLowerCase() ||
+                (p.username || '').toLowerCase() === val.toLowerCase()
+              )
+          : false;
+
+        if (taken) {
+          hint.textContent   = 'Alias already taken — choose another.';
+          hint.style.color   = 'var(--ace3)';
+          aliasValid         = false;
+        } else {
+          hint.textContent   = 'Alias available ✓';
+          hint.style.color   = 'var(--ace2)';
+          aliasValid         = true;
+          saveBtn.disabled   = false;
+        }
+      } catch {
+        aliasValid         = true;
+        saveBtn.disabled   = false;
+      }
+    }, 500);
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const newAlias = input.value.trim();
+    if (!aliasValid || newAlias.length < 2) return;
+    saveBtn.disabled  = true;
+    saveBtn.textContent = 'Saving…';
+    try {
+      await dbMultiUpdate({
+        [`players/${creds.uid}/alias`]:    newAlias,
+        [`players/${creds.uid}/username`]: newAlias,
+      });
+      closeModal();
+      onAliasChanged(newAlias);
+    } catch (err) {
+      console.error('Save alias error:', err);
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save';
+    }
+  });
 }
 
 async function _appCheckNoDuplicate(avatarId, excludeUid) {

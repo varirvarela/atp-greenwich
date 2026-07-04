@@ -160,8 +160,12 @@ function _matchCard(match, myUid, allPlayers) {
     </span>`;
   }
 
+  const formatBadge = match.format === 'pro10'
+    ? `<span class="badge badge-muted" style="font-size:10px;letter-spacing:.5px;">Pro 10</span>`
+    : '';
+
   return `
-    <div class="card" style="margin-bottom:10px;padding:14px 16px;">
+    <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
           ${meAv}
@@ -184,6 +188,7 @@ function _matchCard(match, myUid, allPlayers) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           ${badge}
+          ${formatBadge}
           ${eloBadge}
         </div>
         ${action ? `<button class="btn btn-primary btn-sm"
