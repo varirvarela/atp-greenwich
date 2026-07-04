@@ -14,18 +14,22 @@ export function renderBracketTab(el, player, creds) {
   </div>`;
 
   const unsubs = [];
+  let cancelled = false;
 
   (async () => {
     const sid = await dbGet(dbRef('config/defaultSeason'));
+    if (cancelled) return;
     if (!sid) { _noSeason(el); return; }
 
     const leagues = await dbGet(sRef(sid, null, 'leagues'));
+    if (cancelled) return;
     if (!leagues) { _noSeason(el); return; }
 
     // Find which league the current player is in
     let ctx = null;
     for (const [lid, league] of Object.entries(leagues)) {
       const m = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
+      if (cancelled) return;
       if (m !== null) { ctx = { sid, lid, league }; break; }
     }
     if (!ctx) { _noSeason(el); return; }
@@ -35,6 +39,7 @@ export function renderBracketTab(el, player, creds) {
       dbGet(sRef(sid, lid, 'bracket')),
       dbGet(dbRef('players')),
     ]);
+    if (cancelled) return;
 
     if (bracketData && (bracketData.status === 'active' || bracketData.status === 'complete')) {
       _renderBracket(el, bracketData, allPlayers || {}, creds.uid, league);
@@ -44,6 +49,7 @@ export function renderBracketTab(el, player, creds) {
         dbGet(sRef(sid, lid, 'members')),
         dbGet(sRef(sid, lid, 'scoringConfig')),
       ]);
+      if (cancelled) return;
       const memberUids = Object.keys(membersObj || {});
       const cfg = scoringConfig || { minMatches: 6, minWins: 4, bracketSize: 4 };
 
@@ -58,7 +64,7 @@ export function renderBracketTab(el, player, creds) {
     _noSeason(el);
   });
 
-  return () => { unsubs.forEach(u => u()); };
+  return () => { cancelled = true; unsubs.forEach(u => u()); };
 }
 
 // ─── Qualification tracker ────────────────────────────────────────────────────

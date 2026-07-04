@@ -18,12 +18,14 @@ export function renderStandingsTab(el, player, creds) {
   </div>`;
 
   const unsubscribers = [];
+  let cancelled = false;
 
   (async () => {
     const [sid, allPlayers] = await Promise.all([
       dbGet(dbRef('config/defaultSeason')),
       dbGet(pRef()),
     ]);
+    if (cancelled) return;
 
     if (!allPlayers) { _renderEmpty(el); return; }
 
@@ -31,9 +33,11 @@ export function renderStandingsTab(el, player, creds) {
     let leagueCtx = null;
     if (sid) {
       const leagues = await dbGet(sRef(sid, null, 'leagues'));
+      if (cancelled) return;
       if (leagues) {
         for (const [lid, league] of Object.entries(leagues)) {
           const member = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
+          if (cancelled) return;
           if (member !== null) {
             leagueCtx = { sid, lid, leagueName: league.name || 'League' };
             break;
@@ -64,6 +68,7 @@ export function renderStandingsTab(el, player, creds) {
     if (leagueCtx) {
       const { sid, lid, leagueName } = leagueCtx;
       const membersObj = await dbGet(sRef(sid, lid, 'members'));
+      if (cancelled) return;
       const memberUids = Object.keys(membersObj || {});
 
       const unsub = dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
@@ -93,7 +98,7 @@ export function renderStandingsTab(el, player, creds) {
     }
   })().catch(() => _renderEmpty(el));
 
-  return () => { unsubscribers.forEach(fn => fn()); };
+  return () => { cancelled = true; unsubscribers.forEach(fn => fn()); };
 }
 
 // ─── League table ─────────────────────────────────────────────────────────────

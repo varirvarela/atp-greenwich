@@ -19,27 +19,30 @@ export function renderFeedTab(el, player, creds) {
   </div>`;
 
   const unsubs = [];
+  let cancelled = false;
 
   (async () => {
     const sid = await dbGet(dbRef('config/defaultSeason'));
-    if (!sid) { _renderNoLeague(el); return; }
+    if (cancelled || !sid) { if (!cancelled) _renderNoLeague(el); return; }
 
     const leagues = await dbGet(sRef(sid, null, 'leagues'));
-    if (!leagues) { _renderNoLeague(el); return; }
+    if (cancelled || !leagues) { if (!cancelled) _renderNoLeague(el); return; }
 
     let leagueCtx = null;
     for (const [lid, league] of Object.entries(leagues)) {
       const member = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
+      if (cancelled) return;
       if (member !== null) {
         leagueCtx = { sid, lid, leagueName: league.name || 'League' };
         break;
       }
     }
 
-    if (!leagueCtx) { _renderNoLeague(el); return; }
+    if (cancelled || !leagueCtx) { if (!cancelled) _renderNoLeague(el); return; }
 
     const { sid: resolvedSid, lid, leagueName } = leagueCtx;
     const allPlayers = await dbGet(pRef());
+    if (cancelled) return;
 
     unsubs.push(dbListen(sRef(resolvedSid, lid, 'matches'), (matchesObj) => {
       _renderFeed(el, matchesObj || {}, creds.uid, allPlayers || {}, leagueName,
@@ -47,7 +50,7 @@ export function renderFeedTab(el, player, creds) {
     }));
   })().catch(() => _renderError(el));
 
-  return () => { unsubs.forEach(u => u()); };
+  return () => { cancelled = true; unsubs.forEach(u => u()); };
 }
 
 // ─── Feed renderer ────────────────────────────────────────────────────────────

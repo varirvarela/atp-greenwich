@@ -19,9 +19,11 @@ export function renderMatchesTab(el, player, creds) {
   </div>`;
 
   let unsubscribe = null;
+  let cancelled = false;
 
   (async () => {
     const ctx = await _loadLeagueContext(creds.uid);
+    if (cancelled) return;
     if (!ctx) { _renderNoLeague(el); return; }
 
     const { sid, lid, leagueName } = ctx;
@@ -29,6 +31,7 @@ export function renderMatchesTab(el, player, creds) {
       dbGet(sRef(sid, lid, 'members')),
       dbGet(pRef()),
     ]);
+    if (cancelled) return;
 
     const memberUids = Object.keys(membersObj || {});
 
@@ -37,7 +40,7 @@ export function renderMatchesTab(el, player, creds) {
     });
   })().catch(() => _renderError(el));
 
-  return () => { if (unsubscribe) { unsubscribe(); unsubscribe = null; } };
+  return () => { cancelled = true; if (unsubscribe) { unsubscribe(); unsubscribe = null; } };
 }
 
 // ─── League context loader ────────────────────────────────────────────────────
