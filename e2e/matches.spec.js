@@ -46,28 +46,26 @@ test.describe('Flow 7 — Matches Tab', () => {
     await expect(page.locator('button[data-action="confirm-result"], button[data-action="upload-photo"]')).toHaveCount(1, { timeout: 6000 });
   });
 
-  test('P3-05 Enter Result modal has winner cards and set inputs', async ({ page }) => {
+  test('P3-05 Enter Result modal has set inputs and submit disabled', async ({ page }) => {
     // The photo_pending match has action "upload-photo"; the scheduled match has "enter-result"
     await page.locator('button[data-action="enter-result"]').first().click();
     await expect(page.locator('.modal-sheet').getByText('Enter Result')).toBeVisible();
-    await expect(page.locator('div.tap-card[data-winner="me"]')).toBeVisible();
-    await expect(page.locator('div.tap-card[data-winner="op"]')).toBeVisible();
+    await expect(page.locator('input[data-score="me"]').first()).toBeVisible();
+    await expect(page.locator('input[data-score="op"]').first()).toBeVisible();
     await expect(page.locator('#btn-submit-result')).toBeDisabled();
     await expect(page.locator('#btn-add-set')).toBeVisible();
   });
 
-  test('P3-06 Submit Result requires winner + scores + photo to enable button', async ({ page }) => {
+  test('P3-06 Submit Result requires scores + photo to enable button', async ({ page }) => {
     await page.locator('button[data-action="enter-result"]').first().click();
 
-    // Select winner
-    await page.locator('div.tap-card[data-winner="me"]').click();
-    // Button still disabled — no scores, no photo
+    // Button disabled — no scores, no photo yet
     await expect(page.locator('#btn-submit-result')).toBeDisabled();
 
     // Fill Set 1
     await page.locator('input[data-score="me"]').nth(0).fill('6');
     await page.locator('input[data-score="op"]').nth(0).fill('3');
-    // Still disabled — Set 2 and photo missing
+    // Still disabled — Set 2 incomplete and no photo
     await expect(page.locator('#btn-submit-result')).toBeDisabled();
 
     // Fill Set 2

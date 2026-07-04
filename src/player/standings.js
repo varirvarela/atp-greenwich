@@ -35,14 +35,14 @@ export function renderStandingsTab(el, player, creds) {
       const leagues = await dbGet(sRef(sid, null, 'leagues'));
       if (cancelled) return;
       if (leagues) {
+        const myLeagues = [];
         for (const [lid, league] of Object.entries(leagues)) {
           const member = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
           if (cancelled) return;
-          if (member !== null) {
-            leagueCtx = { sid, lid, leagueName: league.name || 'League' };
-            break;
-          }
+          if (member !== null) myLeagues.push({ sid, lid, leagueName: league.name || 'League' });
         }
+        const prefLid = localStorage.getItem('atp_active_lid');
+        leagueCtx = myLeagues.find(l => l.lid === prefLid) || myLeagues[0] || null;
       }
     }
 
@@ -115,54 +115,53 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName) {
     return;
   }
 
+  function _diff(n) { return `${n > 0 ? '+' : ''}${n}`; }
+  function _diffColor(n) {
+    return n > 0 ? 'var(--ace2)' : n < 0 ? 'var(--ace3)' : 'var(--text3)';
+  }
+
   el.innerHTML = `
     <div style="margin-bottom:8px;">
       <span class="badge badge-teal" style="font-size:11px;">${escHtml(leagueName)}</span>
     </div>
     <div class="card" style="padding:0;overflow:hidden;">
-      <div style="display:grid;grid-template-columns:32px 1fr 36px 36px 48px;gap:4px;
-        padding:8px 12px;background:var(--bg2);border-bottom:1px solid var(--border);">
-        <div class="t-label t-muted" style="text-align:center;">#</div>
-        <div class="t-label t-muted">Player</div>
-        <div class="t-label t-muted" style="text-align:center;">W</div>
-        <div class="t-label t-muted" style="text-align:center;">P</div>
-        <div class="t-label t-muted" style="text-align:right;">GD</div>
-      </div>
       ${table.map((row, i) => {
         const p    = allPlayers[row.uid] || { name: 'Unknown', alias: row.uid };
         const isMe = row.uid === myUid;
-        const gd   = row.standing.gameDiff;
+        const s    = row.standing;
         const isLast = i === table.length - 1;
         return `
-          <div style="display:grid;grid-template-columns:32px 1fr 36px 36px 48px;gap:4px;
-            padding:10px 12px;${isLast ? '' : 'border-bottom:1px solid var(--border);'}
+          <div style="padding:10px 12px;
+            ${isLast ? '' : 'border-bottom:1px solid var(--border);'}
             ${isMe ? 'background:rgba(184,64,8,.06);' : ''}">
-            <div style="text-align:center;font-family:var(--font-mono);font-size:13px;
-              color:var(--text3);align-self:center;">${row.rank}</div>
-            <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+            <!-- Row 1: rank + player + W-L -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);
+                width:20px;text-align:center;flex-shrink:0;">${row.rank}</div>
               ${p.avatarId ? avatarToSvg(p.avatarId, 28) : _defaultAv(28)}
               <span style="font-size:13px;font-weight:${isMe ? '700' : '400'};
-                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                 ${isMe ? 'You' : escHtml(p.alias || p.name)}
               </span>
+              <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;
+                flex-shrink:0;">${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L</span>
             </div>
-            <div style="text-align:center;font-family:var(--font-mono);font-size:14px;
-              font-weight:700;align-self:center;">${row.standing.matchesWon}</div>
-            <div style="text-align:center;font-family:var(--font-mono);font-size:13px;
-              color:var(--text3);align-self:center;">${row.standing.matchesPlayed}</div>
-            <div style="text-align:right;font-family:var(--font-mono);font-size:13px;
-              align-self:center;
-              color:${gd > 0 ? 'var(--ace2)' : gd < 0 ? 'var(--ace3)' : 'var(--text3)'};">
-              ${gd > 0 ? '+' : ''}${gd}
+            <!-- Row 2: sets + games detail -->
+            <div style="display:flex;gap:16px;padding-left:28px;">
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">
+                Sets
+                <span style="color:var(--text);">${s.setsWon}–${s.setsLost}</span>
+                <span style="color:${_diffColor(s.setDiff)};">(${_diff(s.setDiff)})</span>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">
+                Games
+                <span style="color:var(--text);">${s.gamesWon}–${s.gamesLost}</span>
+                <span style="color:${_diffColor(s.gameDiff)};">(${_diff(s.gameDiff)})</span>
+              </div>
             </div>
           </div>
         `;
       }).join('')}
-    </div>
-    <div style="display:flex;gap:16px;padding:10px 4px 4px;justify-content:flex-end;">
-      <span class="t-label t-muted">W = wins</span>
-      <span class="t-label t-muted">P = played</span>
-      <span class="t-label t-muted">GD = game diff</span>
     </div>
   `;
 }

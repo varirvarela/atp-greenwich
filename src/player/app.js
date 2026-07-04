@@ -98,7 +98,10 @@ export function showApp(container, player, creds, onSignOut) {
                 DEV
               </div>` : ''}
           </div>
-          <div class="top-bar-right" id="topbar-right">Greenwich</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div id="league-switcher-area" style="display:none;"></div>
+            <div class="top-bar-right" id="topbar-right">Greenwich</div>
+          </div>
         </div>
 
         <!-- Tab content -->
@@ -183,6 +186,97 @@ export function showApp(container, player, creds, onSignOut) {
   renderShell(activeTab);
   _setupInstallPrompt(container);
   _setupPushNotifications(creds.uid);
+
+  // League switcher — async; shows in top bar only when player is in 2+ leagues
+  (async () => {
+    const allLeagues = await _loadAllLeagues(creds.uid);
+    if (allLeagues.length < 2) return;
+
+    // Validate stored preference
+    const stored = localStorage.getItem('atp_active_lid');
+    if (stored && !allLeagues.find(l => l.lid === stored)) {
+      localStorage.removeItem('atp_active_lid');
+    }
+
+    const area = container.querySelector('#league-switcher-area');
+    if (!area) return;
+
+    function _currentLeague() {
+      const lid = localStorage.getItem('atp_active_lid');
+      return allLeagues.find(l => l.lid === lid) || allLeagues[0];
+    }
+
+    function _renderSwitcher() {
+      const cur = _currentLeague();
+      area.style.display = '';
+      area.innerHTML = `
+        <button id="league-switch-btn"
+          style="display:flex;align-items:center;gap:4px;background:var(--surface2);
+            border:1px solid var(--border);border-radius:20px;padding:3px 10px;
+            font-size:11px;font-weight:700;font-family:var(--font-mono);cursor:pointer;
+            color:var(--text);white-space:nowrap;letter-spacing:.3px;">
+          ${escHtml(cur.leagueName)}
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      `;
+      area.querySelector('#league-switch-btn').addEventListener('click', () => {
+        _showLeaguePicker(allLeagues, container, () => {
+          _renderSwitcher();
+          renderTabContent(activeTab);
+        });
+      });
+    }
+
+    _renderSwitcher();
+  })().catch(() => {});
+}
+
+async function _loadAllLeagues(uid) {
+  try {
+    const sid = await dbGet(dbRef('config/defaultSeason'));
+    if (!sid) return [];
+    const leagues = await dbGet(sRef(sid, null, 'leagues'));
+    if (!leagues) return [];
+    const result = [];
+    for (const [lid, league] of Object.entries(leagues)) {
+      const member = await dbGet(sRef(sid, lid, 'members/' + uid));
+      if (member !== null) result.push({ sid, lid, leagueName: league.name || 'League' });
+    }
+    return result;
+  } catch { return []; }
+}
+
+function _showLeaguePicker(allLeagues, container, onSwitch) {
+  const currentLid = localStorage.getItem('atp_active_lid') || allLeagues[0]?.lid;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="font-size:16px;font-weight:700;padding:0 0 16px;">Switch League</div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding-bottom:8px;">
+        ${allLeagues.map(l => `
+          <div class="tap-card${l.lid === currentLid ? ' selected' : ''}"
+            data-lid="${escHtml(l.lid)}"
+            style="padding:14px 16px;">
+            <div style="font-weight:700;font-size:14px;">${escHtml(l.leagueName)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelectorAll('[data-lid]').forEach(card => {
+    card.addEventListener('click', () => {
+      const lid = card.dataset.lid;
+      localStorage.setItem('atp_active_lid', lid);
+      overlay.remove();
+      onSwitch();
+    });
+  });
 }
 
 // ─── PWA install prompt ───────────────────────────────────────────────────────

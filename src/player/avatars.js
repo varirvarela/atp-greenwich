@@ -40,7 +40,7 @@ export function generateSeed() {
 // Safe to put directly into innerHTML.
 export function avatarToSvg(avatarId, size) {
   const sz  = size || 40;
-  const raw = _generateRawSvg(avatarId);
+  const raw = _generateRawSvg(avatarId, sz);
   return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:#f0ebe2;">${raw}</div>`;
 }
 
@@ -186,19 +186,19 @@ export function renderAvatarPicker(container, takenIds, onSelect, initialSeed, v
 
 // ─── Private helpers ─────────────────────────────────────────────────────────
 
-function _generateRawSvg(avatarId, size) {
+function _generateRawSvg(avatarId, renderSz) {
   const [styleId, seed] = (avatarId || '').split('::');
   const entry = STYLES[styleId] || STYLES['adventurer'];
   const opts  = { seed: seed || 'default' };
-  if (size) opts.size = size;
+  const sz    = renderSz || 40;
   try {
     const svg = createAvatar(entry.schema, opts).toString();
-    // DiceBear SVGs have no explicit width/height — browser renders them at viewBox
-    // size (up to 762×762px for adventurer), clipping inside the circular container.
-    // Injecting 100% makes the SVG scale to fill whatever container it's placed in.
-    return svg.replace('<svg ', '<svg width="100%" height="100%" ');
+    // Use explicit pixel dimensions so the browser scales the viewBox correctly.
+    // Using width="100%" can cause the SVG to render at its natural viewBox size
+    // (762×762 for adventurer) and overflow the circular container.
+    return svg.replace('<svg ', `<svg width="${sz}" height="${sz}" `);
   } catch {
-    return _fallbackSvg(size || 40);
+    return _fallbackSvg(sz);
   }
 }
 

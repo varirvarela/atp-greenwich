@@ -50,13 +50,39 @@ async function _loadLeagueContext(uid) {
   if (!sid) return null;
   const leagues = await dbGet(sRef(sid, null, 'leagues'));
   if (!leagues) return null;
+  const myLeagues = [];
   for (const [lid, league] of Object.entries(leagues)) {
     const member = await dbGet(sRef(sid, lid, 'members/' + uid));
-    if (member !== null) {
-      return { sid, lid, leagueName: league.name || 'League' };
-    }
+    if (member !== null) myLeagues.push({ sid, lid, leagueName: league.name || 'League' });
   }
-  return null;
+  if (!myLeagues.length) return null;
+  const prefLid = localStorage.getItem('atp_active_lid');
+  return myLeagues.find(l => l.lid === prefLid) || myLeagues[0];
+}
+
+// ─── Photo compression ────────────────────────────────────────────────────────
+
+function _compressPhoto(file, maxPx = 1280, quality = 0.82) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else        { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => {
+        resolve(blob ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file);
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
 }
 
 // ─── Match list render ────────────────────────────────────────────────────────
@@ -195,17 +221,17 @@ function _matchCard(match, myUid, allPlayers) {
           ${opAv}
         </div>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          ${badge}
-          ${formatBadge}
-          ${eloBadge}
-          ${dateBadge}
-        </div>
-        ${action ? `<button class="${action === 'adjust-result' ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}"
-          data-action="${action}" data-mid="${escHtml(match.mid)}"
-          style="flex-shrink:0;white-space:nowrap;">${_actionLabel(action)}</button>` : ''}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        ${badge}
+        ${formatBadge}
+        ${eloBadge}
+        ${dateBadge}
       </div>
+      ${action ? `<div style="margin-top:8px;">
+        <button class="${action === 'adjust-result' ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}"
+          data-action="${action}" data-mid="${escHtml(match.mid)}"
+          style="${action === 'adjust-result' ? 'width:auto;' : 'width:100%;'}">${_actionLabel(action)}</button>
+      </div>` : ''}
     </div>
   `;
 }
@@ -413,11 +439,10 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
   const isPro10 = match.format === 'pro10';
   const opUid   = match.playerA === myUid ? match.playerB : match.playerA;
   const op      = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
+  const opName  = op.alias || op.name;
   const isMeA   = match.playerA === myUid;
 
-  // Pre-fill for adjustments
-  const prev    = isAdjust ? match.result : null;
-  const prevWinnerIsMe = prev ? prev.winner === myUid : null;
+  const prev = isAdjust ? match.result : null;
 
   const overlay = _createOverlay();
   overlay.innerHTML = `
@@ -436,22 +461,6 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         </div>
       ` : ''}
 
-      <div style="margin-bottom:20px;">
-        <div class="t-label t-muted" style="margin-bottom:8px;">Who won?</div>
-        <div style="display:flex;gap:8px;">
-          <div class="tap-card${prevWinnerIsMe === true ? ' selected' : ''}" data-winner="me"
-            style="flex:1;text-align:center;padding:14px 8px;">
-            <div style="font-weight:700;font-size:14px;">You</div>
-          </div>
-          <div class="tap-card${prevWinnerIsMe === false ? ' selected' : ''}" data-winner="op"
-            style="flex:1;text-align:center;padding:14px 8px;">
-            <div style="font-weight:700;font-size:14px;">
-              ${escHtml(op.alias || op.name)}
-            </div>
-          </div>
-        </div>
-      </div>
-
       ${isPro10 ? `
         <div style="margin-bottom:20px;">
           <div class="t-label t-muted" style="margin-bottom:12px;">Score (0 – 10)</div>
@@ -465,9 +474,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
             </div>
             <span style="font-size:24px;color:var(--text3);padding-bottom:10px;">–</span>
             <div style="text-align:center;">
-              <div class="t-small t-muted" style="margin-bottom:6px;">
-                ${escHtml(op.alias || op.name)}
-              </div>
+              <div class="t-small t-muted" style="margin-bottom:6px;">${escHtml(opName)}</div>
               <input type="number" class="input" id="score-op"
                 min="0" max="10" inputmode="numeric" placeholder="–"
                 value="${prev?.score ? (isMeA ? prev.score.b : prev.score.a) : ''}"
@@ -477,7 +484,14 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         </div>
       ` : `
         <div style="margin-bottom:20px;">
-          <div class="t-label t-muted" style="margin-bottom:8px;">Set scores</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;padding-bottom:2px;
+            border-bottom:1px solid var(--border);">
+            <span style="width:48px;flex-shrink:0;"></span>
+            <span style="flex:1;text-align:center;font-size:11px;font-weight:700;color:var(--text3);">You</span>
+            <span style="width:16px;flex-shrink:0;"></span>
+            <span style="flex:1;text-align:center;font-size:11px;font-weight:700;color:var(--text3);">${escHtml(opName)}</span>
+            <div style="width:24px;flex-shrink:0;"></div>
+          </div>
           <div id="sets-container" style="display:flex;flex-direction:column;">
             ${_setRowWithPrefill(1, false, prev, isMeA)}
             ${_setRowWithPrefill(2, false, prev, isMeA)}
@@ -490,9 +504,17 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         </div>
       `}
 
+      <div id="winner-display" data-op-name="${escHtml(opName)}"
+        style="display:none;text-align:center;margin-bottom:16px;padding:8px 12px;
+          border-radius:8px;font-weight:700;font-size:13px;">
+      </div>
+
       <div style="margin-bottom:20px;">
         <div class="t-label t-muted" style="margin-bottom:8px;">
-          Match photo <span style="color:var(--ace3);font-size:10px;">required</span>
+          Match photo
+          ${isAdjust
+            ? `<span style="color:var(--text3);font-size:10px;font-weight:400;">(optional — keep existing if not changed)</span>`
+            : `<span style="color:var(--ace3);font-size:10px;">required</span>`}
         </div>
         <div id="photo-preview" style="display:none;margin-bottom:10px;text-align:center;">
           <img id="photo-img" style="max-width:100%;max-height:150px;border-radius:10px;
@@ -531,47 +553,33 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
   overlay.querySelector('#btn-close').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  let winnerIsMe    = prevWinnerIsMe;
   let thirdSetAdded = !!(prev?.sets?.length >= 3);
   let selectedFile  = null;
 
   overlay.addEventListener('third-set-removed', () => {
     thirdSetAdded = false;
-    _checkResultReady(overlay, winnerIsMe, isPro10);
+    _checkResultReady(overlay, isPro10, isAdjust);
   });
 
-  // --- Winner selection ---
-  overlay.querySelectorAll('[data-winner]').forEach(card => {
-    card.addEventListener('click', () => {
-      winnerIsMe = card.dataset.winner === 'me';
-      overlay.querySelectorAll('[data-winner]').forEach(c => c.classList.remove('selected'));
-      card.classList.add('selected');
-      _checkResultReady(overlay, winnerIsMe, isPro10);
-    });
-  });
-
-  // --- Pro10 score inputs ---
+  // --- Score inputs ---
   if (isPro10) {
     overlay.querySelector('#score-me').addEventListener('input', () =>
-      _checkResultReady(overlay, winnerIsMe, true));
+      _checkResultReady(overlay, true, isAdjust));
     overlay.querySelector('#score-op').addEventListener('input', () =>
-      _checkResultReady(overlay, winnerIsMe, true));
+      _checkResultReady(overlay, true, isAdjust));
   } else {
-    // --- Set score inputs ---
     overlay.querySelector('#sets-container').addEventListener('input', () =>
-      _checkResultReady(overlay, winnerIsMe, false));
+      _checkResultReady(overlay, false, isAdjust));
 
-    // --- Add 3rd set ---
     overlay.querySelector('#btn-add-set')?.addEventListener('click', () => {
       if (thirdSetAdded) return;
       thirdSetAdded = true;
       overlay.querySelector('#sets-container').insertAdjacentHTML('beforeend', _setRow(3, true));
       overlay.querySelector('#btn-add-set').style.display = 'none';
       _wireSetRowEvents(overlay, 3);
-      _checkResultReady(overlay, winnerIsMe, false);
+      _checkResultReady(overlay, false, isAdjust);
     });
 
-    // Wire tiebreak toggles and remove buttons for initial rows
     [1, 2].forEach(n => _wireSetRowEvents(overlay, n));
     if (thirdSetAdded) _wireSetRowEvents(overlay, 3);
   }
@@ -584,7 +592,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     overlay.querySelector('#photo-img').src = URL.createObjectURL(file);
     overlay.querySelector('#photo-preview').style.display = 'block';
     overlay.querySelector('#photo-btn-text').textContent = 'Change Photo';
-    _checkResultReady(overlay, winnerIsMe, isPro10);
+    _checkResultReady(overlay, isPro10, isAdjust);
   });
 
   overlay.querySelector('#btn-remove-photo').addEventListener('click', () => {
@@ -592,19 +600,25 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     overlay.querySelector('#photo-input').value = '';
     overlay.querySelector('#photo-preview').style.display = 'none';
     overlay.querySelector('#photo-btn-text').textContent = 'Choose / Take Photo';
-    _checkResultReady(overlay, winnerIsMe, isPro10);
+    _checkResultReady(overlay, isPro10, isAdjust);
   });
+
+  // Show initial winner derivation (for adjustments with pre-filled scores)
+  _checkResultReady(overlay, isPro10, isAdjust);
 
   // --- Submit ---
   overlay.querySelector('#btn-submit-result').addEventListener('click', async () => {
-    if (winnerIsMe === null || !selectedFile) return;
+    const derivedWinner = _deriveWinner(overlay, isPro10);
+    if (!derivedWinner) return;
+    if (!isAdjust && !selectedFile) return;
 
     const btn = overlay.querySelector('#btn-submit-result');
     btn.disabled = true;
     overlay.querySelector('#submit-status').style.display = 'block';
 
-    const winnerUid = winnerIsMe ? myUid : opUid;
-    const loserUid  = winnerIsMe ? opUid : myUid;
+    const winnerIsMe = derivedWinner === 'me';
+    const winnerUid  = winnerIsMe ? myUid : opUid;
+    const loserUid   = winnerIsMe ? opUid : myUid;
 
     let resultData;
     if (isPro10) {
@@ -641,7 +655,10 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     }
 
     try {
-      const photoUrl = await uploadMatchPhoto(match.mid, selectedFile);
+      const photoFile = selectedFile ? await _compressPhoto(selectedFile) : null;
+      const photoUrl  = photoFile
+        ? await uploadMatchPhoto(match.mid, photoFile)
+        : (match.photoUrl || null);
       const prevEloDeltas = isAdjust ? (match.eloDeltas || null) : null;
       await _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers, prevEloDeltas);
       overlay.remove();
@@ -745,23 +762,51 @@ function _setRow(num, removable = false, prefill = null) {
   `;
 }
 
-function _checkResultReady(overlay, winnerIsMe, isPro10) {
-  const hasPhoto = !!(overlay.querySelector('#photo-input')?.files?.length);
-  let scoresOk;
+function _deriveWinner(overlay, isPro10) {
   if (isPro10) {
-    const me = overlay.querySelector('#score-me')?.value ?? '';
-    const op = overlay.querySelector('#score-op')?.value ?? '';
-    scoresOk = me !== '' && op !== '';
-  } else {
-    const rows = overlay.querySelectorAll('[data-set-row]');
-    scoresOk = rows.length > 0;
-    rows.forEach(row => {
-      if ((row.querySelector('[data-score="me"]')?.value ?? '') === '' ||
-          (row.querySelector('[data-score="op"]')?.value ?? '') === '') scoresOk = false;
-    });
+    const me = parseInt(overlay.querySelector('#score-me')?.value ?? '', 10);
+    const op = parseInt(overlay.querySelector('#score-op')?.value ?? '', 10);
+    if (isNaN(me) || isNaN(op) || me === op) return null;
+    return me > op ? 'me' : 'op';
   }
-  const ready = winnerIsMe !== null && scoresOk && hasPhoto;
-  overlay.querySelector('#btn-submit-result').disabled = !ready;
+  const rows = overlay.querySelectorAll('[data-set-row]');
+  if (!rows.length) return null;
+  let meWins = 0, opWins = 0;
+  for (const row of rows) {
+    const me = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
+    const op = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
+    if (isNaN(me) || isNaN(op)) return null;
+    if (me > op) meWins++;
+    else if (op > me) opWins++;
+    else return null; // tied set — can't determine winner
+  }
+  if (meWins === opWins) return null;
+  return meWins > opWins ? 'me' : 'op';
+}
+
+function _checkResultReady(overlay, isPro10, isAdjust) {
+  const hasPhoto = isAdjust || !!(overlay.querySelector('#photo-input')?.files?.length);
+  const winner   = _deriveWinner(overlay, isPro10);
+
+  const display = overlay.querySelector('#winner-display');
+  if (display) {
+    if (winner === 'me') {
+      display.textContent  = 'You win';
+      display.style.color  = 'var(--ace2)';
+      display.style.background = 'rgba(34,197,94,.1)';
+      display.style.display    = 'block';
+    } else if (winner === 'op') {
+      const opName = display.dataset.opName || 'Opponent';
+      display.textContent  = `${opName} wins`;
+      display.style.color  = 'var(--text)';
+      display.style.background = 'var(--surface2)';
+      display.style.display    = 'block';
+    } else {
+      display.style.display = 'none';
+    }
+  }
+
+  overlay.querySelector('#btn-submit-result').disabled = !(winner !== null && hasPhoto);
 }
 
 function _collectSets(overlay, count) {
@@ -976,7 +1021,8 @@ function _showUploadPhotoModal(match, myUid, allPlayers, sid, lid) {
     if (!selectedFile) return;
     _setUploadingState(overlay, true);
     try {
-      const photoUrl = await uploadMatchPhoto(match.mid, selectedFile);
+      const compressed = await _compressPhoto(selectedFile);
+      const photoUrl = await uploadMatchPhoto(match.mid, compressed);
       await _confirmMatchWithElo(match, photoUrl, sid, lid, allPlayers);
       overlay.remove();
     } catch (err) {

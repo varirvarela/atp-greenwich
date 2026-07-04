@@ -26,40 +26,51 @@
 function calculateStanding(matches, uid) {
   let matchesWon    = 0;
   let matchesPlayed = 0;
+  let setsWon       = 0;
+  let setsLost      = 0;
   let gamesWon      = 0;
   let gamesLost     = 0;
 
   for (const match of matches) {
-    // Only count confirmed matches
     if (match.status !== 'confirmed') continue;
     if (!match.result) continue;
 
     matchesPlayed++;
 
-    const playerSide = match.playerA === uid ? 'a' : 'b';
+    const playerSide   = match.playerA === uid ? 'a' : 'b';
     const opponentSide = playerSide === 'a' ? 'b' : 'a';
 
     if (match.result.winner === uid) matchesWon++;
 
-    // Sum games across all sets
+    // Sum games and sets. Tiebreak sub-scores (set.tb) are not counted as games —
+    // only the main set games (e.g., 7–6 counts as 7 games, not 7+tiebreak points).
     const sets = match.result.sets || [];
     for (const set of sets) {
-      gamesWon  += set[playerSide]   || 0;
-      gamesLost += set[opponentSide] || 0;
+      const pg = set[playerSide]   || 0;
+      const og = set[opponentSide] || 0;
+      gamesWon  += pg;
+      gamesLost += og;
+      if (pg > og) setsWon++;
+      else if (og > pg) setsLost++;
     }
   }
 
   const gameDiff = gamesWon - gamesLost;
+  const setDiff  = setsWon - setsLost;
   const winRate  = matchesPlayed > 0 ? matchesWon / matchesPlayed : 0;
 
   return {
     matchesWon,
+    matchesLost: matchesPlayed - matchesWon,
     matchesPlayed,
+    setsWon,
+    setsLost,
+    setDiff,
     gamesWon,
     gamesLost,
     gameDiff,
     winRate: Math.round(winRate * 100) / 100,
-    points: matchesWon, // primary display metric
+    points: matchesWon,
   };
 }
 

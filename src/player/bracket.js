@@ -26,12 +26,14 @@ export function renderBracketTab(el, player, creds) {
     if (!leagues) { _noSeason(el); return; }
 
     // Find which league the current player is in
-    let ctx = null;
+    const myLeagues = [];
     for (const [lid, league] of Object.entries(leagues)) {
       const m = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
       if (cancelled) return;
-      if (m !== null) { ctx = { sid, lid, league }; break; }
+      if (m !== null) myLeagues.push({ sid, lid, league });
     }
+    const prefLid = localStorage.getItem('atp_active_lid');
+    const ctx = myLeagues.find(l => l.lid === prefLid) || myLeagues[0] || null;
     if (!ctx) { _noSeason(el); return; }
 
     const { lid, league } = ctx;

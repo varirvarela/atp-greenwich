@@ -28,15 +28,14 @@ export function renderFeedTab(el, player, creds) {
     const leagues = await dbGet(sRef(sid, null, 'leagues'));
     if (cancelled || !leagues) { if (!cancelled) _renderNoLeague(el); return; }
 
-    let leagueCtx = null;
+    const myLeagues = [];
     for (const [lid, league] of Object.entries(leagues)) {
       const member = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
       if (cancelled) return;
-      if (member !== null) {
-        leagueCtx = { sid, lid, leagueName: league.name || 'League' };
-        break;
-      }
+      if (member !== null) myLeagues.push({ sid, lid, leagueName: league.name || 'League' });
     }
+    const prefLid   = localStorage.getItem('atp_active_lid');
+    const leagueCtx = myLeagues.find(l => l.lid === prefLid) || myLeagues[0] || null;
 
     if (cancelled || !leagueCtx) { if (!cancelled) _renderNoLeague(el); return; }
 
@@ -87,8 +86,20 @@ function _renderFeed(el, matchesObj, myUid, allPlayers, leagueName, sid, lid) {
     </div>
   `;
 
-  // Wire reaction buttons after rendering
+  // Wire reaction buttons and player-click handlers
   confirmed.forEach(m => _wireReactions(el, m.mid, myUid, sid, lid));
+
+  el.querySelectorAll('[data-player-click]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _showPlayerHistory(btn.dataset.playerClick, allPlayers, myUid, confirmed);
+    });
+  });
+
+  // Wire match-photo click for full-screen view
+  el.querySelectorAll('[data-photo-click]').forEach(img => {
+    img.addEventListener('click', () => _showPhotoModal(img.dataset.photoClick));
+  });
 }
 
 // ─── Feed item ────────────────────────────────────────────────────────────────
@@ -121,13 +132,18 @@ function _feedItem(match, myUid, allPlayers) {
       <!-- Players and score -->
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
-          ${avA}
-          <span style="font-size:13px;font-weight:${winnerIsA ? '700' : '400'};
-            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-            ${escHtml(isMeA ? 'You' : nameA)}
-          </span>
+          <button data-player-click="${escHtml(match.playerA)}"
+            style="background:none;border:none;padding:0;cursor:pointer;flex-shrink:0;
+              display:inline-flex;">${avA}</button>
+          <button data-player-click="${escHtml(match.playerA)}"
+            style="background:none;border:none;padding:0;cursor:pointer;min-width:0;">
+            <span style="font-size:13px;font-weight:${winnerIsA ? '700' : '400'};
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;">
+              ${escHtml(isMeA ? 'You' : nameA)}
+            </span>
+          </button>
           ${winnerIsA ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-            stroke="var(--ace2)" stroke-width="3" stroke-linecap="round">
+            stroke="var(--ace2)" stroke-width="3" stroke-linecap="round" style="flex-shrink:0;">
             <polyline points="20 6 9 17 4 12"/></svg>` : ''}
         </div>
         <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);
@@ -137,13 +153,18 @@ function _feedItem(match, myUid, allPlayers) {
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;
           justify-content:flex-end;">
           ${!winnerIsA ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-            stroke="var(--ace2)" stroke-width="3" stroke-linecap="round">
+            stroke="var(--ace2)" stroke-width="3" stroke-linecap="round" style="flex-shrink:0;">
             <polyline points="20 6 9 17 4 12"/></svg>` : ''}
-          <span style="font-size:13px;font-weight:${!winnerIsA ? '700' : '400'};
-            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right;">
-            ${escHtml(isMeB ? 'You' : nameB)}
-          </span>
-          ${avB}
+          <button data-player-click="${escHtml(match.playerB)}"
+            style="background:none;border:none;padding:0;cursor:pointer;min-width:0;text-align:right;">
+            <span style="font-size:13px;font-weight:${!winnerIsA ? '700' : '400'};
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;">
+              ${escHtml(isMeB ? 'You' : nameB)}
+            </span>
+          </button>
+          <button data-player-click="${escHtml(match.playerB)}"
+            style="background:none;border:none;padding:0;cursor:pointer;flex-shrink:0;
+              display:inline-flex;">${avB}</button>
         </div>
       </div>
 
@@ -166,6 +187,16 @@ function _feedItem(match, myUid, allPlayers) {
         </div>
         <span class="t-label t-muted" style="font-size:10px;">${escHtml(when)}</span>
       </div>
+
+      <!-- Match photo thumbnail -->
+      ${match.photoUrl ? `
+        <div style="margin-bottom:10px;">
+          <img src="${escHtml(match.photoUrl)}" loading="lazy"
+            data-photo-click="${escHtml(match.photoUrl)}"
+            style="width:100%;max-height:200px;object-fit:cover;border-radius:8px;
+              border:1px solid var(--border);cursor:pointer;display:block;">
+        </div>
+      ` : ''}
 
       <!-- Reactions -->
       <div class="feed-reactions" data-mid="${escHtml(match.mid)}"
@@ -236,6 +267,96 @@ function _applyReactionState(feedEl, mid, reactionsObj, myUid) {
     btn.style.borderColor    = isMe ? 'var(--ace)'     : 'var(--border)';
     btn.style.color          = isMe ? 'var(--ace)'     : 'inherit';
   });
+}
+
+// ─── Player history modal ─────────────────────────────────────────────────────
+
+function _showPlayerHistory(uid, allPlayers, myUid, confirmedMatches) {
+  const p    = allPlayers[uid] || { name: 'Player', alias: uid };
+  const name = p.alias || p.name;
+  const av   = p.avatarId ? avatarToSvg(p.avatarId, 48) : _defaultAv(48);
+  const elo  = p.eloRating || 1000;
+
+  const matches = confirmedMatches
+    .filter(m => m.playerA === uid || m.playerB === uid)
+    .slice(0, 30);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet" style="max-height:90dvh;overflow-y:auto;">
+      <div class="modal-handle"></div>
+      <div style="display:flex;align-items:center;gap:12px;padding-bottom:16px;
+        border-bottom:1px solid var(--border);margin-bottom:16px;">
+        ${av}
+        <div>
+          <div style="font-weight:700;font-size:15px;">${escHtml(uid === myUid ? 'You' : name)}</div>
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);">
+            ELO ${elo}
+          </div>
+        </div>
+        <button style="margin-left:auto;background:none;border:none;cursor:pointer;
+          padding:4px;" id="btn-close-hist">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+      </div>
+      ${matches.length === 0 ? `
+        <p class="t-small t-muted" style="text-align:center;padding:16px 0;">
+          No confirmed matches yet.
+        </p>
+      ` : matches.map(m => {
+        const isMeA   = m.playerA === myUid;
+        const opUid2  = m.playerA === uid ? m.playerB : m.playerA;
+        const op2     = allPlayers[opUid2] || { name: 'Player', alias: opUid2 };
+        const pIsA    = m.playerA === uid;
+        const score   = _formatSets(m.result);
+        const when    = _timeAgo(m.confirmedAt);
+        const winnerIsPlayer = m.result?.winner === uid;
+        return `
+          <div class="card" style="margin-bottom:8px;padding:12px 14px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <span style="font-size:12px;font-weight:700;">${escHtml(pIsA ? (uid === myUid ? 'You' : name) : (op2.alias || op2.name))}</span>
+              <span style="font-family:var(--font-mono);font-size:12px;color:var(--text3);margin:0 4px;">${score}</span>
+              <span style="font-size:12px;">${escHtml(pIsA ? (op2.alias || op2.name) : (uid === myUid ? 'You' : name))}</span>
+              <span class="badge ${winnerIsPlayer ? 'badge-teal' : 'badge-muted'}"
+                style="margin-left:auto;font-size:10px;">${winnerIsPlayer ? 'Win' : 'Loss'}</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span class="t-label t-muted" style="font-size:10px;">${escHtml(when)}</span>
+              ${m.photoUrl
+                ? `<img src="${escHtml(m.photoUrl)}" loading="lazy"
+                    data-photo-click="${escHtml(m.photoUrl)}"
+                    style="width:80px;height:52px;object-fit:cover;border-radius:6px;
+                      border:1px solid var(--border);cursor:pointer;">`
+                : ''}
+            </div>
+          </div>
+        `;
+      }).join('')}
+      <div style="padding-bottom:8px;"></div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-close-hist').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelectorAll('[data-photo-click]').forEach(img => {
+    img.addEventListener('click', () => _showPhotoModal(img.dataset.photoClick));
+  });
+}
+
+function _showPhotoModal(url) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);
+    display:flex;align-items:center;justify-content:center;cursor:zoom-out;`;
+  overlay.innerHTML = `<img src="${escHtml(url)}"
+    style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;">`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', () => overlay.remove());
 }
 
 // ─── Empty states ─────────────────────────────────────────────────────────────
