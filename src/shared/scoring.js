@@ -259,6 +259,91 @@ function runScoringTests() {
   return results;
 }
 
+// ─── Group stage points ───────────────────────────────────────────────────────
+
+// Calculate a player's group-stage points from all matches in a league.
+// allMatches: { matchId: matchObject } — full league match map
+// uid:        the player whose points we're calculating
+// pointsConfig: { played, wonBonus, missed, forfeitLoser, forfeitWinner }
+//
+// Match fields consumed:
+//   groupMatch: true              — only group fixtures count
+//   forfeited:  uid | null        — explicit forfeit by one player
+//   deadlinePenaltyApplied: true  — deadline passed with no result (set by cron)
+//   status: 'confirmed'           — completed match
+//   result.winner: uid            — who won
+export function calculateGroupPoints(allMatches, uid, pointsConfig) {
+  const {
+    played        = 1,
+    wonBonus      = 2,
+    missed        = -1,
+    forfeitLoser  = -1,
+    forfeitWinner = 2,
+  } = pointsConfig || {};
+
+  let points = 0;
+
+  for (const match of Object.values(allMatches || {})) {
+    if (!match.groupMatch) continue;
+    const isA = match.playerA === uid;
+    const isB = match.playerB === uid;
+    if (!isA && !isB) continue;
+
+    // Explicit forfeit takes priority over everything else
+    if (match.forfeited) {
+      points += (match.forfeited === uid) ? forfeitLoser : forfeitWinner;
+      continue;
+    }
+
+    // Deadline passed — both absent (cron sets this flag)
+    if (match.deadlinePenaltyApplied) {
+      points += missed;
+      continue;
+    }
+
+    // Normal confirmed match
+    if (match.status === 'confirmed') {
+      points += played;
+      if (match.result?.winner === uid) points += wonBonus;
+    }
+  }
+
+  return points;
+}
+
+// Generate a balanced set of group-stage fixtures for a league.
+// Returns an array of [uidA, uidB] pairs.
+// Best-effort: with few players or high matchesPerPlayer some players may get fewer.
+export function generateFixtures(memberUids, matchesPerPlayer) {
+  const uids = [...memberUids];
+  const counts = Object.fromEntries(uids.map(u => [u, 0]));
+
+  // All unique pairs, shuffled
+  const pairs = [];
+  for (let i = 0; i < uids.length; i++)
+    for (let j = i + 1; j < uids.length; j++)
+      pairs.push([uids[i], uids[j]]);
+  for (let i = pairs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+  }
+
+  const fixtures = [];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [a, b] of pairs) {
+      if (counts[a] >= matchesPerPlayer || counts[b] >= matchesPerPlayer) continue;
+      if (fixtures.some(f => (f[0] === a && f[1] === b) || (f[0] === b && f[1] === a))) continue;
+      fixtures.push([a, b]);
+      counts[a]++;
+      counts[b]++;
+      changed = true;
+    }
+  }
+  return fixtures;
+}
+
 // ─── Exports ─────────────────────────────────────────────────────────────────
 export {
   calculateStanding,

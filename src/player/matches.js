@@ -152,6 +152,7 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
       if (action === 'confirm-result') _showConfirmResultModal(match, myUid, allPlayers, sid, lid);
       if (action === 'upload-photo')   _showUploadPhotoModal(match, myUid, allPlayers, sid, lid);
       if (action === 'adjust-result')  _showAdjustResultModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'forfeit')        _showForfeitModal(match, myUid, allPlayers, sid, lid);
     });
   });
 
@@ -194,11 +195,24 @@ function _matchCard(match, myUid, allPlayers) {
     ? `<span class="badge badge-muted" style="font-size:10px;letter-spacing:.5px;">Pro 10</span>`
     : '';
 
+  const groupBadge = match.groupMatch
+    ? `<span class="badge" style="font-size:10px;background:rgba(0,100,220,.10);color:#0054c4;">Group</span>`
+    : '';
+
   const dateBadge = (match.status === 'scheduled' && match.scheduledAt)
     ? `<span class="t-label t-muted" style="font-size:10px;">
          📅 ${new Date(match.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
        </span>`
     : '';
+
+  const deadlineBadge = (match.groupMatch && match.deadline && match.status !== 'confirmed')
+    ? `<span class="t-label" style="font-size:10px;color:var(--ace3);">
+         Play by ${new Date(match.deadline).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}
+       </span>`
+    : '';
+
+  // Forfeit is only available on unfinished group matches that haven't already been forfeited
+  const canForfeit = match.groupMatch && !match.forfeited && match.status !== 'confirmed';
 
   return `
     <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;">
@@ -223,15 +237,22 @@ function _matchCard(match, myUid, allPlayers) {
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         ${badge}
+        ${groupBadge}
         ${formatBadge}
         ${eloBadge}
         ${dateBadge}
+        ${deadlineBadge}
       </div>
-      ${action ? `<div style="margin-top:8px;">
-        <button class="${action === 'adjust-result' ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}"
+      <div style="display:flex;gap:8px;margin-top:${action || canForfeit ? '8px' : '0'};">
+        ${action ? `<button class="${action === 'adjust-result' ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}"
           data-action="${action}" data-mid="${escHtml(match.mid)}"
-          style="${action === 'adjust-result' ? 'width:auto;' : 'width:100%;'}">${_actionLabel(action)}</button>
-      </div>` : ''}
+          style="${action === 'adjust-result' ? 'width:auto;' : 'flex:1;'}">${_actionLabel(action)}</button>` : ''}
+        ${canForfeit ? `<button class="btn btn-ghost btn-sm" data-action="forfeit"
+          data-mid="${escHtml(match.mid)}"
+          style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">
+          Forfeit
+        </button>` : ''}
+      </div>
     </div>
   `;
 }
@@ -1103,6 +1124,57 @@ async function _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers
 // Keep old name as alias for backward compat (used by _showUploadPhotoModal for legacy flow)
 async function _confirmMatchWithElo(match, photoUrl, sid, lid, allPlayers) {
   return _finalizeResult(match, match.result, photoUrl, sid, lid, allPlayers, null);
+}
+
+// ─── Forfeit modal ────────────────────────────────────────────────────────────
+
+function _showForfeitModal(match, myUid, allPlayers, sid, lid) {
+  const opUid = match.playerA === myUid ? match.playerB : match.playerA;
+  const op    = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
+  const overlay = _createOverlay();
+
+  overlay.innerHTML = `
+    <div class="modal-sheet" style="max-width:360px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h2 class="t-h2" style="margin:0;">Forfeit match?</h2>
+        <button id="btn-close-forfeit" class="btn btn-ghost btn-sm" style="width:auto;padding:4px;">
+          ${_closeIcon()}
+        </button>
+      </div>
+      <p class="t-small" style="color:var(--text2);margin-bottom:8px;">
+        You are about to forfeit your group match against
+        <strong>${escHtml(op.alias || op.name)}</strong>.
+      </p>
+      <p class="t-small" style="color:var(--ace3);margin-bottom:20px;">
+        You will lose 1 group point and your opponent will gain 2.
+        This cannot be undone.
+      </p>
+      <button class="btn btn-primary" id="btn-confirm-forfeit"
+        style="background:var(--ace3);border-color:var(--ace3);width:100%;">
+        Confirm Forfeit
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#btn-close-forfeit').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#btn-confirm-forfeit').addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-confirm-forfeit');
+    btn.disabled = true;
+    btn.textContent = 'Forfeiting…';
+    try {
+      await dbMultiUpdate({
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/forfeited`]: myUid,
+      });
+      overlay.remove();
+    } catch {
+      btn.disabled = false;
+      btn.textContent = 'Confirm Forfeit';
+    }
+  });
 }
 
 // ─── Empty / error states ─────────────────────────────────────────────────────

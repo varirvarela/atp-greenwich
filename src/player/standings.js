@@ -1,10 +1,9 @@
-// src/player/standings.js — Phase 4: League table and ELO rankings
-// League standing is season-scoped; ELO ranking is global across all active players.
+// src/player/standings.js — League table, group stage points, and ELO rankings
 
 import { dbGet, dbRef, dbListen, pRef, sRef } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
 import { eloTierLabel } from '@shared/elo.js';
-import { buildLeagueTable } from '@shared/scoring.js';
+import { buildLeagueTable, calculateGroupPoints } from '@shared/scoring.js';
 import { avatarToSvg } from '@player/avatars.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -26,10 +25,9 @@ export function renderStandingsTab(el, player, creds) {
       dbGet(pRef()),
     ]);
     if (cancelled) return;
-
     if (!allPlayers) { _renderEmpty(el); return; }
 
-    // Find player's league
+    // Find player's active league
     let leagueCtx = null;
     if (sid) {
       const leagues = await dbGet(sRef(sid, null, 'leagues'));
@@ -39,14 +37,20 @@ export function renderStandingsTab(el, player, creds) {
         for (const [lid, league] of Object.entries(leagues)) {
           const member = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
           if (cancelled) return;
-          if (member !== null) myLeagues.push({ sid, lid, leagueName: league.name || 'League' });
+          if (member !== null) {
+            myLeagues.push({
+              sid, lid,
+              leagueName:       league.name || 'League',
+              groupStageConfig: league.groupStageConfig || {},
+              pointsConfig:     league.pointsConfig || {},
+            });
+          }
         }
         const prefLid = localStorage.getItem('atp_active_lid');
         leagueCtx = myLeagues.find(l => l.lid === prefLid) || myLeagues[0] || null;
       }
     }
 
-    // Render shell with placeholders
     el.innerHTML = `
       <div style="padding-bottom:24px;">
         <div class="t-label t-muted" style="margin:0 0 8px;">League Table</div>
@@ -55,30 +59,49 @@ export function renderStandingsTab(el, player, creds) {
             <div class="spinner" style="margin:0 auto;"></div>
           </div>
         </div>
-
         <div class="t-label t-muted" style="margin:24px 0 8px;">ELO Rankings</div>
         <div id="elo-rankings-mount"></div>
       </div>
     `;
 
-    // ELO rankings are global and static for this render
     _renderEloRankings(el.querySelector('#elo-rankings-mount'), allPlayers, creds.uid);
 
-    // League table uses real-time listener if player is in a league
     if (leagueCtx) {
-      const { sid, lid, leagueName } = leagueCtx;
+      const { sid, lid, leagueName, groupStageConfig, pointsConfig } = leagueCtx;
       const membersObj = await dbGet(sRef(sid, lid, 'members'));
       if (cancelled) return;
       const memberUids = Object.keys(membersObj || {});
 
       const unsub = dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
-        const table = buildLeagueTable(matchesObj || {}, memberUids);
+        const allMatches = matchesObj || {};
+        const table      = buildLeagueTable(allMatches, memberUids);
+
+        // Attach group points to each row when group stage is active or closed
+        const gsStatus = groupStageConfig.status;
+        if (gsStatus === 'active' || gsStatus === 'closed') {
+          for (const row of table) {
+            row.groupPoints = calculateGroupPoints(allMatches, row.uid, pointsConfig);
+          }
+          // Re-sort by group points when group stage is running
+          table.sort((a, b) => {
+            if (b.groupPoints !== a.groupPoints) return b.groupPoints - a.groupPoints;
+            return b.standing.gameDiff - a.standing.gameDiff;
+          });
+          let rank = 1;
+          for (let i = 0; i < table.length; i++) {
+            if (i > 0 && table[i].groupPoints !== table[i-1].groupPoints) rank = i + 1;
+            table[i].rank = rank;
+          }
+        }
+
         _renderLeagueTable(
           el.querySelector('#league-table-mount'),
           table,
           allPlayers,
           creds.uid,
-          leagueName
+          leagueName,
+          groupStageConfig,
+          pointsConfig,
         );
       });
       unsubscribers.push(unsub);
@@ -103,7 +126,7 @@ export function renderStandingsTab(el, player, creds) {
 
 // ─── League table ─────────────────────────────────────────────────────────────
 
-function _renderLeagueTable(el, table, allPlayers, myUid, leagueName) {
+function _renderLeagueTable(el, table, allPlayers, myUid, leagueName, gs, pointsCfg) {
   if (!table || table.length === 0) {
     el.innerHTML = `
       <div style="text-align:center;padding:24px 0;">
@@ -115,27 +138,46 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName) {
     return;
   }
 
+  gs       = gs       || {};
+  pointsCfg = pointsCfg || {};
+  const gsStatus    = gs.status || 'pending';
+  const showGsPts   = gsStatus === 'active' || gsStatus === 'closed';
+  const qualifyPts  = gs.qualifyPoints ?? 6;
+  const deadline    = gs.deadline;
+  const pts         = pointsCfg;
+
   function _diff(n) { return `${n > 0 ? '+' : ''}${n}`; }
   function _diffColor(n) {
     return n > 0 ? 'var(--ace2)' : n < 0 ? 'var(--ace3)' : 'var(--text3)';
   }
 
+  const deadlineStr = deadline
+    ? new Date(deadline).toLocaleDateString('en-GB', { day:'numeric', month:'short' })
+    : null;
+
   el.innerHTML = `
-    <div style="margin-bottom:8px;">
+    <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
       <span class="badge badge-teal" style="font-size:11px;">${escHtml(leagueName)}</span>
+      ${gsStatus === 'active'  ? `<span class="badge" style="font-size:10px;background:rgba(0,160,80,.12);color:#007a3d;">Group Stage</span>` : ''}
+      ${gsStatus === 'closed'  ? `<span class="badge badge-muted" style="font-size:10px;">Stage Closed</span>` : ''}
+      ${deadlineStr && gsStatus === 'active' ? `<span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">Deadline ${deadlineStr}</span>` : ''}
     </div>
+
+    ${showGsPts ? _rulesAccordion(pts, qualifyPts, deadlineStr) : ''}
+
     <div class="card" style="padding:0;overflow:hidden;">
       ${table.map((row, i) => {
-        const p    = allPlayers[row.uid] || { name: 'Unknown', alias: row.uid };
-        const isMe = row.uid === myUid;
-        const s    = row.standing;
+        const p      = allPlayers[row.uid] || { name: 'Unknown', alias: row.uid };
+        const isMe   = row.uid === myUid;
+        const s      = row.standing;
+        const gp     = row.groupPoints ?? null;
+        const qualifies = gp !== null && gp >= qualifyPts;
         const isLast = i === table.length - 1;
         return `
           <div style="padding:10px 12px;
             ${isLast ? '' : 'border-bottom:1px solid var(--border);'}
             ${isMe ? 'background:rgba(184,64,8,.06);' : ''}">
-            <!-- Row 1: rank + player + W-L -->
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:${showGsPts ? 4 : 6}px;">
               <div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);
                 width:20px;text-align:center;flex-shrink:0;">${row.rank}</div>
               ${p.avatarId ? avatarToSvg(p.avatarId, 28) : _defaultAv(28)}
@@ -143,11 +185,22 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName) {
                 flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                 ${isMe ? 'You' : escHtml(p.alias || p.name)}
               </span>
-              <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;
-                flex-shrink:0;">${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L</span>
+              ${showGsPts ? `
+                <span style="font-family:var(--font-mono);font-size:16px;font-weight:800;
+                  color:${qualifies ? 'var(--ace2)' : 'var(--text)'};flex-shrink:0;">
+                  ${gp ?? 0} pts
+                </span>
+              ` : `
+                <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;
+                  flex-shrink:0;">${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L</span>
+              `}
             </div>
-            <!-- Row 2: sets + games detail -->
             <div style="display:flex;gap:16px;padding-left:28px;">
+              ${showGsPts ? `
+                <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">
+                  ${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L
+                </span>
+              ` : ''}
               <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">
                 Sets
                 <span style="color:var(--text);">${s.setsWon}–${s.setsLost}</span>
@@ -166,6 +219,50 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName) {
   `;
 }
 
+function _rulesAccordion(pts, qualifyPts, deadlineStr) {
+  const played       = pts.played        ?? 1;
+  const wonBonus     = pts.wonBonus      ?? 2;
+  const missed       = pts.missed        ?? -1;
+  const forfeitLoser = pts.forfeitLoser  ?? -1;
+  const forfeitWinner = pts.forfeitWinner ?? 2;
+
+  function row(label, val) {
+    const color = val > 0 ? 'var(--ace2)' : val < 0 ? 'var(--ace3)' : 'var(--text3)';
+    return `<div style="display:flex;justify-content:space-between;padding:3px 0;">
+      <span style="color:var(--text2);">${label}</span>
+      <span style="font-family:var(--font-mono);font-weight:700;color:${color};">
+        ${val > 0 ? '+' : ''}${val}
+      </span>
+    </div>`;
+  }
+
+  return `
+    <details style="margin-bottom:10px;border-radius:8px;overflow:hidden;">
+      <summary style="background:var(--surface2);padding:10px 12px;font-size:12px;
+        font-weight:700;cursor:pointer;list-style:none;display:flex;
+        justify-content:space-between;align-items:center;">
+        <span>ℹ How scoring works</span>
+        <span style="color:var(--text3);font-size:10px;">tap to expand</span>
+      </summary>
+      <div style="background:var(--surface2);padding:10px 12px 12px;
+        border-top:1px solid var(--border);font-size:12px;">
+        ${row('Played a match', played)}
+        ${row('Won a match', played + wonBonus)}
+        ${row('Lost a match', played)}
+        ${row('Missed a pre-arranged match', missed)}
+        ${row('Forfeit (you)', forfeitLoser)}
+        ${row('Opponent forfeits', forfeitWinner)}
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
+          font-size:11px;color:var(--text3);">
+          Top players with <strong style="color:var(--text);">≥ ${qualifyPts} pts</strong>
+          advance to the bracket.
+          ${deadlineStr ? `&nbsp;·&nbsp;Deadline: <strong style="color:var(--text);">${deadlineStr}</strong>.` : ''}
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 // ─── ELO rankings ─────────────────────────────────────────────────────────────
 
 function _renderEloRankings(el, allPlayers, myUid) {
@@ -176,13 +273,9 @@ function _renderEloRankings(el, allPlayers, myUid) {
     .slice(0, 20);
 
   if (!ranked.length) {
-    el.innerHTML = `<p class="t-small t-muted" style="padding:8px 0;">
-      No ranked players yet.</p>`;
+    el.innerHTML = `<p class="t-small t-muted" style="padding:8px 0;">No ranked players yet.</p>`;
     return;
   }
-
-  // Find my position for the "you" highlight
-  const myPos = ranked.findIndex(p => p.uid === myUid);
 
   el.innerHTML = `
     <div class="card" style="padding:0;overflow:hidden;">
@@ -213,7 +306,7 @@ function _renderEloRankings(el, allPlayers, myUid) {
         `;
       }).join('')}
     </div>
-    ${myPos === -1 && myUid ? `
+    ${ranked.findIndex(p => p.uid === myUid) === -1 && myUid ? `
       <p class="t-small t-muted" style="text-align:center;padding:8px 0;">
         Your ELO will appear here once your first match is confirmed.
       </p>

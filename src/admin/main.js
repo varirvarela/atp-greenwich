@@ -6,7 +6,7 @@ import '@admin/style.css';
 import { APP_VERSION } from '@shared/changelog.js';
 import { dbGet, dbSet, dbRef, dbUpdate, dbPush, dbRemove, dbMultiUpdate, pRef, sRef } from '@shared/firebase.js';
 import { escHtml, simpleHash, generateUid, generateInviteCode, timeAgo } from '@shared/utils.js';
-import { buildLeagueTable, isQualified, getQualifiedPlayers } from '@shared/scoring.js';
+import { buildLeagueTable, isQualified, getQualifiedPlayers, calculateGroupPoints, generateFixtures } from '@shared/scoring.js';
 import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
 
@@ -576,9 +576,11 @@ async function renderLeagues(el) {
       const lid = 'league_' + Date.now().toString(36);
       await dbSet(sRef(sid, lid), {
         name,
-        division:     name.split(' ')[0],
-        createdAt:    Date.now(),
+        division:      name.split(' ')[0],
+        createdAt:     Date.now(),
         scoringConfig: { minMatches: 6, minWins: 4, bracketSize: 4 },
+        groupStageConfig: { matchesPerPlayer: 4, qualifyPoints: 6, deadline: null, status: 'pending' },
+        pointsConfig:     { played: 1, wonBonus: 2, missed: -1, forfeitLoser: -1, forfeitWinner: 2 },
       });
       toast('League created', 'success');
       renderLeagues(el);
@@ -616,6 +618,130 @@ async function renderLeagues(el) {
       const seasonData = seasons[sid];
       const allLeagues = (seasonData && seasonData.leagues) ? seasonData.leagues : {};
       _showMovePlayerModal(uid, playerName, sid, lid, allLeagues, () => renderLeagues(el));
+    });
+  });
+
+  // Toggle group stage config panel
+  el.querySelectorAll('[data-action="toggle-gs-config"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const panel = el.querySelector(`#gs-config-${btn.dataset.lid}`);
+      if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+  });
+
+  // Save group stage config
+  el.querySelectorAll('[data-action="save-gs-config"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid, lid } = btn.dataset;
+      const mpp = parseInt(el.querySelector(`#gs-mpp-${lid}`)?.value, 10) || 4;
+      const qp  = parseInt(el.querySelector(`#gs-qp-${lid}`)?.value,  10) || 6;
+      const dlRaw = el.querySelector(`#gs-dl-${lid}`)?.value;
+      const dl  = dlRaw ? new Date(dlRaw).getTime() : null;
+
+      const pointsConfig = {
+        played:        parseFloat(el.querySelector(`#gs-pts-played-${lid}`)?.value)  ?? 1,
+        wonBonus:      parseFloat(el.querySelector(`#gs-pts-wonb-${lid}`)?.value)    ?? 2,
+        missed:        parseFloat(el.querySelector(`#gs-pts-missed-${lid}`)?.value)  ?? -1,
+        forfeitLoser:  parseFloat(el.querySelector(`#gs-pts-floss-${lid}`)?.value)   ?? -1,
+        forfeitWinner: parseFloat(el.querySelector(`#gs-pts-fwin-${lid}`)?.value)    ?? 2,
+      };
+
+      const league = seasons[sid]?.leagues?.[lid] || {};
+      const currentStatus = league.groupStageConfig?.status || 'pending';
+
+      await dbMultiUpdate({
+        [`seasons/${sid}/leagues/${lid}/groupStageConfig/matchesPerPlayer`]: mpp,
+        [`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyPoints`]:    qp,
+        [`seasons/${sid}/leagues/${lid}/groupStageConfig/deadline`]:         dl,
+        [`seasons/${sid}/leagues/${lid}/groupStageConfig/status`]:           currentStatus,
+        [`seasons/${sid}/leagues/${lid}/pointsConfig`]:                      pointsConfig,
+      });
+      toast('Group stage configuration saved', 'success');
+      renderLeagues(el);
+    });
+  });
+
+  // Release Fixtures
+  el.querySelectorAll('[data-action="release-fixtures"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid, lid } = btn.dataset;
+      const league    = seasons[sid]?.leagues?.[lid] || {};
+      const gs        = league.groupStageConfig || {};
+      const mpp       = gs.matchesPerPlayer || 4;
+      const deadline  = gs.deadline || null;
+      const memberUids = Object.keys(league.members || {});
+
+      if (memberUids.length < 2) { toast('Need at least 2 members', 'error'); return; }
+
+      const numFixtures = Math.floor(memberUids.length * mpp / 2);
+      if (!confirm(
+        `Release ${numFixtures} group fixtures for ${memberUids.length} players?\n` +
+        `(${mpp} matches per player target)\n\nThis cannot be undone.`
+      )) return;
+
+      const pairs = generateFixtures(memberUids, mpp);
+      if (!pairs.length) { toast('Could not generate fixtures — check player count vs matches per player', 'error'); return; }
+
+      const now = Date.now();
+      const updates = {};
+      for (const [playerA, playerB] of pairs) {
+        const mid = 'gm_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/playerA`]    = playerA;
+        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/playerB`]    = playerB;
+        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/proposedBy`] = 'admin';
+        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/proposedAt`] = now;
+        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/status`]     = 'scheduled';
+        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/groupMatch`] = true;
+        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/deadline`]   = deadline;
+        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/result`]     = null;
+      }
+      updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/status`] = 'active';
+
+      await dbMultiUpdate(updates);
+      toast(`${pairs.length} fixtures released`, 'success');
+      renderLeagues(el);
+    });
+  });
+
+  // Close Group Stage
+  el.querySelectorAll('[data-action="close-group-stage"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid, lid } = btn.dataset;
+      const league     = seasons[sid]?.leagues?.[lid] || {};
+      const gs         = league.groupStageConfig || {};
+      const pointsCfg  = league.pointsConfig || {};
+      const memberUids = Object.keys(league.members || {});
+
+      const matchesObj = await dbGet(sRef(sid, lid, 'matches'));
+      const allMatches = matchesObj || {};
+      const qualifyPts = gs.qualifyPoints || 6;
+
+      const standings = memberUids.map(uid => ({
+        uid,
+        pts: calculateGroupPoints(allMatches, uid, pointsCfg),
+        name: (allPlayers[uid]?.alias || allPlayers[uid]?.name || uid),
+      })).sort((a, b) => b.pts - a.pts);
+
+      const qualifiers = standings.filter(s => s.pts >= qualifyPts);
+      const msg =
+        `Group Stage Summary (qualify: ≥${qualifyPts} pts)\n\n` +
+        standings.map(s =>
+          `${s.pts >= qualifyPts ? '✓' : '✗'} ${s.name}: ${s.pts} pts`
+        ).join('\n') +
+        `\n\n${qualifiers.length} player(s) qualify for bracket.` +
+        `\n\nClose group stage and mark qualifiers?`;
+
+      if (!confirm(msg)) return;
+
+      const updates = {};
+      updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/status`] = 'closed';
+      for (const { uid, pts } of standings) {
+        updates[`seasons/${sid}/leagues/${lid}/members/${uid}/groupPoints`]   = pts;
+        updates[`seasons/${sid}/leagues/${lid}/members/${uid}/qualified`]     = pts >= qualifyPts;
+      }
+      await dbMultiUpdate(updates);
+      toast('Group stage closed. Qualifiers marked.', 'success');
+      renderLeagues(el);
     });
   });
 }
@@ -713,15 +839,31 @@ function _renderSeason(sid, season, allPlayers) {
           .filter(([uid, p]) => p.status === 'active' && !memberUids.includes(uid))
           .map(([uid, p]) => ({ uid, ...p }));
 
+        const gs     = league.groupStageConfig || {};
+        const pts    = league.pointsConfig    || {};
+        const gsStatus = gs.status || 'pending';
+        const statusBadge = {
+          pending: `<span class="badge-admin badge-muted">Pending</span>`,
+          active:  `<span class="badge-admin badge-green">Active</span>`,
+          closed:  `<span class="badge-admin badge-muted" style="background:#e0e0e0;">Closed</span>`,
+        }[gsStatus] || '';
+        const deadlineStr = gs.deadline
+          ? new Date(gs.deadline).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
+          : 'not set';
+
         return `
           <div style="background:var(--surface2);border-radius:var(--radius);
             padding:12px;margin-bottom:8px;">
-            <div style="font-weight:700;font-size:13px;margin-bottom:8px;">
-              ${escHtml(league.name || lid)}
-              <span class="badge-admin badge-muted" style="margin-left:6px;">
-                ${memberUids.length} members
-              </span>
+
+            <!-- League header -->
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <div style="font-weight:700;font-size:13px;flex:1;">
+                ${escHtml(league.name || lid)}
+              </div>
+              <span class="badge-admin badge-muted">${memberUids.length} members</span>
             </div>
+
+            <!-- Members list -->
             ${memberUids.map(uid => {
               const p = allPlayers[uid] || {};
               return `
@@ -741,6 +883,8 @@ function _renderSeason(sid, season, allPlayers) {
                 </div>
               `;
             }).join('')}
+
+            <!-- Add member -->
             ${activePlayers.length ? `
               <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
                 <select id="member-select-${lid}" class="admin-input" style="flex:1;">
@@ -753,6 +897,78 @@ function _renderSeason(sid, season, allPlayers) {
                   data-sid="${sid}" data-lid="${lid}">Add</button>
               </div>
             ` : ''}
+
+            <!-- Group stage section -->
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <div style="font-size:12px;font-weight:700;color:var(--text2);">Group Stage</div>
+                ${statusBadge}
+                <button class="btn-admin btn-ghost" style="font-size:11px;margin-left:auto;"
+                  data-action="toggle-gs-config" data-lid="${lid}">Configure ▾</button>
+              </div>
+
+              <!-- Config form (hidden by default) -->
+              <div id="gs-config-${lid}" style="display:none;background:var(--surface);
+                border-radius:6px;padding:10px;margin-bottom:10px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                  <div class="admin-input-group">
+                    <label class="admin-input-label">Matches per player</label>
+                    <input id="gs-mpp-${lid}" class="admin-input" type="number" min="1" max="20"
+                      value="${gs.matchesPerPlayer || 4}"/>
+                  </div>
+                  <div class="admin-input-group">
+                    <label class="admin-input-label">Qualify points (≥)</label>
+                    <input id="gs-qp-${lid}" class="admin-input" type="number" min="0"
+                      value="${gs.qualifyPoints || 6}"/>
+                  </div>
+                  <div class="admin-input-group" style="grid-column:1/-1;">
+                    <label class="admin-input-label">Deadline (${deadlineStr})</label>
+                    <input id="gs-dl-${lid}" class="admin-input" type="datetime-local"
+                      value="${gs.deadline ? new Date(gs.deadline - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16) : ''}"/>
+                  </div>
+                </div>
+                <div style="font-size:11px;font-weight:700;color:var(--text3);
+                  margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">
+                  Point values (defaults: played 1 · won bonus 2 · missed −1 · forfeit −1/+2)
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">
+                  ${[
+                    ['gs-pts-played-'+lid,   'Played',          pts.played        ?? 1 ],
+                    ['gs-pts-wonb-'+lid,     'Won bonus',       pts.wonBonus      ?? 2 ],
+                    ['gs-pts-missed-'+lid,   'Missed',          pts.missed        ?? -1],
+                    ['gs-pts-floss-'+lid,    'Forfeit (loser)', pts.forfeitLoser  ?? -1],
+                    ['gs-pts-fwin-'+lid,     'Forfeit (win)',   pts.forfeitWinner ?? 2 ],
+                  ].map(([id, label, val]) => `
+                    <div class="admin-input-group">
+                      <label class="admin-input-label" style="font-size:9px;">${label}</label>
+                      <input id="${id}" class="admin-input" type="number" value="${val}" style="padding:4px 6px;"/>
+                    </div>
+                  `).join('')}
+                </div>
+                <button class="btn-admin btn-primary" style="width:100%;"
+                  data-action="save-gs-config" data-sid="${sid}" data-lid="${lid}">
+                  Save Configuration
+                </button>
+              </div>
+
+              <!-- Action buttons -->
+              <div style="display:flex;gap:8px;">
+                ${gsStatus === 'pending' ? `
+                  <button class="btn-admin btn-teal" style="flex:1;"
+                    data-action="release-fixtures" data-sid="${sid}" data-lid="${lid}"
+                    ${memberUids.length < 2 ? 'disabled title="Need at least 2 members"' : ''}>
+                    Release Fixtures
+                  </button>
+                ` : gsStatus === 'active' ? `
+                  <button class="btn-admin btn-primary" style="flex:1;"
+                    data-action="close-group-stage" data-sid="${sid}" data-lid="${lid}">
+                    Close Group Stage
+                  </button>
+                ` : `
+                  <div style="font-size:12px;color:var(--text3);">Group stage closed.</div>
+                `}
+              </div>
+            </div>
           </div>
         `;
       }).join('')}
