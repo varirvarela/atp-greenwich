@@ -324,12 +324,20 @@ function _playerCard(p) {
 // ─── Leagues ──────────────────────────────────────────────────────────────────
 
 async function renderLeagues(el) {
-  const [config, allPlayers] = await Promise.all([
+  const [config, allPlayers, allSeasonsRaw] = await Promise.all([
     dbGet(dbRef('config')),
     dbGet(pRef()),
+    dbGet(dbRef('seasons')),
   ]);
   const defaultSid = config && config.defaultSeason;
-  const seasons    = defaultSid ? { [defaultSid]: await dbGet(sRef(defaultSid, null)) } : {};
+  const seasons    = allSeasonsRaw || {};
+
+  // Active season first, then remaining sorted newest → oldest
+  const sortedSeasons = Object.entries(seasons).sort(([sA], [sB]) => {
+    if (sA === defaultSid) return -1;
+    if (sB === defaultSid) return 1;
+    return (seasons[sB].createdAt || 0) - (seasons[sA].createdAt || 0);
+  });
 
   el.innerHTML = `
     <div class="section-header">
@@ -351,12 +359,24 @@ async function renderLeagues(el) {
       </div>
     </div>
 
-    ${defaultSid ? `
-      <div class="section-group-label">Current Season · ${escHtml(defaultSid)}</div>
-      ${_renderSeason(defaultSid, seasons[defaultSid], allPlayers || {})}
-    ` : `
-      <div class="admin-empty">No active season. Create one above.</div>
-    `}
+    ${sortedSeasons.length === 0
+      ? `<div class="admin-empty">No seasons yet. Create one above.</div>`
+      : sortedSeasons.map(([sid, season]) => `
+          <div style="margin-bottom:24px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+              <div class="section-group-label" style="margin:0;">
+                ${escHtml(season.name || sid)}
+              </div>
+              ${sid === defaultSid
+                ? `<span class="badge-admin badge-green">Active</span>`
+                : `<button class="btn-admin btn-ghost" style="font-size:11px;"
+                     data-action="set-default-season" data-sid="${sid}">
+                     Set as active
+                   </button>`}
+            </div>
+            ${_renderSeason(sid, season, allPlayers || {})}
+          </div>
+        `).join('')}
   `;
 
   el.querySelector('#btn-new-season').addEventListener('click', () => {
@@ -370,8 +390,20 @@ async function renderLeagues(el) {
     const sid = 'season_' + Date.now().toString(36);
     await dbSet(sRef(sid, null), { name, createdAt: Date.now() });
     await dbUpdate(dbRef('config'), { defaultSeason: sid });
-    toast('Season created and set as default', 'success');
+    toast('Season created and set as active', 'success');
     renderLeagues(el);
+  });
+
+  // Set a past season as the active one
+  el.querySelectorAll('[data-action="set-default-season"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid } = btn.dataset;
+      const seasonName = seasons[sid] && seasons[sid].name ? seasons[sid].name : sid;
+      if (!confirm(`Set "${seasonName}" as the active season? Players will see matches from this season.`)) return;
+      await dbUpdate(dbRef('config'), { defaultSeason: sid });
+      toast(`"${seasonName}" is now the active season`, 'success');
+      renderLeagues(el);
+    });
   });
 
   // Wire "Add League" buttons
