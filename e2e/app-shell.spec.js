@@ -27,9 +27,9 @@ test.describe('Flow 4 — App Shell & Profile Tab', () => {
     await expect(page.getByText(/Coming in Phase/i)).not.toBeVisible();
   });
 
-  test('F4-02 Bracket tab: still shows Phase 6 placeholder', async ({ page }) => {
+  test('F4-02 Bracket tab: Phase 6 live — no Coming-in-Phase placeholder', async ({ page }) => {
     await page.locator('button[data-tab="bracket"]').click();
-    await expect(page.getByText('Coming in Phase 6')).toBeVisible();
+    await expect(page.getByText(/Coming in Phase/i)).not.toBeVisible();
   });
 
   test('F4-03 Profile tab: name, alias, ELO, and buttons present', async ({ page }) => {
@@ -41,9 +41,9 @@ test.describe('Flow 4 — App Shell & Profile Tab', () => {
     await expect(page.locator('#btn-signout')).toBeVisible();
   });
 
-  test('F4-03 Profile tab: season stats section present', async ({ page }) => {
+  test('F4-03 Profile tab: stats card present, Phase 4 placeholder gone', async ({ page }) => {
     await page.locator('button[data-tab="profile"]').click();
     await expect(page.getByText('Season Stats')).toBeVisible();
-    await expect(page.getByText('Stats available in Phase 4')).toBeVisible();
+    await expect(page.getByText('Stats available in Phase 4')).not.toBeVisible();
   });
 });

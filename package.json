@@ -8,6 +8,8 @@
     "dev:admin": "vite --config vite.admin.config.js",
     "dev:companion": "vite --config vite.companion.config.js",
     "build": "vite build",
+    "build:admin": "vite build --config vite.admin.config.js",
+    "build:companion": "vite build --config vite.companion.config.js",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

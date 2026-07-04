@@ -21,16 +21,17 @@ VITEST (npm test) — 93 tests, ~1.5s, no browser needed
   scoring.test.js   56 tests   calculateStanding, buildLeagueTable, isQualified,
                                getQualifiedPlayers, matchCountBetween, canPlayAgainst
 
-PLAYWRIGHT (npm run test:e2e) — 65 tests, real browser, Firebase Emulator (port 9000)
+PLAYWRIGHT (npm run test:e2e) — 72 tests, real browser, Firebase Emulator (port 9000)
   e2e/registration.spec.js  9 tests   form validation, submit, F1-13 admin status change (Flow 1)
   e2e/invite.spec.js        8 tests   code errors, verification, registration, code marked used (Flow 2)
   e2e/login.spec.js         6 tests   email/alias login, wrong pwd, unknown email, Enter key (Flow 3)
-  e2e/app-shell.spec.js     7 tests   DEV badge, tab routing, profile fields (Flow 4)
+  e2e/app-shell.spec.js     7 tests   DEV badge, tab routing, profile fields (Flow 4) [2 updated]
   e2e/avatar.spec.js        9 tests   modal open/close, SVG clipping fix, shuffle, confirm (Flow 5)
   e2e/session.spec.js       4 tests   session persist, tampered creds, sign out (Flow 6)
   e2e/matches.spec.js      12 tests   sections, confirm/dispute/enter/skip, propose (Flow 7)
   e2e/standings.spec.js     5 tests   league table, ELO rankings, You label (Flow 8)
   e2e/feed.spec.js          5 tests   badge, matches, ELO deltas, accent border, empty state (Flow 9)
+  e2e/bracket.spec.js       7 tests   qualification tracker, badges, qualified count (Flow 10)
   All tests use the Firebase Emulator — zero writes to real Firebase.
   Playwright starts both the emulator (port 9000) and Vite (port 5174) automatically.
 
@@ -913,7 +914,7 @@ REGRESSION QUICK-CHECK  (after any code change)
 
 AUTOMATED — run these first, no manual steps needed:
   npm test              → 93 Vitest tests pass (elo + scoring, ~1.5s)
-  npm run test:e2e      → 65 Playwright tests pass (browser + emulator, ~6min)
+  npm run test:e2e      → 72 Playwright tests pass (browser + emulator, ~6min)
   npm run test:all      → both suites in sequence
 
 VISUAL ONLY — cannot be automated, requires human eyes:

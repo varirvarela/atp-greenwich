@@ -6,7 +6,7 @@ import { resolve } from 'path';
 
 export default defineConfig({
   root: '.',
-  base: '/',
+  base: '/atp-greenwich/companion/',
   build: {
     outDir: 'dist-companion',
     rollupOptions: {
