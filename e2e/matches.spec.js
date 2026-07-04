@@ -56,23 +56,32 @@ test.describe('Flow 7 — Matches Tab', () => {
     await expect(page.locator('#btn-add-set')).toBeVisible();
   });
 
-  test('P3-06 Submit Result requires winner + scores to enable button', async ({ page }) => {
+  test('P3-06 Submit Result requires winner + scores + photo to enable button', async ({ page }) => {
     await page.locator('button[data-action="enter-result"]').first().click();
 
     // Select winner
     await page.locator('div.tap-card[data-winner="me"]').click();
-    // Button still disabled — no scores yet
+    // Button still disabled — no scores, no photo
     await expect(page.locator('#btn-submit-result')).toBeDisabled();
 
     // Fill Set 1
     await page.locator('input[data-score="me"]').nth(0).fill('6');
     await page.locator('input[data-score="op"]').nth(0).fill('3');
-    // Still disabled — Set 2 missing
+    // Still disabled — Set 2 and photo missing
     await expect(page.locator('#btn-submit-result')).toBeDisabled();
 
     // Fill Set 2
     await page.locator('input[data-score="me"]').nth(1).fill('7');
     await page.locator('input[data-score="op"]').nth(1).fill('5');
+    // Still disabled — photo required
+    await expect(page.locator('#btn-submit-result')).toBeDisabled();
+
+    // Attach a photo (1×1 transparent PNG stub)
+    await page.locator('#photo-input').setInputFiles({
+      name: 'match.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'),
+    });
     await expect(page.locator('#btn-submit-result')).toBeEnabled();
   });
 

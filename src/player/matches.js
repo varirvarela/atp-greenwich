@@ -125,6 +125,7 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
       if (action === 'enter-result')   _showEnterResultModal(match, myUid, allPlayers, sid, lid);
       if (action === 'confirm-result') _showConfirmResultModal(match, myUid, allPlayers, sid, lid);
       if (action === 'upload-photo')   _showUploadPhotoModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'adjust-result')  _showAdjustResultModal(match, myUid, allPlayers, sid, lid);
     });
   });
 
@@ -201,7 +202,7 @@ function _matchCard(match, myUid, allPlayers) {
           ${eloBadge}
           ${dateBadge}
         </div>
-        ${action ? `<button class="btn btn-primary btn-sm"
+        ${action ? `<button class="${action === 'adjust-result' ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}"
           data-action="${action}" data-mid="${escHtml(match.mid)}"
           style="flex-shrink:0;white-space:nowrap;">${_actionLabel(action)}</button>` : ''}
       </div>
@@ -230,7 +231,7 @@ function _cardMeta(match, myUid) {
       const iWon = match.result?.winner === myUid;
       return {
         badge: `<span class="badge ${iWon ? 'badge-teal' : 'badge-muted'}">${iWon ? 'Won ✓' : 'Lost'}</span>`,
-        action: null,
+        action: 'adjust-result',
       };
     }
     default:
@@ -242,6 +243,7 @@ function _actionLabel(action) {
   if (action === 'enter-result')   return 'Enter Result';
   if (action === 'confirm-result') return 'Confirm Result';
   if (action === 'upload-photo')   return 'Upload Photo';
+  if (action === 'adjust-result')  return 'Adjust';
   return 'Action';
 }
 
@@ -252,7 +254,11 @@ function _formatScore(result, isMeA) {
     return isMeA ? `${s.a}–${s.b}` : `${s.b}–${s.a}`;
   }
   if (!result.sets?.length) return '';
-  return result.sets.map(s => isMeA ? `${s.a}-${s.b}` : `${s.b}-${s.a}`).join(', ');
+  return result.sets.map(s => {
+    const base = isMeA ? `${s.a}-${s.b}` : `${s.b}-${s.a}`;
+    if (s.tb) return `${base} (${s.tb.a}-${s.tb.b})`;
+    return base;
+  }).join(', ');
 }
 
 // ─── Propose match modal ──────────────────────────────────────────────────────
@@ -396,28 +402,48 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
 // ─── Enter result modal ───────────────────────────────────────────────────────
 
 function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
+  _showResultEntryModal(match, myUid, allPlayers, sid, lid, false);
+}
+
+function _showAdjustResultModal(match, myUid, allPlayers, sid, lid) {
+  _showResultEntryModal(match, myUid, allPlayers, sid, lid, true);
+}
+
+function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
   const isPro10 = match.format === 'pro10';
   const opUid   = match.playerA === myUid ? match.playerB : match.playerA;
   const op      = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
   const isMeA   = match.playerA === myUid;
+
+  // Pre-fill for adjustments
+  const prev    = isAdjust ? match.result : null;
+  const prevWinnerIsMe = prev ? prev.winner === myUid : null;
 
   const overlay = _createOverlay();
   overlay.innerHTML = `
     <div class="modal-sheet" style="max-height:92dvh;overflow-y:auto;">
       <div class="modal-handle"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
-        <div style="font-size:16px;font-weight:700;">Enter Result</div>
+        <div style="font-size:16px;font-weight:700;">${isAdjust ? 'Adjust Result' : 'Enter Result'}</div>
         <button class="btn-icon" id="btn-close">${_closeIcon()}</button>
       </div>
+
+      ${isAdjust ? `
+        <div class="card" style="margin-bottom:16px;border-left:3px solid var(--ace4);background:var(--ace4-bg);">
+          <p class="t-small" style="color:var(--ace4);">
+            Adjusting this result will recalculate ELO ratings for both players.
+          </p>
+        </div>
+      ` : ''}
 
       <div style="margin-bottom:20px;">
         <div class="t-label t-muted" style="margin-bottom:8px;">Who won?</div>
         <div style="display:flex;gap:8px;">
-          <div class="tap-card" data-winner="me"
+          <div class="tap-card${prevWinnerIsMe === true ? ' selected' : ''}" data-winner="me"
             style="flex:1;text-align:center;padding:14px 8px;">
             <div style="font-weight:700;font-size:14px;">You</div>
           </div>
-          <div class="tap-card" data-winner="op"
+          <div class="tap-card${prevWinnerIsMe === false ? ' selected' : ''}" data-winner="op"
             style="flex:1;text-align:center;padding:14px 8px;">
             <div style="font-weight:700;font-size:14px;">
               ${escHtml(op.alias || op.name)}
@@ -434,6 +460,7 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
               <div class="t-small t-muted" style="margin-bottom:6px;">You</div>
               <input type="number" class="input" id="score-me"
                 min="0" max="10" inputmode="numeric" placeholder="–"
+                value="${prev?.score ? (isMeA ? prev.score.a : prev.score.b) : ''}"
                 style="width:76px;text-align:center;height:56px;font-size:24px;padding:8px 4px;">
             </div>
             <span style="font-size:24px;color:var(--text3);padding-bottom:10px;">–</span>
@@ -443,6 +470,7 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
               </div>
               <input type="number" class="input" id="score-op"
                 min="0" max="10" inputmode="numeric" placeholder="–"
+                value="${prev?.score ? (isMeA ? prev.score.b : prev.score.a) : ''}"
                 style="width:76px;text-align:center;height:56px;font-size:24px;padding:8px 4px;">
             </div>
           </div>
@@ -450,19 +478,51 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
       ` : `
         <div style="margin-bottom:20px;">
           <div class="t-label t-muted" style="margin-bottom:8px;">Set scores</div>
-          <div id="sets-container" style="display:flex;flex-direction:column;gap:10px;">
-            ${_setRow(1)}
-            ${_setRow(2)}
+          <div id="sets-container" style="display:flex;flex-direction:column;">
+            ${_setRowWithPrefill(1, false, prev, isMeA)}
+            ${_setRowWithPrefill(2, false, prev, isMeA)}
+            ${prev?.sets?.length >= 3 ? _setRowWithPrefill(3, true, prev, isMeA) : ''}
           </div>
           <button class="btn btn-ghost btn-sm" id="btn-add-set"
-            style="margin-top:10px;width:auto;">+ Add 3rd set</button>
+            style="margin-top:8px;width:auto;${prev?.sets?.length >= 3 ? 'display:none;' : ''}">
+            + Add 3rd set
+          </button>
         </div>
       `}
 
+      <div style="margin-bottom:20px;">
+        <div class="t-label t-muted" style="margin-bottom:8px;">
+          Match photo <span style="color:var(--ace3);font-size:10px;">required</span>
+        </div>
+        <div id="photo-preview" style="display:none;margin-bottom:10px;text-align:center;">
+          <img id="photo-img" style="max-width:100%;max-height:150px;border-radius:10px;
+            object-fit:cover;border:2px solid var(--border);">
+          <button type="button" id="btn-remove-photo"
+            style="display:block;margin:6px auto 0;background:none;border:none;
+              cursor:pointer;font-size:11px;color:var(--text3);">Remove photo</button>
+        </div>
+        <label class="btn btn-surface" id="photo-label"
+          style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+            <circle cx="12" cy="13" r="3"/>
+          </svg>
+          <span id="photo-btn-text">Choose / Take Photo</span>
+          <input type="file" id="photo-input" accept="image/*" capture="environment"
+            style="display:none;">
+        </label>
+      </div>
+
       <div style="padding-bottom:8px;">
         <button class="btn btn-primary" id="btn-submit-result" disabled>
-          Submit Result
+          ${isAdjust ? 'Save Adjustment' : 'Submit Result'}
         </button>
+      </div>
+
+      <div id="submit-status" style="display:none;text-align:center;padding:12px 0;">
+        <div class="spinner" style="margin:0 auto 8px;"></div>
+        <p class="t-small t-muted">Saving and updating ratings…</p>
       </div>
     </div>
   `;
@@ -471,9 +531,16 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
   overlay.querySelector('#btn-close').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  let winnerIsMe    = null;
-  let thirdSetAdded = false;
+  let winnerIsMe    = prevWinnerIsMe;
+  let thirdSetAdded = !!(prev?.sets?.length >= 3);
+  let selectedFile  = null;
 
+  overlay.addEventListener('third-set-removed', () => {
+    thirdSetAdded = false;
+    _checkResultReady(overlay, winnerIsMe, isPro10);
+  });
+
+  // --- Winner selection ---
   overlay.querySelectorAll('[data-winner]').forEach(card => {
     card.addEventListener('click', () => {
       winnerIsMe = card.dataset.winner === 'me';
@@ -483,108 +550,217 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
     });
   });
 
+  // --- Pro10 score inputs ---
   if (isPro10) {
     overlay.querySelector('#score-me').addEventListener('input', () =>
       _checkResultReady(overlay, winnerIsMe, true));
     overlay.querySelector('#score-op').addEventListener('input', () =>
       _checkResultReady(overlay, winnerIsMe, true));
   } else {
-    overlay.querySelector('#btn-add-set').addEventListener('click', () => {
+    // --- Set score inputs ---
+    overlay.querySelector('#sets-container').addEventListener('input', () =>
+      _checkResultReady(overlay, winnerIsMe, false));
+
+    // --- Add 3rd set ---
+    overlay.querySelector('#btn-add-set')?.addEventListener('click', () => {
       if (thirdSetAdded) return;
       thirdSetAdded = true;
-      overlay.querySelector('#sets-container').insertAdjacentHTML('beforeend', _setRow(3));
+      overlay.querySelector('#sets-container').insertAdjacentHTML('beforeend', _setRow(3, true));
       overlay.querySelector('#btn-add-set').style.display = 'none';
+      _wireSetRowEvents(overlay, 3);
       _checkResultReady(overlay, winnerIsMe, false);
     });
 
-    overlay.querySelector('#sets-container').addEventListener('input', () => {
-      _checkResultReady(overlay, winnerIsMe, false);
-    });
+    // Wire tiebreak toggles and remove buttons for initial rows
+    [1, 2].forEach(n => _wireSetRowEvents(overlay, n));
+    if (thirdSetAdded) _wireSetRowEvents(overlay, 3);
   }
 
+  // --- Photo ---
+  overlay.querySelector('#photo-input').addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    selectedFile = file;
+    overlay.querySelector('#photo-img').src = URL.createObjectURL(file);
+    overlay.querySelector('#photo-preview').style.display = 'block';
+    overlay.querySelector('#photo-btn-text').textContent = 'Change Photo';
+    _checkResultReady(overlay, winnerIsMe, isPro10);
+  });
+
+  overlay.querySelector('#btn-remove-photo').addEventListener('click', () => {
+    selectedFile = null;
+    overlay.querySelector('#photo-input').value = '';
+    overlay.querySelector('#photo-preview').style.display = 'none';
+    overlay.querySelector('#photo-btn-text').textContent = 'Choose / Take Photo';
+    _checkResultReady(overlay, winnerIsMe, isPro10);
+  });
+
+  // --- Submit ---
   overlay.querySelector('#btn-submit-result').addEventListener('click', async () => {
-    if (winnerIsMe === null) return;
+    if (winnerIsMe === null || !selectedFile) return;
 
     const btn = overlay.querySelector('#btn-submit-result');
     btn.disabled = true;
-    btn.textContent = 'Saving…';
+    overlay.querySelector('#submit-status').style.display = 'block';
 
-    const opUid2    = match.playerA === myUid ? match.playerB : match.playerA;
-    const winnerUid = winnerIsMe ? myUid : opUid2;
-    const loserUid  = winnerIsMe ? opUid2 : myUid;
+    const winnerUid = winnerIsMe ? myUid : opUid;
+    const loserUid  = winnerIsMe ? opUid : myUid;
 
     let resultData;
     if (isPro10) {
       const me  = parseInt(overlay.querySelector('#score-me').value, 10);
       const opp = parseInt(overlay.querySelector('#score-op').value, 10);
       resultData = {
-        winner:      winnerUid,
-        loser:       loserUid,
-        score:       isMeA ? { a: me, b: opp } : { a: opp, b: me },
-        enteredBy:   myUid,
-        enteredAt:   Date.now(),
-        confirmedBy: null,
-        confirmedAt: null,
+        winner:    winnerUid,
+        loser:     loserUid,
+        score:     isMeA ? { a: me, b: opp } : { a: opp, b: me },
+        enteredBy: myUid,
+        enteredAt: Date.now(),
       };
     } else {
-      const setCount  = thirdSetAdded ? 3 : 2;
-      const sets      = _collectSets(overlay, setCount);
-      if (!sets) { btn.disabled = false; btn.textContent = 'Submit Result'; return; }
+      const setCount = thirdSetAdded ? 3 : 2;
+      const sets     = _collectSets(overlay, setCount);
+      if (!sets) {
+        btn.disabled = false;
+        overlay.querySelector('#submit-status').style.display = 'none';
+        return;
+      }
       resultData = {
-        winner:      winnerUid,
-        loser:       loserUid,
-        sets:        sets.map(s => isMeA ? { a: s.me, b: s.op } : { a: s.op, b: s.me }),
-        enteredBy:   myUid,
-        enteredAt:   Date.now(),
-        confirmedBy: null,
-        confirmedAt: null,
+        winner:    winnerUid,
+        loser:     loserUid,
+        sets:      sets.map(s => {
+          const base = isMeA ? { a: s.me, b: s.op } : { a: s.op, b: s.me };
+          if (s.tbMe !== null && s.tbOp !== null) {
+            base.tb = isMeA ? { a: s.tbMe, b: s.tbOp } : { a: s.tbOp, b: s.tbMe };
+          }
+          return base;
+        }),
+        enteredBy: myUid,
+        enteredAt: Date.now(),
       };
     }
 
     try {
-      await dbMultiUpdate({
-        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]: 'result_pending',
-        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]: resultData,
-      });
+      const photoUrl = await uploadMatchPhoto(match.mid, selectedFile);
+      const prevEloDeltas = isAdjust ? (match.eloDeltas || null) : null;
+      await _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers, prevEloDeltas);
       overlay.remove();
     } catch (err) {
-      console.error('Enter result error:', err);
+      console.error('Submit result error:', err);
       btn.disabled = false;
-      btn.textContent = 'Submit Result';
+      overlay.querySelector('#submit-status').style.display = 'none';
     }
   });
 }
 
-function _setRow(num) {
+function _wireSetRowEvents(overlay, num) {
+  const container = overlay.querySelector('#sets-container') || overlay.querySelector(`[data-set-row="${num}"]`)?.parentElement;
+  if (!container) return;
+
+  // Tiebreak toggle
+  const toggleBtn = container.querySelector(`[data-toggle-tb="${num}"]`);
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const tbRow = container.querySelector(`[data-tb-row="${num}"]`);
+      const visible = tbRow.style.display !== 'none';
+      tbRow.style.display = visible ? 'none' : 'flex';
+      toggleBtn.textContent = visible ? '+ tiebreak' : '− remove tiebreak';
+      if (visible) {
+        tbRow.querySelectorAll('input').forEach(i => { i.value = ''; });
+      }
+    });
+  }
+
+  // Remove set button (3rd set only)
+  const removeBtn = container.querySelector(`[data-remove-set="${num}"]`);
+  if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+      const setRow = container.querySelector(`[data-set-row="${num}"]`);
+      if (setRow) setRow.remove();
+      const addBtn = overlay.querySelector('#btn-add-set');
+      if (addBtn) addBtn.style.display = '';
+      // thirdSetAdded is in outer closure — reset via event
+      const event = new CustomEvent('third-set-removed');
+      overlay.dispatchEvent(event);
+    });
+  }
+}
+
+function _setRowWithPrefill(num, removable, prev, isMeA) {
+  if (!prev?.sets) return _setRow(num, removable);
+  const s = prev.sets[num - 1];
+  if (!s) return _setRow(num, removable);
+  const me = isMeA ? s.a : s.b;
+  const op = isMeA ? s.b : s.a;
+  const tb = s.tb ? { me: isMeA ? s.tb.a : s.tb.b, op: isMeA ? s.tb.b : s.tb.a } : null;
+  return _setRow(num, removable, { me, op, tbMe: tb?.me ?? null, tbOp: tb?.op ?? null });
+}
+
+function _setRow(num, removable = false, prefill = null) {
+  const me = prefill?.me ?? '';
+  const op = prefill?.op ?? '';
+  const tbMe = prefill?.tbMe ?? '';
+  const tbOp = prefill?.tbOp ?? '';
+  const showTb = prefill?.tbMe !== undefined && prefill?.tbMe !== null;
   return `
-    <div style="display:flex;align-items:center;gap:10px;" data-set-row="${num}">
-      <span class="t-label t-muted" style="width:48px;flex-shrink:0;">Set ${num}</span>
-      <input type="number" class="input" data-score="me"
-        min="0" max="7" placeholder="You"
-        style="flex:1;text-align:center;height:44px;padding:8px 4px;">
-      <span style="color:var(--text3);font-size:16px;">–</span>
-      <input type="number" class="input" data-score="op"
-        min="0" max="7" placeholder="Opp"
-        style="flex:1;text-align:center;height:44px;padding:8px 4px;">
+    <div data-set-row="${num}">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">
+        <span class="t-label t-muted" style="width:48px;flex-shrink:0;">Set ${num}</span>
+        <input type="number" class="input" data-score="me"
+          min="0" max="99" placeholder="You" value="${escHtml(String(me))}"
+          style="flex:1;text-align:center;height:44px;padding:8px 4px;">
+        <span style="color:var(--text3);font-size:16px;">–</span>
+        <input type="number" class="input" data-score="op"
+          min="0" max="99" placeholder="Opp" value="${escHtml(String(op))}"
+          style="flex:1;text-align:center;height:44px;padding:8px 4px;">
+        ${removable
+          ? `<button type="button" data-remove-set="${num}" aria-label="Remove set 3"
+               style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text3);
+                      display:flex;align-items:center;flex-shrink:0;">
+               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.5" stroke-linecap="round">
+                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+               </svg>
+             </button>`
+          : '<div style="width:24px;flex-shrink:0;"></div>'}
+      </div>
+      <div data-tb-row="${num}" style="display:${showTb ? 'flex' : 'none'};
+        align-items:center;gap:10px;padding:4px 0 8px;margin-left:58px;">
+        <span class="t-label t-muted" style="width:24px;flex-shrink:0;font-size:10px;">TB</span>
+        <input type="number" class="input" data-tb="me"
+          min="0" placeholder="You" value="${escHtml(String(tbMe))}"
+          style="flex:1;text-align:center;height:38px;padding:6px 4px;font-size:15px;">
+        <span style="color:var(--text3);font-size:14px;">–</span>
+        <input type="number" class="input" data-tb="op"
+          min="0" placeholder="Opp" value="${escHtml(String(tbOp))}"
+          style="flex:1;text-align:center;height:38px;padding:6px 4px;font-size:15px;">
+        <div style="width:24px;flex-shrink:0;"></div>
+      </div>
+      <button type="button" data-toggle-tb="${num}"
+        style="background:none;border:none;padding:0 0 8px 58px;cursor:pointer;
+               font-size:11px;color:var(--text3);display:block;">
+        ${showTb ? '− remove tiebreak' : '+ tiebreak'}
+      </button>
     </div>
   `;
 }
 
 function _checkResultReady(overlay, winnerIsMe, isPro10) {
-  let ready;
+  const hasPhoto = !!(overlay.querySelector('#photo-input')?.files?.length);
+  let scoresOk;
   if (isPro10) {
     const me = overlay.querySelector('#score-me')?.value ?? '';
     const op = overlay.querySelector('#score-op')?.value ?? '';
-    ready = winnerIsMe !== null && me !== '' && op !== '';
+    scoresOk = me !== '' && op !== '';
   } else {
     const rows = overlay.querySelectorAll('[data-set-row]');
-    let allFilled = rows.length > 0;
+    scoresOk = rows.length > 0;
     rows.forEach(row => {
-      if (row.querySelector('[data-score="me"]').value === '' ||
-          row.querySelector('[data-score="op"]').value === '') allFilled = false;
+      if ((row.querySelector('[data-score="me"]')?.value ?? '') === '' ||
+          (row.querySelector('[data-score="op"]')?.value ?? '') === '') scoresOk = false;
     });
-    ready = winnerIsMe !== null && allFilled;
   }
+  const ready = winnerIsMe !== null && scoresOk && hasPhoto;
   overlay.querySelector('#btn-submit-result').disabled = !ready;
 }
 
@@ -596,7 +772,14 @@ function _collectSets(overlay, count) {
     const me = parseInt(row.querySelector('[data-score="me"]').value, 10);
     const op = parseInt(row.querySelector('[data-score="op"]').value, 10);
     if (isNaN(me) || isNaN(op)) return null;
-    sets.push({ me, op });
+    const entry = { me, op, tbMe: null, tbOp: null };
+    const tbRow = row.querySelector(`[data-tb-row="${i}"]`);
+    if (tbRow && tbRow.style.display !== 'none') {
+      const tbMe = parseInt(tbRow.querySelector('[data-tb="me"]')?.value ?? '', 10);
+      const tbOp = parseInt(tbRow.querySelector('[data-tb="op"]')?.value ?? '', 10);
+      if (!isNaN(tbMe) && !isNaN(tbOp)) { entry.tbMe = tbMe; entry.tbOp = tbOp; }
+    }
+    sets.push(entry);
   }
   return sets.length ? sets : null;
 }
@@ -822,42 +1005,58 @@ function _setUploadingState(overlay, loading) {
   });
 }
 
-async function _confirmMatchWithElo(match, photoUrl, sid, lid, allPlayers) {
+// _finalizeResult: writes confirmed status + calculates ELO.
+// prevEloDeltas: pass match.eloDeltas when adjusting an existing confirmed result
+//   so we revert the old deltas before applying the new ones.
+async function _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers, prevEloDeltas) {
   const uidA = match.playerA;
   const uidB = match.playerB;
 
-  const [ratingA, ratingB] = await Promise.all([
+  const [ratingA, ratingB, histA, histB] = await Promise.all([
     dbGet(pRef(uidA, 'eloRating')),
     dbGet(pRef(uidB, 'eloRating')),
-  ]);
-
-  const ra      = ratingA || 1000;
-  const rb      = ratingB || 1000;
-  const winner  = match.result.winner === uidA ? 'a' : 'b';
-  const kFactor = 32;
-
-  const elo = calculateElo(ra, rb, winner, kFactor);
-  const now = Date.now();
-
-  const [histA, histB] = await Promise.all([
     dbGet(pRef(uidA, 'eloHistory')),
     dbGet(pRef(uidB, 'eloHistory')),
   ]);
 
+  // Start from current ratings, reverting old deltas if this is an adjustment
+  let ra = ratingA || 1000;
+  let rb = ratingB || 1000;
+  if (prevEloDeltas) {
+    ra -= (prevEloDeltas[uidA] || 0);
+    rb -= (prevEloDeltas[uidB] || 0);
+  }
+
+  const winner  = resultData.winner === uidA ? 'a' : 'b';
+  const elo     = calculateElo(ra, rb, winner, 32);
+  const now     = Date.now();
+
+  // ELO history: remove old entry for this match (if adjusting), append new
+  const newHistA = [...(histA || []).filter(h => h.match !== match.mid),
+    { delta: elo.deltaA, match: match.mid, ts: now }];
+  const newHistB = [...(histB || []).filter(h => h.match !== match.mid),
+    { delta: elo.deltaB, match: match.mid, ts: now }];
+
   await dbMultiUpdate({
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
+    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
-    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'system',
+    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:   {
       [uidA]: elo.deltaA,
       [uidB]: elo.deltaB,
     },
     [`players/${uidA}/eloRating`]:  elo.newRatingA,
     [`players/${uidB}/eloRating`]:  elo.newRatingB,
-    [`players/${uidA}/eloHistory`]: [...(histA || []), { delta: elo.deltaA, match: match.mid, ts: now }],
-    [`players/${uidB}/eloHistory`]: [...(histB || []), { delta: elo.deltaB, match: match.mid, ts: now }],
+    [`players/${uidA}/eloHistory`]: newHistA,
+    [`players/${uidB}/eloHistory`]: newHistB,
   });
+}
+
+// Keep old name as alias for backward compat (used by _showUploadPhotoModal for legacy flow)
+async function _confirmMatchWithElo(match, photoUrl, sid, lid, allPlayers) {
+  return _finalizeResult(match, match.result, photoUrl, sid, lid, allPlayers, null);
 }
 
 // ─── Empty / error states ─────────────────────────────────────────────────────
