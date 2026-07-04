@@ -424,6 +424,79 @@ async function renderLeagues(el) {
       renderLeagues(el);
     });
   });
+
+  // Wire "Move Member" buttons
+  el.querySelectorAll('[data-action="move-member"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { sid, lid, uid, playerName } = btn.dataset;
+      const seasonData = seasons[sid];
+      const allLeagues = (seasonData && seasonData.leagues) ? seasonData.leagues : {};
+      _showMovePlayerModal(uid, playerName, sid, lid, allLeagues, () => renderLeagues(el));
+    });
+  });
+}
+
+function _showMovePlayerModal(uid, playerName, sid, fromLid, allLeagues, onDone) {
+  const targets = Object.entries(allLeagues).filter(([lid]) => lid !== fromLid);
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  `;
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;
+      width:100%;max-width:380px;box-shadow:0 8px 32px rgba(28,24,20,0.2);">
+      <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;
+        margin-bottom:8px;">Move Player</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">
+        Moving <strong>${escHtml(playerName)}</strong> to a different league.
+      </div>
+      ${targets.length === 0 ? `
+        <p style="font-size:13px;color:var(--text3);">No other leagues in this season.</p>
+        <button id="btn-close-move" class="btn-admin btn-secondary" style="margin-top:12px;width:100%;">Close</button>
+      ` : `
+        <div class="admin-input-group">
+          <label class="admin-input-label">Destination league</label>
+          <select id="move-target-league" class="admin-input">
+            <option value="">Select league…</option>
+            ${targets.map(([lid, l]) =>
+              `<option value="${escHtml(lid)}">${escHtml(l.name || lid)}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button id="btn-confirm-move" class="btn-admin btn-primary" style="flex:1;">Move</button>
+          <button id="btn-close-move" class="btn-admin btn-secondary">Cancel</button>
+        </div>
+      `}
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#btn-close-move').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  const confirmBtn = overlay.querySelector('#btn-confirm-move');
+  if (!confirmBtn) return;
+
+  confirmBtn.addEventListener('click', async () => {
+    const toLid = overlay.querySelector('#move-target-league').value;
+    if (!toLid) { toast('Select a destination league', 'error'); return; }
+    if (!confirm(`Move ${playerName} from current league to selected league?`)) return;
+
+    confirmBtn.disabled = true;
+    const updates = {};
+    updates[`seasons/${sid}/leagues/${fromLid}/members/${uid}`] = null;
+    updates[`seasons/${sid}/leagues/${toLid}/members/${uid}`]   = {
+      joinedAt: Date.now(),
+      transferredAt: Date.now(),
+    };
+    await dbMultiUpdate(updates);
+    overlay.remove();
+    toast(`${playerName} moved successfully`, 'success');
+    onDone();
+  });
 }
 
 function _renderSeason(sid, season, allPlayers) {
@@ -472,6 +545,11 @@ function _renderSeason(sid, season, allPlayers) {
                   border-bottom:1px solid var(--border);">
                   ${avatarToSvg(p.avatarId || null, 24)}
                   <span style="flex:1;font-size:13px;">${escHtml(p.alias || p.name || uid)}</span>
+                  <button class="btn-admin btn-ghost" style="color:var(--text3);font-size:11px;"
+                    data-action="move-member" data-sid="${sid}" data-lid="${lid}" data-uid="${uid}"
+                    data-player-name="${escHtml(p.alias || p.name || uid)}">
+                    Move
+                  </button>
                   <button class="btn-admin btn-ghost" style="color:var(--ace3);font-size:11px;"
                     data-action="remove-member" data-sid="${sid}" data-lid="${lid}" data-uid="${uid}">
                     Remove
@@ -643,6 +721,22 @@ async function renderMatches(el) {
     ` : ''}
   `;
 
+  // Dismiss dispute (uphold original result)
+  el.querySelectorAll('[data-action="dismiss-dispute"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid, lid, mid } = btn.dataset;
+      if (!confirm('Dismiss this dispute and uphold the existing result?')) return;
+      const base = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
+      await dbMultiUpdate({
+        [base + '/disputed']:     null,
+        [base + '/adminReviewed']: true,
+        [base + '/reviewedAt']:   Date.now(),
+      });
+      toast('Dispute dismissed — result upheld', 'success');
+      renderMatches(el);
+    });
+  });
+
   // Override result buttons
   el.querySelectorAll('[data-action="override-match"]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -696,6 +790,12 @@ function _matchCard(m, allPlayers, showOverride) {
       </div>
       <div class="admin-card-actions">
         <span class="badge-admin ${statusClass}">${escHtml(m.status || '?')}</span>
+        ${m.disputed ? `
+          <button class="btn-admin btn-teal" data-action="dismiss-dispute"
+            data-sid="${m.sid}" data-lid="${m.lid}" data-mid="${m.mid}">
+            Dismiss
+          </button>
+        ` : ''}
         ${m.status !== 'confirmed' && m.status !== 'cancelled' ? `
           <button class="btn-admin btn-secondary" data-action="override-match"
             data-sid="${m.sid}" data-lid="${m.lid}" data-mid="${m.mid}">
@@ -779,10 +879,11 @@ function _showOverrideModal(match, allPlayers, onDone) {
     const now = Date.now();
     const updates = {};
     const base = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
-    updates[base + '/status']       = 'confirmed';
-    updates[base + '/confirmedAt']  = now;
+    updates[base + '/status']        = 'confirmed';
+    updates[base + '/confirmedAt']   = now;
     updates[base + '/adminOverride'] = true;
-    updates[base + '/result']       = { winner, sets };
+    updates[base + '/disputed']      = null;
+    updates[base + '/result']        = { winner, sets };
     if (score) updates[base + '/score'] = score;
     updates[`players/${match.playerA}/eloRating`] = eloResult.newA;
     updates[`players/${match.playerB}/eloRating`] = eloResult.newB;

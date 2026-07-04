@@ -164,6 +164,12 @@ function _matchCard(match, myUid, allPlayers) {
     ? `<span class="badge badge-muted" style="font-size:10px;letter-spacing:.5px;">Pro 10</span>`
     : '';
 
+  const dateBadge = (match.status === 'scheduled' && match.scheduledAt)
+    ? `<span class="t-label t-muted" style="font-size:10px;">
+         📅 ${new Date(match.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
+       </span>`
+    : '';
+
   return `
     <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -190,6 +196,7 @@ function _matchCard(match, myUid, allPlayers) {
           ${badge}
           ${formatBadge}
           ${eloBadge}
+          ${dateBadge}
         </div>
         ${action ? `<button class="btn btn-primary btn-sm"
           data-action="${action}" data-mid="${escHtml(match.mid)}"
@@ -311,6 +318,14 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
             </div>
           </div>
         </div>
+        <div style="margin-bottom:20px;">
+          <div class="t-label t-muted" style="margin-bottom:8px;">
+            Suggested date &amp; time <span style="font-weight:400;opacity:.6;">(optional)</span>
+          </div>
+          <input class="input" id="propose-date" type="datetime-local"
+            style="font-size:14px;"
+            min="${new Date(Date.now() + 60000).toISOString().slice(0,16)}">
+        </div>
         <button class="btn btn-primary" id="btn-confirm-propose" disabled>
           Propose Match
         </button>
@@ -349,12 +364,17 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
     btn.disabled = true;
     btn.textContent = 'Proposing…';
     try {
+      const dateInput = overlay.querySelector('#propose-date');
+      const scheduledAt = dateInput?.value
+        ? new Date(dateInput.value).getTime()
+        : null;
       await dbPush(sRef(sid, lid, 'matches'), {
         playerA:    myUid,
         playerB:    selectedUid,
         proposedBy: myUid,
         proposedAt: Date.now(),
         format:     selectedFormat,
+        scheduledAt,
         status:     'scheduled',
         result:     null,
         photoUrl:   null,

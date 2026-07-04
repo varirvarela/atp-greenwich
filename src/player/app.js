@@ -2,7 +2,7 @@
 // Each tab renders a placeholder; real content arrives in later phases.
 
 import { dbGet, dbRef, dbMultiUpdate, pRef, sRef } from '@shared/firebase.js';
-import { escHtml } from '@shared/utils.js';
+import { escHtml, simpleHash } from '@shared/utils.js';
 import { eloTierLabel } from '@shared/elo.js';
 import { logTabView, logInstallPrompted, logInstallCompleted } from '@shared/analytics.js';
 import { avatarToSvg, renderAvatarPicker } from '@player/avatars.js';
@@ -182,6 +182,7 @@ export function showApp(container, player, creds, onSignOut) {
 
   renderShell(activeTab);
   _setupInstallPrompt(container);
+  _setupPushNotifications(creds.uid);
 }
 
 // ─── PWA install prompt ───────────────────────────────────────────────────────
@@ -231,6 +232,83 @@ function _setupInstallPrompt(container) {
     localStorage.setItem('pwa_install_dismissed', '1');
     banner.remove();
   });
+}
+
+// ─── Push notifications opt-in ────────────────────────────────────────────────
+
+async function _setupPushNotifications(uid) {
+  const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+  if (!vapidKey) return; // not configured
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+  try {
+    const reg = await navigator.serviceWorker.register(
+      import.meta.env.BASE_URL + 'sw.js',
+      { scope: import.meta.env.BASE_URL }
+    );
+
+    if (Notification.permission === 'granted') {
+      await _subscribePush(reg, uid, vapidKey);
+      return;
+    }
+
+    if (Notification.permission === 'denied') return;
+    if (localStorage.getItem('push_dismissed') === '1') return;
+
+    // Show a non-intrusive opt-in banner
+    const banner = document.createElement('div');
+    banner.id = 'push-opt-in-banner';
+    banner.style.cssText = `
+      position:fixed;bottom:64px;left:50%;transform:translateX(-50%);
+      background:var(--text);color:#fff;border-radius:12px;
+      padding:10px 14px;display:flex;align-items:center;gap:10px;
+      font-size:13px;font-family:var(--font-sans);z-index:900;
+      box-shadow:0 4px 16px rgba(28,24,20,0.25);max-width:calc(100vw - 32px);
+    `;
+    banner.innerHTML = `
+      <span style="flex:1;">Get notified when you're challenged or a result is entered</span>
+      <button id="push-enable-btn" style="background:var(--ace);color:#fff;border:none;
+        border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;
+        white-space:nowrap;">Enable</button>
+      <button id="push-later-btn" style="background:none;border:none;
+        color:rgba(255,255,255,0.6);cursor:pointer;font-size:18px;line-height:1;padding:0 2px;">×</button>
+    `;
+    document.body.appendChild(banner);
+
+    banner.querySelector('#push-enable-btn').addEventListener('click', async () => {
+      banner.remove();
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') await _subscribePush(reg, uid, vapidKey);
+    });
+
+    banner.querySelector('#push-later-btn').addEventListener('click', () => {
+      localStorage.setItem('push_dismissed', '1');
+      banner.remove();
+    });
+
+  } catch (err) {
+    console.warn('Push setup failed:', err);
+  }
+}
+
+async function _subscribePush(reg, uid, vapidKey) {
+  try {
+    const existing = await reg.pushManager.getSubscription();
+    const sub = existing || await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _urlBase64ToUint8Array(vapidKey),
+    });
+    await dbMultiUpdate({ [`players/${uid}/pushSubscription`]: sub.toJSON() });
+  } catch (err) {
+    console.warn('Push subscribe failed:', err);
+  }
+}
+
+function _urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
 // ─── Tab: Profile ─────────────────────────────────────────────────────────────
@@ -290,8 +368,16 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         </div>
       </div>
 
+      <!-- ELO history chart (loaded async below) -->
+      <div class="card" style="margin-bottom:16px;" id="profile-elo-chart">
+        <div class="t-label t-muted" style="margin-bottom:10px;">ELO History</div>
+        <div style="text-align:center;padding:8px 0;">
+          <div class="spinner spinner-sm" style="margin:0 auto;"></div>
+        </div>
+      </div>
+
       <!-- Account info -->
-      <div class="card" style="margin-bottom:24px;">
+      <div class="card" style="margin-bottom:16px;">
         <div class="t-label t-muted" style="margin-bottom:12px;">Account</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           ${player.email
@@ -313,6 +399,20 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         </div>
       </div>
 
+      <!-- Security -->
+      <div class="card" style="margin-bottom:24px;">
+        <div class="t-label t-muted" style="margin-bottom:12px;">Security</div>
+        <button class="btn btn-surface btn-sm" id="btn-change-password"
+          style="width:100%;text-align:left;justify-content:flex-start;gap:10px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Change Password
+        </button>
+      </div>
+
       <!-- Sign out -->
       <button class="btn btn-surface" id="btn-signout"
         style="color:var(--ace3);border-color:var(--ace3);">
@@ -327,6 +427,10 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
       localStorage.removeItem('atp_player_creds');
       if (typeof onSignOut === 'function') onSignOut();
     }
+  });
+
+  el.querySelector('#btn-change-password')?.addEventListener('click', () => {
+    showChangePasswordModal(player, creds);
   });
 
   // Load season stats asynchronously and populate the card
@@ -365,6 +469,40 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         <span class="t-small t-muted">—</span>
       </div>
     `;
+  });
+
+  // Load ELO history chart
+  dbGet(dbRef(`players/${creds.uid}/eloHistory`)).then(raw => {
+    const chartCard = el.querySelector('#profile-elo-chart');
+    if (!chartCard) return;
+    const history = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+    if (history.length < 2) {
+      chartCard.innerHTML = `
+        <div class="t-label t-muted" style="margin-bottom:10px;">ELO History</div>
+        <div style="text-align:center;padding:8px 0;">
+          <span class="t-small t-muted">Not enough data yet</span>
+        </div>
+      `;
+      return;
+    }
+    // Sort by timestamp, compute cumulative ELO from current rating
+    const sorted = [...history].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    const currentElo = player.eloRating || 1000;
+    const totalDelta = sorted.reduce((s, e) => s + (e.delta || 0), 0);
+    let running = currentElo - totalDelta;
+    const points = sorted.map(e => { running += (e.delta || 0); return running; });
+
+    chartCard.innerHTML = `
+      <div class="t-label t-muted" style="margin-bottom:10px;">ELO History</div>
+      ${_renderEloSparkline(points, currentElo)}
+      <div style="display:flex;justify-content:space-between;margin-top:6px;">
+        <span class="t-small t-muted">${points[0]}</span>
+        <span class="t-small" style="font-family:var(--font-mono);font-weight:700;">${currentElo}</span>
+      </div>
+    `;
+  }).catch(() => {
+    const chartCard = el.querySelector('#profile-elo-chart');
+    if (chartCard) chartCard.style.display = 'none';
   });
 
   const changeBtn = el.querySelector('#btn-change-avatar');
@@ -544,6 +682,135 @@ function showEditAliasModal(player, creds, onAliasChanged) {
       console.error('Save alias error:', err);
       saveBtn.disabled    = false;
       saveBtn.textContent = 'Save';
+    }
+  });
+}
+
+// ─── ELO sparkline ───────────────────────────────────────────────────────────
+
+function _renderEloSparkline(points, currentElo) {
+  const W = 280, H = 60, PAD = 4;
+  const min = Math.min(...points) - 10;
+  const max = Math.max(...points) + 10;
+  const range = max - min || 1;
+  const step  = (W - PAD * 2) / (points.length - 1);
+
+  const coords = points.map((v, i) => [
+    PAD + i * step,
+    PAD + (1 - (v - min) / range) * (H - PAD * 2),
+  ]);
+
+  const line = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(' ');
+  const area = line + ` L${coords[coords.length - 1][0].toFixed(1)},${H} L${PAD},${H} Z`;
+
+  const last = coords[coords.length - 1];
+  const color = currentElo >= points[0] ? 'var(--ace2)' : 'var(--ace3)';
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;overflow:visible;">
+      <defs>
+        <linearGradient id="elo-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.22"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${area}" fill="url(#elo-grad)" stroke="none"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5"
+        fill="${color}" stroke="var(--surface)" stroke-width="1.5"/>
+    </svg>
+  `;
+}
+
+// ─── Change password modal ────────────────────────────────────────────────────
+
+function showChangePasswordModal(player, creds) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
+        <div style="font-size:16px;font-weight:700;">Change Password</div>
+        <button class="btn-icon" id="btn-close-pwd-modal" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-group" style="margin-bottom:12px;">
+        <label class="input-label" for="pwd-current">Current password</label>
+        <input class="input" id="pwd-current" type="password" autocomplete="current-password">
+      </div>
+      <div class="input-group" style="margin-bottom:12px;">
+        <label class="input-label" for="pwd-new">New password</label>
+        <input class="input" id="pwd-new" type="password" autocomplete="new-password" minlength="6">
+      </div>
+      <div class="input-group" style="margin-bottom:16px;">
+        <label class="input-label" for="pwd-confirm">Confirm new password</label>
+        <input class="input" id="pwd-confirm" type="password" autocomplete="new-password">
+        <div id="pwd-hint" class="input-hint" style="font-size:12px;color:var(--text3);margin-top:4px;"></div>
+      </div>
+      <button class="btn btn-primary" id="btn-save-pwd">Save Password</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  function closeModal() { overlay.remove(); }
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  overlay.querySelector('#btn-close-pwd-modal').addEventListener('click', closeModal);
+
+  const hint    = overlay.querySelector('#pwd-hint');
+  const saveBtn = overlay.querySelector('#btn-save-pwd');
+
+  function validate() {
+    const np = overlay.querySelector('#pwd-new').value;
+    const cp = overlay.querySelector('#pwd-confirm').value;
+    if (np.length > 0 && np.length < 6) {
+      hint.textContent   = 'At least 6 characters required.';
+      hint.style.color   = 'var(--ace3)';
+      saveBtn.disabled   = true;
+      return;
+    }
+    if (cp && np !== cp) {
+      hint.textContent   = 'Passwords do not match.';
+      hint.style.color   = 'var(--ace3)';
+      saveBtn.disabled   = true;
+      return;
+    }
+    hint.textContent = '';
+    saveBtn.disabled = !(np.length >= 6 && np === cp);
+  }
+
+  overlay.querySelector('#pwd-new').addEventListener('input', validate);
+  overlay.querySelector('#pwd-confirm').addEventListener('input', validate);
+  saveBtn.disabled = true;
+
+  saveBtn.addEventListener('click', async () => {
+    const currentPwd = overlay.querySelector('#pwd-current').value;
+    const newPwd     = overlay.querySelector('#pwd-new').value;
+
+    if (simpleHash(currentPwd) !== player.passwordHash) {
+      hint.textContent = 'Current password is incorrect.';
+      hint.style.color = 'var(--ace3)';
+      return;
+    }
+
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving…';
+    try {
+      await dbMultiUpdate({ [`players/${creds.uid}/passwordHash`]: simpleHash(newPwd) });
+      player.passwordHash = simpleHash(newPwd);
+      closeModal();
+    } catch (err) {
+      console.error('Change password error:', err);
+      hint.textContent    = 'Failed to save — try again.';
+      hint.style.color    = 'var(--ace3)';
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save Password';
     }
   });
 }
