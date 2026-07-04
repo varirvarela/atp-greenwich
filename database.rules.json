@@ -1,0 +1,64 @@
+{
+  "rules": {
+
+    "_dev": {
+      ".read": true,
+      ".write": true
+    },
+
+    "players": {
+      ".read": true,
+      "$uid": {
+        ".write": true,
+        "eloRating": {
+          ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 3000)"
+        },
+        "status": {
+          ".validate": "!newData.exists() || newData.val() === 'invited' || newData.val() === 'onboarding' || newData.val() === 'active' || newData.val() === 'inactive'"
+        },
+        "passwordHash": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0)"
+        }
+      }
+    },
+
+    "email_index": {
+      ".read": true,
+      ".write": true
+    },
+
+    "invite_codes": {
+      ".read": true,
+      ".write": true
+    },
+
+    "config": {
+      ".read": true,
+      ".write": true
+    },
+
+    "seasons": {
+      ".read": true,
+      ".write": true
+    },
+
+    "pending_approvals": {
+      ".read": false,
+      ".write": true
+    },
+
+    "password_resets": {
+      ".read": true,
+      ".write": true,
+      "$token": {
+        ".validate": "newData.hasChildren(['uid', 'expiry']) && newData.child('expiry').isNumber()"
+      }
+    },
+
+    "analytics": {
+      ".read": false,
+      "events":   { ".write": true },
+      "sessions": { ".write": true }
+    }
+  }
+}

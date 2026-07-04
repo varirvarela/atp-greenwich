@@ -1,7 +1,7 @@
 // src/player/feed.js — Phase 5: Activity feed
 // Shows recent confirmed match results across the league, with ELO changes.
 
-import { dbGet, dbRef, dbListen, pRef, sRef } from '@shared/firebase.js';
+import { dbGet, dbRef, dbListen, dbSet, dbRemove, pRef, sRef } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
 import { eloTierLabel } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
@@ -10,13 +10,15 @@ const BASE = import.meta.env.BASE_URL;
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
+const REACTIONS = ['👏', '🔥', '🎾', '💪'];
+
 export function renderFeedTab(el, player, creds) {
   el.innerHTML = `<div style="padding:24px;text-align:center;">
     <div class="spinner" style="margin:0 auto 12px;"></div>
     <p class="t-small t-muted">Loading feed…</p>
   </div>`;
 
-  let unsubscribe = null;
+  const unsubs = [];
 
   (async () => {
     const sid = await dbGet(dbRef('config/defaultSeason'));
@@ -36,20 +38,21 @@ export function renderFeedTab(el, player, creds) {
 
     if (!leagueCtx) { _renderNoLeague(el); return; }
 
-    const { lid, leagueName } = leagueCtx;
+    const { sid: resolvedSid, lid, leagueName } = leagueCtx;
     const allPlayers = await dbGet(pRef());
 
-    unsubscribe = dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
-      _renderFeed(el, matchesObj || {}, creds.uid, allPlayers || {}, leagueName);
-    });
+    unsubs.push(dbListen(sRef(resolvedSid, lid, 'matches'), (matchesObj) => {
+      _renderFeed(el, matchesObj || {}, creds.uid, allPlayers || {}, leagueName,
+                  resolvedSid, lid);
+    }));
   })().catch(() => _renderError(el));
 
-  return () => { if (unsubscribe) { unsubscribe(); unsubscribe = null; } };
+  return () => { unsubs.forEach(u => u()); };
 }
 
 // ─── Feed renderer ────────────────────────────────────────────────────────────
 
-function _renderFeed(el, matchesObj, myUid, allPlayers, leagueName) {
+function _renderFeed(el, matchesObj, myUid, allPlayers, leagueName, sid, lid) {
   const confirmed = Object.entries(matchesObj)
     .map(([mid, m]) => ({ mid, ...m }))
     .filter(m => m.status === 'confirmed' && m.result)
@@ -80,6 +83,9 @@ function _renderFeed(el, matchesObj, myUid, allPlayers, leagueName) {
       ${confirmed.map(m => _feedItem(m, myUid, allPlayers)).join('')}
     </div>
   `;
+
+  // Wire reaction buttons after rendering
+  confirmed.forEach(m => _wireReactions(el, m.mid, myUid, sid, lid));
 }
 
 // ─── Feed item ────────────────────────────────────────────────────────────────
@@ -95,7 +101,7 @@ function _feedItem(match, myUid, allPlayers) {
   const iMePlayed = isMeA || isMeB;
 
   const winnerUid = match.result.winner;
-  const score     = _formatSets(match.result.sets);
+  const score     = _formatSets(match.result);
   const when      = _timeAgo(match.confirmedAt);
 
   const deltaA = match.eloDeltas?.[match.playerA];
@@ -140,7 +146,7 @@ function _feedItem(match, myUid, allPlayers) {
 
       <!-- ELO changes + time -->
       <div style="display:flex;align-items:center;justify-content:space-between;
-        gap:8px;flex-wrap:wrap;">
+        gap:8px;flex-wrap:wrap;margin-bottom:10px;">
         <div style="display:flex;gap:12px;">
           ${deltaA !== undefined ? `
             <span style="font-family:var(--font-mono);font-size:10px;
@@ -157,8 +163,76 @@ function _feedItem(match, myUid, allPlayers) {
         </div>
         <span class="t-label t-muted" style="font-size:10px;">${escHtml(when)}</span>
       </div>
+
+      <!-- Reactions -->
+      <div class="feed-reactions" data-mid="${escHtml(match.mid)}"
+        style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${REACTIONS.map(emoji => `
+          <button class="reaction-btn" data-emoji="${emoji}" data-mid="${escHtml(match.mid)}"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;
+              padding:3px 9px;font-size:14px;cursor:pointer;display:flex;align-items:center;
+              gap:4px;transition:background 0.15s,border-color 0.15s;">
+            <span>${emoji}</span>
+            <span class="reaction-count" style="font-size:11px;font-family:var(--font-mono);
+              color:var(--text3);min-width:8px;"></span>
+          </button>
+        `).join('')}
+      </div>
     </div>
   `;
+}
+
+// ─── Reactions ───────────────────────────────────────────────────────────────
+
+function _wireReactions(feedEl, mid, myUid, sid, lid) {
+  const reactionRef = sRef(sid, lid, 'reactions/' + mid);
+
+  // Load current reaction counts + highlight mine
+  dbGet(reactionRef).then(reactionsObj => {
+    _applyReactionState(feedEl, mid, reactionsObj || {}, myUid);
+  }).catch(() => {});
+
+  // Wire button clicks
+  feedEl.querySelectorAll(`.reaction-btn[data-mid="${mid}"]`).forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const emoji = btn.dataset.emoji;
+      const myReactionRef = sRef(sid, lid, `reactions/${mid}/${myUid}`);
+      try {
+        const current = await dbGet(myReactionRef);
+        if (current === emoji) {
+          // Toggle off
+          await dbRemove(myReactionRef);
+        } else {
+          // Set or change reaction
+          await dbSet(myReactionRef, emoji);
+        }
+        // Refresh display
+        const updated = await dbGet(reactionRef);
+        _applyReactionState(feedEl, mid, updated || {}, myUid);
+      } catch { /* silent fail — reactions are non-critical */ }
+    });
+  });
+}
+
+function _applyReactionState(feedEl, mid, reactionsObj, myUid) {
+  // Count each emoji
+  const counts = {};
+  let myEmoji = null;
+  for (const [uid, emoji] of Object.entries(reactionsObj)) {
+    counts[emoji] = (counts[emoji] || 0) + 1;
+    if (uid === myUid) myEmoji = emoji;
+  }
+
+  feedEl.querySelectorAll(`.reaction-btn[data-mid="${mid}"]`).forEach(btn => {
+    const emoji = btn.dataset.emoji;
+    const count = counts[emoji] || 0;
+    const isMe  = myEmoji === emoji;
+
+    btn.querySelector('.reaction-count').textContent = count > 0 ? String(count) : '';
+    btn.style.background     = isMe ? 'var(--ace-bg)'  : 'var(--surface2)';
+    btn.style.borderColor    = isMe ? 'var(--ace)'     : 'var(--border)';
+    btn.style.color          = isMe ? 'var(--ace)'     : 'inherit';
+  });
 }
 
 // ─── Empty states ─────────────────────────────────────────────────────────────
@@ -192,9 +266,11 @@ function _renderError(el) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function _formatSets(sets) {
-  if (!sets?.length) return '—';
-  return sets.map(s => `${s.a}-${s.b}`).join(', ');
+function _formatSets(result) {
+  if (!result) return '—';
+  if (result.score) return `${result.score.a}–${result.score.b}`;
+  if (!result.sets?.length) return '—';
+  return result.sets.map(s => `${s.a}-${s.b}`).join(', ');
 }
 
 function _timeAgo(ts) {

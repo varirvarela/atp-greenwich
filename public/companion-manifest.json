@@ -1,0 +1,19 @@
+{
+  "name": "ATP Greenwich — Courtside",
+  "short_name": "ATP Courtside",
+  "description": "Courtside score entry for ATP Greenwich matches.",
+  "start_url": "/atp-greenwich/companion/",
+  "scope": "/atp-greenwich/companion/",
+  "display": "standalone",
+  "background_color": "#f7f3ec",
+  "theme_color": "#b84008",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/atp-greenwich/images/atp-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

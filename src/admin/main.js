@@ -116,8 +116,9 @@ const NAV_ITEMS = [
 
 function showAdminShell(app) {
   app.innerHTML = `
-    <div class="admin-shell">
-      <aside class="admin-sidebar">
+    <div class="admin-shell" id="admin-shell">
+      <div class="sidebar-overlay" id="sidebar-overlay"></div>
+      <aside class="admin-sidebar" id="admin-sidebar">
         <div class="admin-brand">
           <div class="admin-logo">ATP</div>
           <div class="admin-sub">Admin Dashboard</div>
@@ -134,6 +135,13 @@ function showAdminShell(app) {
         </div>
       </aside>
       <main class="admin-main">
+        <div class="admin-mobile-topbar">
+          <button class="admin-hamburger" id="btn-hamburger" aria-label="Open menu">
+            <span></span><span></span><span></span>
+          </button>
+          <div style="font-family:var(--font-serif);font-weight:700;color:var(--ace);font-size:18px;">ATP</div>
+          <div style="width:40px;"></div>
+        </div>
         <div class="admin-content" id="admin-content">
           <div class="admin-loading"><div class="spinner"></div></div>
         </div>
@@ -141,8 +149,23 @@ function showAdminShell(app) {
     </div>
   `;
 
+  const sidebar  = app.querySelector('#admin-sidebar');
+  const overlay  = app.querySelector('#sidebar-overlay');
+  const hamburger = app.querySelector('#btn-hamburger');
+
+  function openSidebar()  { sidebar.classList.add('open');  overlay.classList.add('open'); }
+  function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+
+  hamburger.addEventListener('click', () => {
+    sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+  });
+  overlay.addEventListener('click', closeSidebar);
+
   app.querySelectorAll('.admin-nav-item').forEach(btn => {
-    btn.addEventListener('click', () => _navTo(btn.dataset.section));
+    btn.addEventListener('click', () => {
+      closeSidebar();
+      _navTo(btn.dataset.section);
+    });
   });
 
   app.querySelector('#btn-admin-signout').addEventListener('click', () => {

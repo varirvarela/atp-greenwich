@@ -2,7 +2,7 @@
 // Each exported function renders a full screen into the `container` element.
 // Navigation between screens is handled via callbacks, not a router.
 
-import { dbGet, dbRef, pRef, dbSet, dbMultiUpdate, dbListen } from '@shared/firebase.js';
+import { dbGet, dbRef, pRef, dbSet, dbMultiUpdate, dbListen, dbRemove } from '@shared/firebase.js';
 import { simpleHash, toEmailKey, generateUid, isValidEmail, isValidPassword, escHtml } from '@shared/utils.js';
 import { getStartingElo } from '@shared/elo.js';
 import { initAnalytics, logAppOpen } from '@shared/analytics.js';
@@ -107,8 +107,16 @@ function _checkPwMatch(pwInput, pw2Input, errEl) {
 export function showOnboarding(container, onAuthenticated) {
   _detachListener();
 
-  // Check for ?code= param — if present, skip straight to invite code screen
   const params = new URLSearchParams(window.location.search);
+
+  // ?reset=TOKEN — password reset link from email
+  const resetParam = params.get('reset') || '';
+  if (resetParam) {
+    showResetPassword(container, resetParam, onAuthenticated);
+    return;
+  }
+
+  // ?code= — invite code deep link
   const codeParam = params.get('code') || '';
   if (codeParam) {
     showInviteCode(container, codeParam, onAuthenticated);
@@ -1186,8 +1194,12 @@ export function showLogin(container, onAuthenticated) {
         </div>
       </div>
 
-      <div style="padding-bottom:16px;">
+      <div style="padding-bottom:16px;display:flex;flex-direction:column;gap:8px;">
         <button class="btn btn-primary" id="btn-submit">Sign In</button>
+        <button class="btn btn-ghost btn-sm" id="btn-forgot"
+          style="color:var(--text3);font-size:13px;">
+          Forgot password?
+        </button>
       </div>
     </div>
   `;
@@ -1199,6 +1211,10 @@ export function showLogin(container, onAuthenticated) {
 
   container.querySelector('#btn-back').addEventListener('click', () => {
     showOnboarding(container, onAuthenticated);
+  });
+
+  container.querySelector('#btn-forgot').addEventListener('click', () => {
+    showForgotPassword(container, onAuthenticated);
   });
 
   // Allow Enter key to submit
@@ -1307,6 +1323,239 @@ export function showLogin(container, onAuthenticated) {
       errEl.style.display = 'block';
       submitBtn.disabled = false;
       submitBtn.textContent = 'Sign In';
+    }
+  });
+}
+
+// ─── Screen I — Forgot Password ──────────────────────────────────────────────
+
+function showForgotPassword(container, onAuthenticated) {
+  _detachListener();
+
+  container.innerHTML = `
+    <div class="screen" style="gap:0;">
+      <div style="padding-top:16px;">
+        <button class="back-btn" id="btn-back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="m15 18-6-6 6-6"/>
+          </svg>
+          Back
+        </button>
+      </div>
+
+      <div id="fp-form" style="display:flex;flex-direction:column;flex:1;">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:24px;">
+          <div>
+            <h1 class="t-h2" style="margin-bottom:8px;">Forgot password?</h1>
+            <p class="t-small t-muted">Enter your email and we'll send a reset link.</p>
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="fp-email">Email</label>
+            <input class="input" id="fp-email" type="email" placeholder="you@example.com"
+              autocomplete="email" autocapitalize="none" autocorrect="off">
+            <div class="input-error" id="fp-err" style="display:none;"></div>
+          </div>
+        </div>
+        <div style="padding-bottom:16px;">
+          <button class="btn btn-primary" id="btn-submit">Send Reset Link</button>
+        </div>
+      </div>
+
+      <div id="fp-done" style="display:none;flex:1;flex-direction:column;align-items:center;
+        justify-content:center;text-align:center;gap:20px;">
+        <div style="width:64px;height:64px;border-radius:50%;background:var(--ace-bg);
+          display:flex;align-items:center;justify-content:center;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--ace)"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="t-h2" style="margin-bottom:8px;">Check your email</h2>
+          <p class="t-small t-muted" style="max-width:280px;margin:0 auto;">
+            If an account with that email exists, we've sent a reset link.
+            Check your inbox (and spam folder).
+          </p>
+        </div>
+        <button class="btn btn-ghost" id="btn-back-login">Back to Sign In</button>
+      </div>
+    </div>
+  `;
+
+  container.querySelector('#btn-back').addEventListener('click', () => {
+    showLogin(container, onAuthenticated);
+  });
+
+  container.querySelector('#btn-back-login').addEventListener('click', () => {
+    showLogin(container, onAuthenticated);
+  });
+
+  const emailInput = container.querySelector('#fp-email');
+  const errEl      = container.querySelector('#fp-err');
+  const submitBtn  = container.querySelector('#btn-submit');
+
+  emailInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitBtn.click(); });
+
+  submitBtn.addEventListener('click', async () => {
+    const email = emailInput.value.trim().toLowerCase();
+    errEl.style.display = 'none';
+
+    if (!isValidEmail(email)) {
+      errEl.textContent = 'Please enter a valid email address.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending…';
+
+    try {
+      const emailKey = toEmailKey(email);
+      const uid      = await dbGet(dbRef('email_index/' + emailKey));
+
+      if (uid) {
+        const token = generateUid('rst');
+        await dbSet(dbRef('password_resets/' + token), {
+          uid,
+          email,
+          expiry:     Date.now() + 3_600_000,
+          emailSent:  false,
+          createdAt:  Date.now(),
+        });
+      }
+    } catch (err) {
+      console.error('Forgot password error:', err);
+    }
+
+    // Always show confirmation to avoid leaking whether email exists
+    container.querySelector('#fp-form').style.display = 'none';
+    const done = container.querySelector('#fp-done');
+    done.style.display = 'flex';
+  });
+}
+
+// ─── Screen J — Reset Password (token link from email) ───────────────────────
+
+async function showResetPassword(container, token, onAuthenticated) {
+  _detachListener();
+  window.history.replaceState({}, '', window.location.pathname);
+
+  container.innerHTML = `
+    <div class="screen-center">
+      <div class="spinner"></div>
+    </div>
+  `;
+
+  let record = null;
+  try {
+    record = await dbGet(dbRef('password_resets/' + token));
+  } catch { /* network error — treat as invalid */ }
+
+  if (!record || (record.expiry && record.expiry < Date.now())) {
+    container.innerHTML = `
+      <div class="screen-center" style="text-align:center;gap:20px;">
+        <div style="width:64px;height:64px;border-radius:50%;background:var(--ace3-bg);
+          display:flex;align-items:center;justify-content:center;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--ace3)"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="m15 9-6 6M9 9l6 6"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="t-h2" style="margin-bottom:8px;">Link expired</h2>
+          <p class="t-small t-muted" style="max-width:280px;margin:0 auto;">
+            This password reset link has expired or already been used. Request a new one.
+          </p>
+        </div>
+        <button class="btn btn-primary" id="btn-back-login">Back to Sign In</button>
+      </div>
+    `;
+    container.querySelector('#btn-back-login').addEventListener('click', () => {
+      showLogin(container, onAuthenticated);
+    });
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="screen" style="gap:0;">
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:24px;">
+        <div>
+          <h1 class="t-h2" style="margin-bottom:8px;">Set new password</h1>
+          <p class="t-small t-muted">Choose a new password for your account.</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="input-group">
+            <label class="input-label" for="rp-pw">New Password</label>
+            <input class="input" id="rp-pw" type="password" placeholder="Min 6 characters"
+              autocomplete="new-password">
+            <div class="pw-strength"><div class="pw-strength-bar" id="rp-pw-bar"></div></div>
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="rp-pw2">Confirm Password</label>
+            <input class="input" id="rp-pw2" type="password" placeholder="Repeat password"
+              autocomplete="new-password">
+            <div class="input-error" id="rp-pw2-err" style="display:none;"></div>
+          </div>
+          <div class="input-error" id="rp-err" style="display:none;"></div>
+        </div>
+      </div>
+      <div style="padding-bottom:16px;">
+        <button class="btn btn-primary" id="btn-submit" disabled>Set New Password</button>
+      </div>
+    </div>
+  `;
+
+  const pwInput   = container.querySelector('#rp-pw');
+  const pw2Input  = container.querySelector('#rp-pw2');
+  const pwBar     = container.querySelector('#rp-pw-bar');
+  const pw2Err    = container.querySelector('#rp-pw2-err');
+  const errEl     = container.querySelector('#rp-err');
+  const submitBtn = container.querySelector('#btn-submit');
+
+  function _updateReady() {
+    submitBtn.disabled = !(isValidPassword(pwInput.value) && pwInput.value === pw2Input.value);
+  }
+
+  pwInput.addEventListener('input', () => {
+    const len = pwInput.value.length;
+    pwBar.className = 'pw-strength-bar';
+    if (len >= 10)     pwBar.classList.add('strong');
+    else if (len >= 6) pwBar.classList.add('medium');
+    else if (len > 0)  pwBar.classList.add('weak');
+    _checkPwMatch(pwInput, pw2Input, pw2Err);
+    _updateReady();
+  });
+
+  pw2Input.addEventListener('input', () => {
+    _checkPwMatch(pwInput, pw2Input, pw2Err);
+    _updateReady();
+  });
+
+  submitBtn.addEventListener('click', async () => {
+    const pw  = pwInput.value;
+    const pw2 = pw2Input.value;
+    if (pw !== pw2) { pw2Err.textContent = 'Passwords do not match.'; pw2Err.style.display = 'block'; return; }
+    if (!isValidPassword(pw)) return;
+
+    submitBtn.disabled  = true;
+    submitBtn.textContent = 'Saving…';
+    errEl.style.display = 'none';
+
+    try {
+      const pwdHash = simpleHash(pw);
+      await dbMultiUpdate({ [`players/${record.uid}/passwordHash`]: pwdHash });
+      await dbRemove(dbRef('password_resets/' + token));
+      showToast('Password updated! Please sign in.', 'success');
+      showLogin(container, onAuthenticated);
+    } catch (err) {
+      console.error('Reset password error:', err);
+      errEl.textContent = 'Could not update password. Try again.';
+      errEl.style.display = 'block';
+      submitBtn.disabled  = false;
+      submitBtn.textContent = 'Set New Password';
     }
   });
 }

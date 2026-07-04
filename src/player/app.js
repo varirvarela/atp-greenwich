@@ -4,7 +4,7 @@
 import { dbGet, dbRef, dbMultiUpdate, pRef, sRef } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
 import { eloTierLabel } from '@shared/elo.js';
-import { logTabView } from '@shared/analytics.js';
+import { logTabView, logInstallPrompted, logInstallCompleted } from '@shared/analytics.js';
 import { avatarToSvg, renderAvatarPicker } from '@player/avatars.js';
 import { renderMatchesTab }   from '@player/matches.js';
 import { renderStandingsTab } from '@player/standings.js';
@@ -170,6 +170,56 @@ export function showApp(container, player, creds, onSignOut) {
   }
 
   renderShell(activeTab);
+  _setupInstallPrompt(container);
+}
+
+// ─── PWA install prompt ───────────────────────────────────────────────────────
+
+function _setupInstallPrompt(container) {
+  if (localStorage.getItem('pwa_install_dismissed') === '1') return;
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+
+  let deferredPrompt = null;
+
+  const banner = document.createElement('div');
+  banner.id = 'pwa-install-banner';
+  banner.style.cssText = `
+    display:none;position:fixed;bottom:64px;left:50%;transform:translateX(-50%);
+    background:var(--text);color:#fff;border-radius:12px;
+    padding:10px 14px 10px 16px;display:none;align-items:center;gap:10px;
+    font-size:13px;font-family:var(--font-sans);z-index:900;
+    box-shadow:0 4px 16px rgba(28,24,20,0.25);max-width:calc(100vw - 32px);
+  `;
+  banner.innerHTML = `
+    <span style="flex:1;">Add ATP Greenwich to your home screen</span>
+    <button id="pwa-install-btn" style="background:var(--ace);color:#fff;border:none;
+      border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;
+      white-space:nowrap;">Install</button>
+    <button id="pwa-dismiss-btn" style="background:none;border:none;color:rgba(255,255,255,0.6);
+      cursor:pointer;font-size:18px;line-height:1;padding:0 2px;">×</button>
+  `;
+  document.body.appendChild(banner);
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    banner.style.display = 'flex';
+    logInstallPrompted(navigator.userAgent.includes('Android') ? 'android' : 'ios');
+  });
+
+  banner.querySelector('#pwa-install-btn').addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') logInstallCompleted(navigator.userAgent.includes('Android') ? 'android' : 'ios');
+    deferredPrompt = null;
+    banner.remove();
+  });
+
+  banner.querySelector('#pwa-dismiss-btn').addEventListener('click', () => {
+    localStorage.setItem('pwa_install_dismissed', '1');
+    banner.remove();
+  });
 }
 
 // ─── Tab: Profile ─────────────────────────────────────────────────────────────

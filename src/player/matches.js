@@ -231,7 +231,12 @@ function _actionLabel(action) {
 }
 
 function _formatScore(result, isMeA) {
-  if (!result?.sets?.length) return '';
+  if (!result) return '';
+  if (result.score) {
+    const s = result.score;
+    return isMeA ? `${s.a}–${s.b}` : `${s.b}–${s.a}`;
+  }
+  if (!result.sets?.length) return '';
   return result.sets.map(s => isMeA ? `${s.a}-${s.b}` : `${s.b}-${s.a}`).join(', ');
 }
 
@@ -286,6 +291,21 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
             `;
           }).join('')}
         </div>
+        <div style="margin-bottom:16px;">
+          <div class="t-label t-muted" style="margin-bottom:8px;">Match format</div>
+          <div style="display:flex;gap:8px;">
+            <div class="tap-card selected" data-format="bo3"
+              style="flex:1;text-align:center;padding:12px 8px;">
+              <div style="font-weight:700;font-size:13px;">Best of 3</div>
+              <div class="t-small t-muted">3 sets max</div>
+            </div>
+            <div class="tap-card" data-format="pro10"
+              style="flex:1;text-align:center;padding:12px 8px;">
+              <div style="font-weight:700;font-size:13px;">Pro 10</div>
+              <div class="t-small t-muted">Single score 0–10</div>
+            </div>
+          </div>
+        </div>
         <button class="btn btn-primary" id="btn-confirm-propose" disabled>
           Propose Match
         </button>
@@ -298,12 +318,21 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
   overlay.querySelector('#btn-close')?.addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  let selectedUid = null;
+  let selectedUid    = null;
+  let selectedFormat = 'bo3';
+
+  overlay.querySelectorAll('.tap-card[data-format]').forEach(card => {
+    card.addEventListener('click', () => {
+      selectedFormat = card.dataset.format;
+      overlay.querySelectorAll('.tap-card[data-format]').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+  });
 
   overlay.querySelectorAll('.tap-card[data-uid]').forEach(card => {
     card.addEventListener('click', () => {
       selectedUid = card.dataset.uid;
-      overlay.querySelectorAll('.tap-card').forEach(c => c.classList.remove('selected'));
+      overlay.querySelectorAll('.tap-card[data-uid]').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
       overlay.querySelector('#btn-confirm-propose').disabled = false;
     });
@@ -320,6 +349,7 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
         playerB:    selectedUid,
         proposedBy: myUid,
         proposedAt: Date.now(),
+        format:     selectedFormat,
         status:     'scheduled',
         result:     null,
         photoUrl:   null,
@@ -338,9 +368,10 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
 // ─── Enter result modal ───────────────────────────────────────────────────────
 
 function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
-  const opUid  = match.playerA === myUid ? match.playerB : match.playerA;
-  const op     = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
-  const isMeA  = match.playerA === myUid;
+  const isPro10 = match.format === 'pro10';
+  const opUid   = match.playerA === myUid ? match.playerB : match.playerA;
+  const op      = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
+  const isMeA   = match.playerA === myUid;
 
   const overlay = _createOverlay();
   overlay.innerHTML = `
@@ -367,15 +398,38 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
         </div>
       </div>
 
-      <div style="margin-bottom:20px;">
-        <div class="t-label t-muted" style="margin-bottom:8px;">Set scores</div>
-        <div id="sets-container" style="display:flex;flex-direction:column;gap:10px;">
-          ${_setRow(1)}
-          ${_setRow(2)}
+      ${isPro10 ? `
+        <div style="margin-bottom:20px;">
+          <div class="t-label t-muted" style="margin-bottom:12px;">Score (0 – 10)</div>
+          <div style="display:flex;align-items:flex-end;gap:12px;justify-content:center;">
+            <div style="text-align:center;">
+              <div class="t-small t-muted" style="margin-bottom:6px;">You</div>
+              <input type="number" class="input" id="score-me"
+                min="0" max="10" inputmode="numeric" placeholder="–"
+                style="width:76px;text-align:center;height:56px;font-size:24px;padding:8px 4px;">
+            </div>
+            <span style="font-size:24px;color:var(--text3);padding-bottom:10px;">–</span>
+            <div style="text-align:center;">
+              <div class="t-small t-muted" style="margin-bottom:6px;">
+                ${escHtml(op.alias || op.name)}
+              </div>
+              <input type="number" class="input" id="score-op"
+                min="0" max="10" inputmode="numeric" placeholder="–"
+                style="width:76px;text-align:center;height:56px;font-size:24px;padding:8px 4px;">
+            </div>
+          </div>
         </div>
-        <button class="btn btn-ghost btn-sm" id="btn-add-set"
-          style="margin-top:10px;width:auto;">+ Add 3rd set</button>
-      </div>
+      ` : `
+        <div style="margin-bottom:20px;">
+          <div class="t-label t-muted" style="margin-bottom:8px;">Set scores</div>
+          <div id="sets-container" style="display:flex;flex-direction:column;gap:10px;">
+            ${_setRow(1)}
+            ${_setRow(2)}
+          </div>
+          <button class="btn btn-ghost btn-sm" id="btn-add-set"
+            style="margin-top:10px;width:auto;">+ Add 3rd set</button>
+        </div>
+      `}
 
       <div style="padding-bottom:8px;">
         <button class="btn btn-primary" id="btn-submit-result" disabled>
@@ -389,7 +443,7 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
   overlay.querySelector('#btn-close').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  let winnerIsMe = null;
+  let winnerIsMe    = null;
   let thirdSetAdded = false;
 
   overlay.querySelectorAll('[data-winner]').forEach(card => {
@@ -397,26 +451,31 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
       winnerIsMe = card.dataset.winner === 'me';
       overlay.querySelectorAll('[data-winner]').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
-      _checkResultReady(overlay, winnerIsMe);
+      _checkResultReady(overlay, winnerIsMe, isPro10);
     });
   });
 
-  overlay.querySelector('#btn-add-set').addEventListener('click', () => {
-    if (thirdSetAdded) return;
-    thirdSetAdded = true;
-    overlay.querySelector('#sets-container').insertAdjacentHTML('beforeend', _setRow(3));
-    overlay.querySelector('#btn-add-set').style.display = 'none';
-    _checkResultReady(overlay, winnerIsMe);
-  });
+  if (isPro10) {
+    overlay.querySelector('#score-me').addEventListener('input', () =>
+      _checkResultReady(overlay, winnerIsMe, true));
+    overlay.querySelector('#score-op').addEventListener('input', () =>
+      _checkResultReady(overlay, winnerIsMe, true));
+  } else {
+    overlay.querySelector('#btn-add-set').addEventListener('click', () => {
+      if (thirdSetAdded) return;
+      thirdSetAdded = true;
+      overlay.querySelector('#sets-container').insertAdjacentHTML('beforeend', _setRow(3));
+      overlay.querySelector('#btn-add-set').style.display = 'none';
+      _checkResultReady(overlay, winnerIsMe, false);
+    });
 
-  overlay.querySelector('#sets-container').addEventListener('input', () => {
-    _checkResultReady(overlay, winnerIsMe);
-  });
+    overlay.querySelector('#sets-container').addEventListener('input', () => {
+      _checkResultReady(overlay, winnerIsMe, false);
+    });
+  }
 
   overlay.querySelector('#btn-submit-result').addEventListener('click', async () => {
-    const setCount = thirdSetAdded ? 3 : 2;
-    const sets = _collectSets(overlay, setCount);
-    if (!sets || winnerIsMe === null) return;
+    if (winnerIsMe === null) return;
 
     const btn = overlay.querySelector('#btn-submit-result');
     btn.disabled = true;
@@ -426,23 +485,38 @@ function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
     const winnerUid = winnerIsMe ? myUid : opUid2;
     const loserUid  = winnerIsMe ? opUid2 : myUid;
 
-    // Store sets from playerA's perspective
-    const setsForDB = sets.map(s =>
-      isMeA ? { a: s.me, b: s.op } : { a: s.op, b: s.me }
-    );
+    let resultData;
+    if (isPro10) {
+      const me  = parseInt(overlay.querySelector('#score-me').value, 10);
+      const opp = parseInt(overlay.querySelector('#score-op').value, 10);
+      resultData = {
+        winner:      winnerUid,
+        loser:       loserUid,
+        score:       isMeA ? { a: me, b: opp } : { a: opp, b: me },
+        enteredBy:   myUid,
+        enteredAt:   Date.now(),
+        confirmedBy: null,
+        confirmedAt: null,
+      };
+    } else {
+      const setCount  = thirdSetAdded ? 3 : 2;
+      const sets      = _collectSets(overlay, setCount);
+      if (!sets) { btn.disabled = false; btn.textContent = 'Submit Result'; return; }
+      resultData = {
+        winner:      winnerUid,
+        loser:       loserUid,
+        sets:        sets.map(s => isMeA ? { a: s.me, b: s.op } : { a: s.op, b: s.me }),
+        enteredBy:   myUid,
+        enteredAt:   Date.now(),
+        confirmedBy: null,
+        confirmedAt: null,
+      };
+    }
 
     try {
       await dbMultiUpdate({
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]: 'result_pending',
-        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]: {
-          winner:      winnerUid,
-          loser:       loserUid,
-          sets:        setsForDB,
-          enteredBy:   myUid,
-          enteredAt:   Date.now(),
-          confirmedBy: null,
-          confirmedAt: null,
-        },
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]: resultData,
       });
       overlay.remove();
     } catch (err) {
@@ -468,15 +542,22 @@ function _setRow(num) {
   `;
 }
 
-function _checkResultReady(overlay, winnerIsMe) {
-  const rows = overlay.querySelectorAll('[data-set-row]');
-  let allFilled = rows.length > 0;
-  rows.forEach(row => {
-    const me = row.querySelector('[data-score="me"]').value;
-    const op = row.querySelector('[data-score="op"]').value;
-    if (me === '' || op === '') allFilled = false;
-  });
-  overlay.querySelector('#btn-submit-result').disabled = !(winnerIsMe !== null && allFilled);
+function _checkResultReady(overlay, winnerIsMe, isPro10) {
+  let ready;
+  if (isPro10) {
+    const me = overlay.querySelector('#score-me')?.value ?? '';
+    const op = overlay.querySelector('#score-op')?.value ?? '';
+    ready = winnerIsMe !== null && me !== '' && op !== '';
+  } else {
+    const rows = overlay.querySelectorAll('[data-set-row]');
+    let allFilled = rows.length > 0;
+    rows.forEach(row => {
+      if (row.querySelector('[data-score="me"]').value === '' ||
+          row.querySelector('[data-score="op"]').value === '') allFilled = false;
+    });
+    ready = winnerIsMe !== null && allFilled;
+  }
+  overlay.querySelector('#btn-submit-result').disabled = !ready;
 }
 
 function _collectSets(overlay, count) {

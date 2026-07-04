@@ -120,7 +120,51 @@ function showCompanionShell(app) {
     window.location.reload();
   });
 
+  _setupInstallPrompt();
   showMatchList(app.querySelector('#comp-screen'), app.querySelector('#comp-title'));
+}
+
+function _setupInstallPrompt() {
+  if (localStorage.getItem('comp_install_dismissed') === '1') return;
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+
+  let deferredPrompt = null;
+
+  const banner = document.createElement('div');
+  banner.style.cssText = `
+    display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+    background:#1c1814;color:#fff;border-radius:12px;padding:10px 14px 10px 16px;
+    align-items:center;gap:10px;font-size:13px;z-index:900;
+    box-shadow:0 4px 16px rgba(28,24,20,0.25);max-width:calc(100vw - 32px);
+  `;
+  banner.innerHTML = `
+    <span style="flex:1;">Add Courtside to home screen</span>
+    <button id="cp-install" style="background:#b84008;color:#fff;border:none;
+      border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;">
+      Install</button>
+    <button id="cp-dismiss" style="background:none;border:none;color:rgba(255,255,255,0.6);
+      cursor:pointer;font-size:18px;line-height:1;padding:0 2px;">×</button>
+  `;
+  document.body.appendChild(banner);
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    banner.style.display = 'flex';
+  });
+
+  banner.querySelector('#cp-install').addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    banner.remove();
+  });
+
+  banner.querySelector('#cp-dismiss').addEventListener('click', () => {
+    localStorage.setItem('comp_install_dismissed', '1');
+    banner.remove();
+  });
 }
 
 // ─── Match list ───────────────────────────────────────────────────────────────
@@ -218,12 +262,14 @@ function showMatchList(screen, titleEl) {
 // ─── Score entry ──────────────────────────────────────────────────────────────
 
 function showScoreEntry(screen, titleEl, match, allPlayers, onBack) {
-  const pA = allPlayers[match.playerA] || {};
-  const pB = allPlayers[match.playerB] || {};
+  const pA      = allPlayers[match.playerA] || {};
+  const pB      = allPlayers[match.playerB] || {};
+  const isPro10 = match.format === 'pro10';
   titleEl.textContent = 'Enter Result';
 
   let selectedWinner = null;
   let sets = [{ a: '', b: '' }, { a: '', b: '' }];
+  let pro10Score = { a: '', b: '' };
 
   function render() {
     screen.innerHTML = `
@@ -243,9 +289,15 @@ function showScoreEntry(screen, titleEl, match, allPlayers, onBack) {
         <!-- Match header -->
         <div style="background:#fff;border:1px solid #ddd6c8;border-radius:14px;
           padding:16px;margin-bottom:16px;">
-          <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;
-            text-transform:uppercase;color:#8a7e72;margin-bottom:10px;">
-            ${escHtml(match.league && match.league.name || 'Match')}
+          <div style="display:flex;align-items:center;justify-content:space-between;
+            margin-bottom:10px;">
+            <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;
+              text-transform:uppercase;color:#8a7e72;">
+              ${escHtml(match.league && match.league.name || 'Match')}
+            </div>
+            ${isPro10 ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:9px;
+              letter-spacing:1px;text-transform:uppercase;color:#b84008;
+              background:#fdf0e8;padding:2px 8px;border-radius:8px;">Pro 10</div>` : ''}
           </div>
           <div style="display:flex;align-items:center;justify-content:space-around;gap:8px;">
             <div style="text-align:center;flex:1;">
@@ -254,9 +306,7 @@ function showScoreEntry(screen, titleEl, match, allPlayers, onBack) {
                 ${escHtml(pA.alias || pA.name || match.playerA)}
               </div>
             </div>
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a7e72;">
-              vs
-            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a7e72;">vs</div>
             <div style="text-align:center;flex:1;">
               ${avatarToSvg(pB.avatarId || null, 40)}
               <div style="font-weight:700;font-size:14px;margin-top:6px;color:#1c1814;">
@@ -288,35 +338,64 @@ function showScoreEntry(screen, titleEl, match, allPlayers, onBack) {
           </button>
         </div>
 
-        <!-- Set scores -->
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1.5px;
-          text-transform:uppercase;color:#8a7e72;margin-bottom:8px;">Set Scores</div>
-        ${sets.map((s, i) => `
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a7e72;
-              width:36px;flex-shrink:0;">Set ${i + 1}</div>
-            <input class="set-score-a" data-set="${i}" data-side="a"
-              type="number" min="0" max="99" inputmode="numeric" value="${s.a}"
-              style="width:56px;padding:10px;border:1.5px solid #ddd6c8;border-radius:10px;
-                font-size:18px;font-family:'IBM Plex Mono',monospace;text-align:center;
-                background:#fff;color:#1c1814;outline:none;-webkit-appearance:none;"/>
-            <div style="color:#8a7e72;font-size:16px;">–</div>
-            <input class="set-score-b" data-set="${i}" data-side="b"
-              type="number" min="0" max="99" inputmode="numeric" value="${s.b}"
-              style="width:56px;padding:10px;border:1.5px solid #ddd6c8;border-radius:10px;
-                font-size:18px;font-family:'IBM Plex Mono',monospace;text-align:center;
-                background:#fff;color:#1c1814;outline:none;-webkit-appearance:none;"/>
-            ${i > 1 ? `<button data-remove-set="${i}" style="background:transparent;
-              border:none;color:#8a7e72;cursor:pointer;font-size:18px;padding:4px;">×</button>` : ''}
-          </div>
-        `).join('')}
-
-        <button id="btn-add-set"
-          style="width:100%;background:transparent;border:1.5px dashed #ddd6c8;
-            border-radius:10px;padding:10px;color:#8a7e72;font-size:13px;cursor:pointer;
+        ${isPro10 ? `
+          <!-- Pro10 single score -->
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1.5px;
+            text-transform:uppercase;color:#8a7e72;margin-bottom:8px;">Score (0 – 10)</div>
+          <div style="display:flex;align-items:flex-end;gap:12px;justify-content:center;
             margin-bottom:20px;">
-          + Add 3rd set
-        </button>
+            <div style="text-align:center;">
+              <div style="font-size:11px;color:#8a7e72;margin-bottom:6px;">
+                ${escHtml(pA.alias || pA.name || match.playerA)}
+              </div>
+              <input id="pro10-a" type="number" min="0" max="10" inputmode="numeric"
+                value="${pro10Score.a}"
+                style="width:72px;padding:12px;border:1.5px solid #ddd6c8;border-radius:10px;
+                  font-size:24px;font-family:'IBM Plex Mono',monospace;text-align:center;
+                  background:#fff;color:#1c1814;outline:none;-webkit-appearance:none;"/>
+            </div>
+            <div style="color:#8a7e72;font-size:20px;padding-bottom:12px;">–</div>
+            <div style="text-align:center;">
+              <div style="font-size:11px;color:#8a7e72;margin-bottom:6px;">
+                ${escHtml(pB.alias || pB.name || match.playerB)}
+              </div>
+              <input id="pro10-b" type="number" min="0" max="10" inputmode="numeric"
+                value="${pro10Score.b}"
+                style="width:72px;padding:12px;border:1.5px solid #ddd6c8;border-radius:10px;
+                  font-size:24px;font-family:'IBM Plex Mono',monospace;text-align:center;
+                  background:#fff;color:#1c1814;outline:none;-webkit-appearance:none;"/>
+            </div>
+          </div>
+        ` : `
+          <!-- BO3 set scores -->
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1.5px;
+            text-transform:uppercase;color:#8a7e72;margin-bottom:8px;">Set Scores</div>
+          ${sets.map((s, i) => `
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a7e72;
+                width:36px;flex-shrink:0;">Set ${i + 1}</div>
+              <input class="set-score-a" data-set="${i}" data-side="a"
+                type="number" min="0" max="99" inputmode="numeric" value="${s.a}"
+                style="width:56px;padding:10px;border:1.5px solid #ddd6c8;border-radius:10px;
+                  font-size:18px;font-family:'IBM Plex Mono',monospace;text-align:center;
+                  background:#fff;color:#1c1814;outline:none;-webkit-appearance:none;"/>
+              <div style="color:#8a7e72;font-size:16px;">–</div>
+              <input class="set-score-b" data-set="${i}" data-side="b"
+                type="number" min="0" max="99" inputmode="numeric" value="${s.b}"
+                style="width:56px;padding:10px;border:1.5px solid #ddd6c8;border-radius:10px;
+                  font-size:18px;font-family:'IBM Plex Mono',monospace;text-align:center;
+                  background:#fff;color:#1c1814;outline:none;-webkit-appearance:none;"/>
+              ${i > 1 ? `<button data-remove-set="${i}" style="background:transparent;
+                border:none;color:#8a7e72;cursor:pointer;font-size:18px;padding:4px;">×</button>` : ''}
+            </div>
+          `).join('')}
+          <button id="btn-add-set"
+            style="width:100%;background:transparent;border:1.5px dashed #ddd6c8;
+              border-radius:10px;padding:10px;color:#8a7e72;font-size:13px;cursor:pointer;
+              margin-bottom:20px;">
+            + Add 3rd set
+          </button>
+        `}
 
         <!-- Submit -->
         <button id="btn-submit-result"
@@ -343,45 +422,41 @@ function showScoreEntry(screen, titleEl, match, allPlayers, onBack) {
       selectedWinner = match.playerB; render();
     });
 
-    // Wire score inputs
-    screen.querySelectorAll('.set-score-a, .set-score-b').forEach(input => {
-      input.addEventListener('input', () => {
-        const i    = parseInt(input.dataset.set, 10);
-        const side = input.dataset.side;
-        sets[i][side] = input.value;
+    if (isPro10) {
+      screen.querySelector('#pro10-a').addEventListener('input', e => { pro10Score.a = e.target.value; });
+      screen.querySelector('#pro10-b').addEventListener('input', e => { pro10Score.b = e.target.value; });
+    } else {
+      // Wire set score inputs
+      screen.querySelectorAll('.set-score-a, .set-score-b').forEach(input => {
+        input.addEventListener('input', () => {
+          sets[parseInt(input.dataset.set, 10)][input.dataset.side] = input.value;
+        });
       });
-    });
-
-    // Add set
-    screen.querySelector('#btn-add-set').addEventListener('click', () => {
-      if (sets.length >= 3) return;
-      sets.push({ a: '', b: '' });
-      render();
-    });
-
-    // Remove set
-    screen.querySelectorAll('[data-remove-set]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        sets.splice(parseInt(btn.dataset.removeSet, 10), 1);
+      // Add set
+      screen.querySelector('#btn-add-set').addEventListener('click', () => {
+        if (sets.length >= 3) return;
+        sets.push({ a: '', b: '' });
         render();
       });
-    });
+      // Remove set
+      screen.querySelectorAll('[data-remove-set]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          sets.splice(parseInt(btn.dataset.removeSet, 10), 1);
+          render();
+        });
+      });
+    }
 
     // Submit
     screen.querySelector('#btn-submit-result').addEventListener('click', async () => {
       const errEl = screen.querySelector('#comp-submit-error');
       if (!selectedWinner) { errEl.textContent = 'Select a winner'; errEl.style.display = 'block'; return; }
 
-      const parsedSets = sets
-        .map(s => ({ a: parseInt(s.a, 10), b: parseInt(s.b, 10) }))
-        .filter(s => !isNaN(s.a) && !isNaN(s.b));
-
       const submitBtn = screen.querySelector('#btn-submit-result');
       submitBtn.disabled = true; submitBtn.textContent = 'Saving…';
       errEl.style.display = 'none';
 
       try {
-        // Calculate ELO
         const allPlayersLatest = await dbGet(pRef()) || {};
         const pAData = allPlayersLatest[match.playerA] || {};
         const pBData = allPlayersLatest[match.playerB] || {};
@@ -390,17 +465,28 @@ function showScoreEntry(screen, titleEl, match, allPlayers, onBack) {
         const aWins  = selectedWinner === match.playerA;
         const eloRes = calculateElo(eloA, eloB, aWins ? 'a' : 'b');
 
-        const score = parsedSets.map(s => `${s.a}-${s.b}`).join(' ');
-        const now   = Date.now();
+        const now    = Date.now();
         const updates = {};
-        const base  = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
+        const base   = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
         updates[base + '/status']        = 'confirmed';
         updates[base + '/confirmedAt']   = now;
         updates[base + '/adminOverride'] = true;
-        updates[base + '/result']        = { winner: selectedWinner, sets: parsedSets };
-        if (score) updates[base + '/score'] = score;
         updates[`players/${match.playerA}/eloRating`] = eloRes.newA;
         updates[`players/${match.playerB}/eloRating`] = eloRes.newB;
+
+        if (isPro10) {
+          const sA = parseInt(screen.querySelector('#pro10-a').value, 10);
+          const sB = parseInt(screen.querySelector('#pro10-b').value, 10);
+          updates[base + '/result'] = {
+            winner: selectedWinner,
+            score: { a: isNaN(sA) ? 0 : sA, b: isNaN(sB) ? 0 : sB },
+          };
+        } else {
+          const parsedSets = sets
+            .map(s => ({ a: parseInt(s.a, 10), b: parseInt(s.b, 10) }))
+            .filter(s => !isNaN(s.a) && !isNaN(s.b));
+          updates[base + '/result'] = { winner: selectedWinner, sets: parsedSets };
+        }
 
         await dbMultiUpdate(updates);
         _showSuccess(screen, titleEl, pA, pB, aWins, eloRes, () => showMatchList(screen, titleEl));

@@ -57,6 +57,13 @@ jobs:
           cp -r dist-companion/. dist/companion/
           mv dist/companion/companion.html dist/companion/index.html
 
+      - name: Deploy Firebase Database Rules
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa-key.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-key.json
+          npx firebase deploy --only database --project atp-greenwich
+        continue-on-error: true
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
