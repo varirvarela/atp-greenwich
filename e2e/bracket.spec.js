@@ -80,6 +80,6 @@ test.describe('Flow 10 — Bracket Tab (Phase 6)', () => {
   test('P6-08 no crash when switching away and back to bracket tab', async ({ page }) => {
     await page.locator('button[data-tab="standings"]').click();
     await page.locator('button[data-tab="bracket"]').click();
-    await expect(page.getByText(/Group Stage|Bracket Qualification/)).toBeVisible();
+    await expect(page.getByText(/Group Stage|Bracket Qualification/).first()).toBeVisible();
   });
 });

@@ -138,7 +138,7 @@ test.describe('Flow 15 — Group Stage Standings', () => {
   test('F15-06 Current player row shows "You" label in standings', async ({ page }) => {
     // Wait for the table to render (group pts present) then check "You" label
     await expect(page.locator('#league-table-mount').getByText('3 pts', { exact: true }).first()).toBeVisible({ timeout: 8000 });
-    await expect(page.getByText('You').first()).toBeVisible();
+    await expect(page.getByText('You', { exact: true }).first()).toBeVisible();
   });
 
   test('F15-07 Rules accordion expands to show point values', async ({ page }) => {
