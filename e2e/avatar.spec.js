@@ -40,25 +40,25 @@ test.describe('Flow 5 — Change Avatar', () => {
     await expect(page.locator('button[data-style="pixel-art"]')).toBeVisible();
   });
 
-  // The DiceBear clipping fix: SVGs must have explicit px dimensions injected (not natural viewBox size)
-  // Adventurer viewBox is 762×762 — without explicit dimensions it renders at 762px and clips to top-left
-  test('F5-02 Adventurer SVG has explicit px dimensions — no top-left clipping', async ({ page }) => {
+  // Avatar clipping fix: avatars are rendered as <img data-uri> so iOS Safari always
+  // sizes them correctly (SVG attribute dimensions are ignored inside flex on Safari).
+  test('F5-02 Adventurer renders as img with explicit px dimensions — no top-left clipping', async ({ page }) => {
     await page.locator('button[data-style="adventurer"]').click();
     await page.waitForTimeout(150); // animation settle
-    await expect(page.locator('#av-preview-inner svg').first()).toHaveAttribute('width', /^\d+$/);
-    await expect(page.locator('#av-preview-inner svg').first()).toHaveAttribute('height', /^\d+$/);
+    await expect(page.locator('#av-preview-inner img').first()).toHaveAttribute('width', /^\d+$/);
+    await expect(page.locator('#av-preview-inner img').first()).toHaveAttribute('height', /^\d+$/);
   });
 
-  test('F5-03 Big Smile SVG has explicit px dimensions', async ({ page }) => {
+  test('F5-03 Big Smile renders as img with explicit px dimensions', async ({ page }) => {
     await page.locator('button[data-style="big-smile"]').click();
     await page.waitForTimeout(150);
-    await expect(page.locator('#av-preview-inner svg').first()).toHaveAttribute('width', /^\d+$/);
+    await expect(page.locator('#av-preview-inner img').first()).toHaveAttribute('width', /^\d+$/);
   });
 
-  test('F5-03 Pixel Art SVG has explicit px dimensions', async ({ page }) => {
+  test('F5-03 Pixel Art renders as img with explicit px dimensions', async ({ page }) => {
     await page.locator('button[data-style="pixel-art"]').click();
     await page.waitForTimeout(150);
-    await expect(page.locator('#av-preview-inner svg').first()).toHaveAttribute('width', /^\d+$/);
+    await expect(page.locator('#av-preview-inner img').first()).toHaveAttribute('width', /^\d+$/);
   });
 
   test('F5-01 Shuffle changes the preview content', async ({ page }) => {

@@ -1,0 +1,19 @@
+{
+  "name": "ATP Admin",
+  "short_name": "ATP Admin",
+  "description": "ATP Greenwich — Admin Dashboard",
+  "start_url": "/atp-greenwich/admin/",
+  "scope": "/atp-greenwich/admin/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1c1814",
+  "theme_color": "#1c1814",
+  "icons": [
+    {
+      "src": "/atp-greenwich/images/atp-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

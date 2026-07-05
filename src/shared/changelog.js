@@ -10,6 +10,18 @@
 
 export const CHANGELOG = [
   {
+    version: '1.3.0',
+    date:    '2026-07-05',
+    changes: [
+      'Group stage: admin can now release randomised group fixtures with a deadline and point system',
+      'Group stage: standings show group points as the primary ranking during the group phase',
+      'Group stage: "How scoring works" accordion in standings explains the live-configured rules',
+      'Group stage: match cards show a Group badge, play-by deadline, and a Forfeit option',
+      'Avatars: all styles now render at the correct size on iOS Safari — no more top-left clipping',
+      'Admin: mobile-friendly layout — works on phone, hamburger menu, no companion app needed',
+    ],
+  },
+  {
     version: '1.2.0',
     date:    '2026-07-04',
     changes: [

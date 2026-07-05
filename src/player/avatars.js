@@ -48,11 +48,11 @@ export function generateSeed() {
 }
 
 // ─── Core render ─────────────────────────────────────────────────────────────
-// Returns an HTML string: a circular div wrapping the DiceBear SVG.
+// Returns an HTML string: a circular div wrapping the DiceBear avatar.
 export function avatarToSvg(avatarId, size) {
   const sz  = size || 40;
   const raw = _generateRawSvg(avatarId, sz);
-  return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:#f0ebe2;">${raw}</div>`;
+  return `<div style="width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;flex-shrink:0;background:#f0ebe2;">${raw}</div>`;
 }
 
 // ─── Avatar picker component ──────────────────────────────────────────────────
@@ -300,15 +300,12 @@ function _generateRawSvg(avatarId, renderSz) {
 
   try {
     const svg = createAvatar(entry.schema, opts).toString();
-    // Robust size injection: strip existing width/height from the <svg> tag, then
-    // add explicit px attributes AND inline style. The style override is needed for
-    // iOS Safari where SVG attribute dimensions can be ignored inside flex containers.
-    return svg.replace(/<svg([^>]*)>/, (_, attrs) => {
-      const cleaned = attrs
-        .replace(/\s+width="[^"]*"/g, '')
-        .replace(/\s+height="[^"]*"/g, '');
-      return `<svg width="${sz}" height="${sz}" style="width:${sz}px;height:${sz}px;display:block;"${cleaned}>`;
-    });
+    // Use data URI + <img> tag: the most reliable cross-browser/iOS-Safari approach.
+    // SVG attribute dimensions are inconsistently honoured inside flex containers on
+    // iOS Safari; <img width height> is always respected by every browser.
+    const dataUri = 'data:image/svg+xml,' + encodeURIComponent(svg);
+    return `<img src="${dataUri}" width="${sz}" height="${sz}" alt=""
+      style="width:${sz}px;height:${sz}px;display:block;flex-shrink:0;">`;
   } catch {
     return _fallbackSvg(sz);
   }

@@ -2,9 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ATP Greenwich — Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>ATP Admin</title>
+
+  <!-- PWA meta — separate identity from player app -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ATP Admin">
+  <meta name="theme-color" content="#1c1814">
+  <meta name="description" content="ATP Greenwich — Admin Dashboard">
+
+  <!-- PWA manifest — scope /atp-greenwich/admin/ keeps this separate from player PWA -->
+  <link rel="manifest" href="/atp-greenwich/admin-manifest.json">
+  <link rel="apple-touch-icon" href="/atp-greenwich/images/atp-icon-admin-512.png">
   <link rel="icon" type="image/png" href="/atp-greenwich/images/atp-icon-512.png">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Lato:wght@300;400;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/src/admin/style.css">
@@ -14,14 +27,14 @@
       background: #f7f3ec;
       color: #1c1814;
       font-family: 'Lato', sans-serif;
-      min-height: 100vh;
+      min-height: 100dvh;
     }
-    #app { min-height: 100vh; }
+    #app { min-height: 100dvh; }
     #loading {
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      height: 100dvh;
       flex-direction: column;
       gap: 12px;
     }

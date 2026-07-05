@@ -48,16 +48,11 @@ jobs:
       - name: Build admin app
         run: npm run build:admin
 
-      - name: Build companion app
-        run: npm run build:companion
-
-      - name: Merge admin and companion into player dist
+      - name: Merge admin into player dist
         run: |
-          mkdir -p dist/admin dist/companion
+          mkdir -p dist/admin
           cp -r dist-admin/. dist/admin/
           mv dist/admin/admin.html dist/admin/index.html
-          cp -r dist-companion/. dist/companion/
-          mv dist/companion/companion.html dist/companion/index.html
 
       - name: Deploy Firebase Database Rules
         run: |
