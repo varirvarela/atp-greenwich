@@ -458,6 +458,22 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         <div class="badge badge-ace" style="margin-top:8px;font-size:12px;">${escHtml(tier)}</div>
       </div>
 
+      ${player.isAdmin ? `
+      <!-- Admin access -->
+      <div class="card" style="margin-bottom:16px;background:var(--ace-bg);border-color:var(--ace);">
+        <div class="t-label" style="color:var(--ace);margin-bottom:8px;">Admin Access</div>
+        <p class="t-small" style="color:var(--text2);margin-bottom:12px;">
+          You have admin privileges. Open the dashboard to manage players, leagues, and matches.
+        </p>
+        <a href="${import.meta.env.BASE_URL}admin/"
+          style="display:block;text-align:center;text-decoration:none;
+            background:var(--ace);color:#fff;border-radius:var(--radius);
+            padding:10px;font-weight:700;font-size:14px;">
+          Open Admin Panel →
+        </a>
+      </div>
+      ` : ''}
+
       <!-- Season stats (loaded async below) -->
       <div class="card" style="margin-bottom:16px;" id="profile-stats-card">
         <div class="t-label t-muted" style="margin-bottom:12px;">Season Stats</div>

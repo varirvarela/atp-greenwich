@@ -1140,6 +1140,7 @@ export function showAvatarPicker(container, uid, onAuthenticated) {
         pwdHash:   pwdHash,
         avatarId:  avatarId,
         adminRole: updatedPlayer ? updatedPlayer.adminRole : null,
+        isAdmin:   updatedPlayer ? (updatedPlayer.isAdmin || false) : false,
       };
 
       localStorage.setItem('atp_player_creds', JSON.stringify(creds));
@@ -1305,6 +1306,7 @@ export function showLogin(container, onAuthenticated) {
         pwdHash,
         avatarId:  player.avatarId || null,
         adminRole: player.adminRole || null,
+        isAdmin:   player.isAdmin  || false,
       };
 
       localStorage.setItem('atp_player_creds', JSON.stringify(creds));
@@ -1575,6 +1577,7 @@ async function _launchAfterSetup(container, uid, onAuthenticated) {
       pwdHash:   player.passwordHash || _pending.pwdHash || '',
       avatarId:  player.avatarId || null,
       adminRole: player.adminRole || null,
+      isAdmin:   player.isAdmin  || false,
     };
 
     localStorage.setItem('atp_player_creds', JSON.stringify(creds));

@@ -7,6 +7,7 @@ import { dbGet, dbRef, dbMultiUpdate, dbListen, dbPush, pRef, sRef, uploadMatchP
 import { escHtml } from '@shared/utils.js';
 import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
+import { showPlayerModal } from '@player/player-modal.js';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -156,6 +157,25 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
     });
   });
 
+  // Click player name → profile modal
+  el.querySelectorAll('[data-view-player]').forEach(span => {
+    span.addEventListener('click', e => {
+      e.stopPropagation();
+      showPlayerModal(span.dataset.viewPlayer, allPlayers, matchesObj, myUid);
+    });
+  });
+
+  // Click confirmed match card body → match detail modal
+  el.querySelectorAll('[data-view-match]').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.closest('button')) return;
+      if (e.target.closest('[data-view-player]')) return;
+      const mid   = card.dataset.viewMatch;
+      const match = mine.find(m => m.mid === mid);
+      if (match) _showMatchDetailModal(match, allPlayers, myUid);
+    });
+  });
+
   el.querySelector('#btn-propose')?.addEventListener('click', () => {
     _showProposeModal(myUid, allPlayers, memberUids, matchesObj, sid, lid);
   });
@@ -214,13 +234,18 @@ function _matchCard(match, myUid, allPlayers) {
   // Forfeit is only available on unfinished group matches that haven't already been forfeited
   const canForfeit = match.groupMatch && !match.forfeited && match.status !== 'confirmed';
 
+  const opponentUid = match.playerA === myUid ? match.playerB : match.playerA;
+  const isConfirmed = match.status === 'confirmed';
+
   return `
-    <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;">
+    <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;
+      ${isConfirmed ? 'cursor:pointer;' : ''}"
+      ${isConfirmed ? `data-view-match="${escHtml(match.mid)}"` : ''}>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
           ${meAv}
           <span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
-            text-overflow:ellipsis;">You</span>
+            text-overflow:ellipsis;cursor:pointer;" data-view-player="${escHtml(myUid)}">You</span>
         </div>
         <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);
           flex-shrink:0;text-align:center;min-width:48px;">
@@ -229,7 +254,8 @@ function _matchCard(match, myUid, allPlayers) {
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;
           justify-content:flex-end;">
           <span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
-            text-overflow:ellipsis;text-align:right;">
+            text-overflow:ellipsis;text-align:right;cursor:pointer;"
+            data-view-player="${escHtml(opponentUid)}">
             ${escHtml(op.alias || op.name)}
           </span>
           ${opAv}
@@ -1124,6 +1150,125 @@ async function _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers
 // Keep old name as alias for backward compat (used by _showUploadPhotoModal for legacy flow)
 async function _confirmMatchWithElo(match, photoUrl, sid, lid, allPlayers) {
   return _finalizeResult(match, match.result, photoUrl, sid, lid, allPlayers, null);
+}
+
+// ─── Match detail modal ───────────────────────────────────────────────────────
+
+function _showMatchDetailModal(match, allPlayers, myUid) {
+  document.querySelector('.modal-overlay.match-detail-modal')?.remove();
+
+  const aUid = match.playerA;
+  const bUid = match.playerB;
+  const pA   = allPlayers[aUid] || {};
+  const pB   = allPlayers[bUid] || {};
+  const sets = match.result?.sets || [];
+  const winner = match.result?.winner;
+  const loser  = match.result?.loser;
+
+  const when = match.confirmedAt
+    ? new Date(match.confirmedAt).toLocaleString('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      })
+    : '';
+
+  function playerBlock(uid, p) {
+    const isMe  = uid === myUid;
+    const won   = uid === winner;
+    return `
+      <div style="flex:1;text-align:center;">
+        ${avatarToSvg(p.avatarId || null, 48)}
+        <div style="font-weight:${won ? '700' : '400'};font-size:14px;margin-top:6px;
+          color:${isMe ? 'var(--ace)' : won ? 'var(--ace2)' : 'var(--text)'};">
+          ${isMe ? 'You' : escHtml(p.alias || p.name || uid)}
+        </div>
+        ${won ? `<span class="badge badge-teal" style="font-size:10px;margin-top:3px;">Winner</span>` : ''}
+      </div>
+    `;
+  }
+
+  const setRows = sets.map((s, i) => {
+    const aScore = s.a ?? 0;
+    const bScore = s.b ?? 0;
+    const aWon   = aScore > bScore;
+    const isTb   = s.tb !== undefined;
+    return `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;
+        border-bottom:1px solid var(--border);font-family:var(--font-mono);">
+        <div style="flex:1;text-align:center;font-size:20px;font-weight:${aWon ? '800' : '400'};
+          color:${aWon ? 'var(--text)' : 'var(--text3)'};">${aScore}</div>
+        <div style="font-size:10px;color:var(--text3);min-width:36px;text-align:center;">
+          Set ${i + 1}${isTb ? ' TB' : ''}
+        </div>
+        <div style="flex:1;text-align:center;font-size:20px;font-weight:${!aWon ? '800' : '400'};
+          color:${!aWon ? 'var(--text)' : 'var(--text3)'};">${bScore}</div>
+      </div>
+    `;
+  }).join('');
+
+  const eloA = match.eloDeltas?.[aUid];
+  const eloB = match.eloDeltas?.[bUid];
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay match-detail-modal';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h2 class="t-h2" style="margin:0;">Match Details</h2>
+        <button id="btn-close-match-detail" class="btn btn-ghost btn-sm" style="width:auto;padding:4px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:16px;">
+        ${playerBlock(aUid, pA)}
+        <div style="padding-top:14px;color:var(--text3);font-size:12px;">vs</div>
+        ${playerBlock(bUid, pB)}
+      </div>
+
+      ${sets.length > 0 ? `
+        <div class="t-label t-muted" style="margin-bottom:4px;">Score</div>
+        <div style="margin-bottom:14px;">${setRows}</div>
+      ` : ''}
+
+      ${(eloA !== undefined || eloB !== undefined) ? `
+        <div class="t-label t-muted" style="margin-bottom:6px;">ELO Changes</div>
+        <div style="display:flex;gap:12px;margin-bottom:14px;">
+          ${eloA !== undefined ? `
+            <div style="flex:1;background:var(--surface2);border-radius:var(--radius);padding:10px;text-align:center;">
+              <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;
+                color:${eloA >= 0 ? 'var(--ace2)' : 'var(--ace3)'};">
+                ${eloA >= 0 ? '+' : ''}${eloA}
+              </div>
+              <div class="t-small t-muted">${aUid === myUid ? 'You' : escHtml(pA.alias || pA.name || '')}</div>
+            </div>` : ''}
+          ${eloB !== undefined ? `
+            <div style="flex:1;background:var(--surface2);border-radius:var(--radius);padding:10px;text-align:center;">
+              <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;
+                color:${eloB >= 0 ? 'var(--ace2)' : 'var(--ace3)'};">
+                ${eloB >= 0 ? '+' : ''}${eloB}
+              </div>
+              <div class="t-small t-muted">${bUid === myUid ? 'You' : escHtml(pB.alias || pB.name || '')}</div>
+            </div>` : ''}
+        </div>
+      ` : ''}
+
+      ${match.photoUrl ? `
+        <div class="t-label t-muted" style="margin-bottom:6px;">Photo</div>
+        <img src="${escHtml(match.photoUrl)}" alt="Match photo"
+          style="width:100%;border-radius:var(--radius);object-fit:cover;max-height:220px;
+            margin-bottom:14px;" loading="lazy">
+      ` : ''}
+
+      ${when ? `<div class="t-small t-muted" style="text-align:center;">${when}</div>` : ''}
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-close-match-detail').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
 // ─── Forfeit modal ────────────────────────────────────────────────────────────

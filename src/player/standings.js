@@ -5,6 +5,7 @@ import { escHtml } from '@shared/utils.js';
 import { eloTierLabel } from '@shared/elo.js';
 import { buildLeagueTable, calculateGroupPoints } from '@shared/scoring.js';
 import { avatarToSvg } from '@player/avatars.js';
+import { showPlayerModal } from '@player/player-modal.js';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -94,15 +95,14 @@ export function renderStandingsTab(el, player, creds) {
           }
         }
 
-        _renderLeagueTable(
-          el.querySelector('#league-table-mount'),
-          table,
-          allPlayers,
-          creds.uid,
-          leagueName,
-          groupStageConfig,
-          pointsConfig,
-        );
+        const mount = el.querySelector('#league-table-mount');
+        _renderLeagueTable(mount, table, allPlayers, creds.uid, leagueName, groupStageConfig, pointsConfig);
+
+        mount.querySelectorAll('[data-view-player]').forEach(row => {
+          row.addEventListener('click', () =>
+            showPlayerModal(row.dataset.viewPlayer, allPlayers, allMatches, creds.uid)
+          );
+        });
       });
       unsubscribers.push(unsub);
     } else {
@@ -174,7 +174,7 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName, gs, points
         const qualifies = gp !== null && gp >= qualifyPts;
         const isLast = i === table.length - 1;
         return `
-          <div style="padding:10px 12px;
+          <div data-view-player="${row.uid}" style="padding:10px 12px;cursor:pointer;
             ${isLast ? '' : 'border-bottom:1px solid var(--border);'}
             ${isMe ? 'background:rgba(184,64,8,.06);' : ''}">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:${showGsPts ? 4 : 6}px;">

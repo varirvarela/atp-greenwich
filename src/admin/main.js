@@ -17,6 +17,19 @@ const DEFAULT_PASSWORD = 'atpgreenwich2026';
 
 async function boot() {
   const app   = document.getElementById('app');
+
+  // Auto-login: if a player marked isAdmin:true is already signed into the player app
+  try {
+    const pc = JSON.parse(localStorage.getItem('atp_player_creds') || 'null');
+    if (pc?.uid && pc?.pwdHash && pc.pwdHash !== 'dev') {
+      const pd = await dbGet(pRef(pc.uid));
+      if (pd?.isAdmin === true && pd?.passwordHash === pc.pwdHash) {
+        showAdminShell(app);
+        return;
+      }
+    }
+  } catch {}
+
   const saved = _getSavedCreds();
 
   if (saved) {
@@ -314,6 +327,22 @@ async function renderPlayers(el) {
       if (player) _showPlayerProfileModal(player, () => renderPlayers(el));
     });
   });
+
+  // Toggle admin
+  el.querySelectorAll('[data-action="toggle-admin"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { uid } = btn.dataset;
+      const nowAdmin = btn.dataset.isAdmin === 'true';
+      const newVal   = !nowAdmin;
+      btn.disabled   = true;
+      await dbMultiUpdate({
+        [`players/${uid}/isAdmin`]:   newVal || null,
+        [`players/${uid}/adminRole`]: newVal ? 'League Admin' : null,
+      });
+      toast(`Admin ${newVal ? 'granted' : 'revoked'}`, 'success');
+      renderPlayers(el);
+    });
+  });
 }
 
 function _playerCard(p) {
@@ -346,6 +375,12 @@ function _playerCard(p) {
           <button class="btn-admin btn-secondary" data-action="edit-elo"
             data-uid="${p.uid}" data-name="${displayName}"
             data-elo="${p.eloRating || 1000}">Edit ELO</button>
+          <button class="btn-admin ${p.isAdmin ? 'btn-danger' : 'btn-secondary'}"
+            data-action="toggle-admin" data-uid="${p.uid}"
+            data-is-admin="${p.isAdmin ? 'true' : 'false'}"
+            title="${p.isAdmin ? 'Remove admin access' : 'Grant admin access'}">
+            ${p.isAdmin ? '★ Admin' : 'Make Admin'}
+          </button>
         ` : ''}
         <button class="btn-admin btn-ghost" data-action="view-player"
           data-uid="${p.uid}" style="font-size:11px;">Profile</button>

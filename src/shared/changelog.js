@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.3.2',
+    date:    '2026-07-05',
+    changes: [
+      'Players: tap any player row in Standings or match card to see their stats, ELO, and full match history',
+      'Matches: tap any confirmed match card to see full score, ELO changes, and match photo',
+      'Admin access: players granted admin by the admin can open the Admin Panel directly from their profile',
+      'Admin: Players tab now has "Make Admin" / "Revoke Admin" toggle for active players',
+    ],
+  },
+  {
     version: '1.3.1',
     date:    '2026-07-03',
     changes: [
