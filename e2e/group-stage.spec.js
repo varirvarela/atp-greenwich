@@ -116,7 +116,7 @@ test.describe('Flow 15 — Group Stage Standings', () => {
     // Group pts are rendered as "${gp} pts" — devplayer and sofia both have 3 pts
     const tableMount = page.locator('#league-table-mount');
     await expect(tableMount).toBeVisible({ timeout: 8000 });
-    await expect(tableMount.getByText('3 pts').first()).toBeVisible({ timeout: 8000 });
+    await expect(tableMount.getByText('3 pts', { exact: true }).first()).toBeVisible({ timeout: 8000 });
   });
 
   test('F15-04 Qualifying threshold mentioned in accordion', async ({ page }) => {
@@ -131,13 +131,13 @@ test.describe('Flow 15 — Group Stage Standings', () => {
     // Standings renders pts as "${gp} pts" — devplayer and sofia both have 3 pts (= qualifyPoints)
     // Their pts number is shown in green (var(--ace2)) — count the "3 pts" occurrences
     const tableMount = page.locator('#league-table-mount');
-    const ptsBadges = tableMount.getByText('3 pts');
+    const ptsBadges = tableMount.getByText('3 pts', { exact: true });
     await expect(ptsBadges).toHaveCount(2, { timeout: 8000 });
   });
 
   test('F15-06 Current player row shows "You" label in standings', async ({ page }) => {
     // Wait for the table to render (group pts present) then check "You" label
-    await expect(page.locator('#league-table-mount').getByText('3 pts').first()).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('#league-table-mount').getByText('3 pts', { exact: true }).first()).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('You').first()).toBeVisible();
   });
 
