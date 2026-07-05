@@ -4,7 +4,7 @@
 
 import { dbGet, dbRef, dbListen, sRef } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
-import { buildLeagueTable, isQualified } from '@shared/scoring.js';
+import { buildLeagueTable, calculateGroupPoints } from '@shared/scoring.js';
 import { avatarToSvg } from '@player/avatars.js';
 
 export function renderBracketTab(el, player, creds) {
@@ -46,18 +46,19 @@ export function renderBracketTab(el, player, creds) {
     if (bracketData && (bracketData.status === 'active' || bracketData.status === 'complete')) {
       _renderBracket(el, bracketData, allPlayers || {}, creds.uid, league);
     } else {
-      // Season still in progress — live qualification tracker
-      const [membersObj, scoringConfig] = await Promise.all([
+      // Season still in progress — live qualification tracker (group stage)
+      const [membersObj, groupStageConfig, pointsConfig] = await Promise.all([
         dbGet(sRef(sid, lid, 'members')),
-        dbGet(sRef(sid, lid, 'scoringConfig')),
+        dbGet(sRef(sid, lid, 'groupStageConfig')),
+        dbGet(sRef(sid, lid, 'pointsConfig')),
       ]);
       if (cancelled) return;
       const memberUids = Object.keys(membersObj || {});
-      const cfg = scoringConfig || { minMatches: 6, minWins: 4, bracketSize: 4 };
+      const gs  = groupStageConfig || {};
+      const pts = pointsConfig     || {};
 
       const unsub = dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
-        const table = buildLeagueTable(matchesObj || {}, memberUids);
-        _renderTracker(el, table, allPlayers || {}, creds.uid, league, cfg);
+        _renderTracker(el, matchesObj || {}, memberUids, allPlayers || {}, creds.uid, league, gs, pts);
       });
       unsubs.push(unsub);
     }
@@ -71,89 +72,111 @@ export function renderBracketTab(el, player, creds) {
 
 // ─── Qualification tracker ────────────────────────────────────────────────────
 
-function _renderTracker(el, table, allPlayers, myUid, league, cfg) {
-  const bracketSize = cfg.bracketSize || 4;
-  const minMatches  = cfg.minMatches  || 6;
-  const minWins     = cfg.minWins     || 4;
-  const qualCount   = table.filter(r => isQualified(r.standing, cfg)).length;
+function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, gs, pointsCfg) {
+  const gsStatus   = gs.status || 'pending';
+  const qualifyPts = gs.qualifyPoints ?? 6;
+  const deadline   = gs.deadline;
+
+  // Build rows: uid + group points (if group stage is running) or W-L fallback
+  const rows = memberUids.map(uid => {
+    const gp = (gsStatus === 'active' || gsStatus === 'closed')
+      ? calculateGroupPoints(allMatches, uid, pointsCfg)
+      : null;
+    return { uid, gp };
+  });
+
+  if (gsStatus === 'active' || gsStatus === 'closed') {
+    rows.sort((a, b) => b.gp - a.gp);
+  }
+
+  const qualifiedCount = rows.filter(r => r.gp !== null && r.gp >= qualifyPts).length;
+  const deadlineStr = deadline
+    ? new Date(deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    : null;
+
+  const statusBadge = gsStatus === 'active'
+    ? `<span class="badge" style="font-size:10px;background:rgba(0,160,80,.12);color:#007a3d;">Group Stage Open</span>`
+    : gsStatus === 'closed'
+      ? `<span class="badge badge-muted" style="font-size:10px;">Group Stage Closed</span>`
+      : `<span class="badge badge-muted" style="font-size:10px;">Pending</span>`;
 
   el.innerHTML = `
     <div style="padding-bottom:80px;">
-      <div style="display:flex;align-items:center;padding:16px 0 12px;">
+      <div style="display:flex;align-items:center;gap:8px;padding:16px 0 12px;">
         <div class="badge badge-teal">${escHtml(league.name || 'League')}</div>
+        ${statusBadge}
       </div>
 
       <div class="card" style="text-align:center;margin-bottom:20px;">
         <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;
-          color:var(--text);margin-bottom:6px;">Playoff Qualifier</div>
-        <p class="t-small t-muted">
-          Top ${bracketSize} spots &middot; min ${minWins}W from ${minMatches} matches
-        </p>
-        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;">
-          <div style="font-family:var(--font-mono);font-size:22px;font-weight:500;
-            color:${qualCount >= bracketSize ? 'var(--ace2)' : 'var(--text)'};">
-            ${qualCount}/${bracketSize}
-          </div>
-          <span class="t-small t-muted">qualified</span>
+          color:var(--text);margin-bottom:6px;">
+          ${gsStatus === 'pending' ? 'Group Stage — Coming Soon' : 'Bracket Qualification'}
         </div>
+        ${gsStatus === 'pending' ? `
+          <p class="t-small t-muted">
+            Admin hasn't released fixtures yet. Check back soon.
+          </p>
+        ` : `
+          <p class="t-small t-muted">
+            Earn <strong>${qualifyPts}+ group points</strong> to advance to the bracket.
+            ${deadlineStr ? `Deadline: ${deadlineStr}.` : ''}
+          </p>
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;">
+            <div style="font-family:var(--font-mono);font-size:22px;font-weight:500;
+              color:${qualifiedCount > 0 ? 'var(--ace2)' : 'var(--text)'};">
+              ${qualifiedCount}
+            </div>
+            <span class="t-small t-muted">
+              player${qualifiedCount !== 1 ? 's' : ''} currently qualified
+            </span>
+          </div>
+        `}
       </div>
 
-      <div class="t-label t-muted" style="margin-bottom:8px;">Current Standings</div>
+      ${gsStatus !== 'pending' ? `
+        <div class="t-label t-muted" style="margin-bottom:8px;">Group Points</div>
+        ${rows.map((row, i) => {
+          const p      = allPlayers[row.uid] || {};
+          const isMe   = row.uid === myUid;
+          const gp     = row.gp ?? 0;
+          const qual   = gp >= qualifyPts;
+          const ptsLeft = Math.max(0, qualifyPts - gp);
 
-      ${table.map((row, i) => {
-        const p      = allPlayers[row.uid] || {};
-        const isMe   = row.uid === myUid;
-        const qual   = isQualified(row.standing, cfg);
-        const inZone = i < bracketSize;
-        const w  = row.standing.matchesWon;
-        const pl = row.standing.matchesPlayed;
-        const gd = row.standing.gameDiff;
-        const wLeft = Math.max(0, minWins - w);
-        const pLeft = Math.max(0, minMatches - pl);
+          const badgeClass = qual ? 'badge-teal' : gp > 0 ? 'badge-gold' : 'badge-muted';
+          const badgeText  = qual ? 'Qualified' : ptsLeft > 0 ? `${ptsLeft} pts needed` : 'No points yet';
 
-        let badgeClass, badgeText;
-        if (qual && inZone) {
-          badgeClass = 'badge-teal'; badgeText = 'Qualified';
-        } else if (inZone && (wLeft > 0 || pLeft > 0)) {
-          const tip = wLeft > 0 ? `${wLeft}W to go` : `${pLeft}P to go`;
-          badgeClass = 'badge-gold'; badgeText = tip;
-        } else if (!inZone) {
-          badgeClass = 'badge-muted'; badgeText = `Outside top ${bracketSize}`;
-        } else {
-          badgeClass = 'badge-gold'; badgeText = 'On track';
-        }
-
-        return `
-          <div style="display:flex;align-items:center;gap:10px;padding:10px;
-            background:${isMe ? 'var(--ace-bg)' : 'var(--surface)'};
-            border:1px solid ${isMe ? 'var(--ace)' : 'var(--border)'};
-            border-radius:var(--radius);margin-bottom:6px;">
-            <div style="width:22px;text-align:center;font-family:var(--font-mono);font-size:11px;
-              font-weight:700;color:${qual && inZone ? 'var(--ace2)' : 'var(--text3)'};flex-shrink:0;">
-              ${i + 1}
-            </div>
-            ${avatarToSvg(p.avatarId || null, 30)}
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:700;font-size:14px;
-                color:${isMe ? 'var(--ace)' : 'var(--text)'};
-                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                ${isMe ? 'You' : escHtml(p.alias || p.name || row.uid)}
+          return `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px;
+              background:${isMe ? 'var(--ace-bg)' : 'var(--surface)'};
+              border:1px solid ${isMe ? 'var(--ace)' : 'var(--border)'};
+              border-radius:var(--radius);margin-bottom:6px;">
+              <div style="width:22px;text-align:center;font-family:var(--font-mono);font-size:11px;
+                font-weight:700;color:${qual ? 'var(--ace2)' : 'var(--text3)'};flex-shrink:0;">
+                ${i + 1}
               </div>
-              <div class="t-small t-muted">
-                ${w}W &middot; ${pl}P &middot; GD ${gd >= 0 ? '+' : ''}${gd}
+              ${avatarToSvg(p.avatarId || null, 30)}
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:14px;
+                  color:${isMe ? 'var(--ace)' : 'var(--text)'};
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                  ${isMe ? 'You' : escHtml(p.alias || p.name || row.uid)}
+                </div>
+              </div>
+              <div style="font-family:var(--font-mono);font-size:18px;font-weight:800;
+                color:${qual ? 'var(--ace2)' : 'var(--text)'};flex-shrink:0;margin-right:6px;">
+                ${gp}
+              </div>
+              <div class="badge ${badgeClass}" style="white-space:nowrap;flex-shrink:0;">
+                ${escHtml(badgeText)}
               </div>
             </div>
-            <div class="badge ${badgeClass}" style="white-space:nowrap;flex-shrink:0;">
-              ${escHtml(badgeText)}
-            </div>
+          `;
+        }).join('')}
+        ${rows.length === 0 ? `
+          <div class="empty-state" style="padding:32px 16px;">
+            <p class="t-small t-muted">No group fixtures yet.</p>
           </div>
-        `;
-      }).join('')}
-
-      ${table.length === 0 ? `
-        <div class="empty-state" style="padding:32px 16px;">
-          <p class="t-small t-muted">No matches played yet.</p>
-        </div>
+        ` : ''}
       ` : ''}
     </div>
   `;

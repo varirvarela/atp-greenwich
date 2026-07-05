@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.3.1',
+    date:    '2026-07-03',
+    changes: [
+      'Bracket tab: qualification tracker now shows group points and a "Qualified / X pts needed" badge per player',
+      'Bracket tab: removed outdated "Top 4 / min wins" description — qualification is now group-points-based',
+    ],
+  },
+  {
     version: '1.3.0',
     date:    '2026-07-05',
     changes: [
