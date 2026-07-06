@@ -40,7 +40,7 @@ export default defineConfig({
     {
       // Admin app Vite dev server (port 5175) — separate build/entry point
       command: 'npm run dev:admin:test',
-      url: 'http://localhost:5175/atp-greenwich/admin/',
+      url: 'http://localhost:5175/admin.html',
       reuseExistingServer: !process.env.CI,
       timeout: 20000,
       env: { VITE_USE_EMULATOR: 'true' },
