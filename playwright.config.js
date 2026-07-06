@@ -30,10 +30,17 @@ export default defineConfig({
       timeout: 60000, // first CI run downloads the emulator JAR (~30 MB)
     },
     {
-      // Vite dev server on port 5174 with emulator flag
-      // VITE_USE_EMULATOR tells firebase.js to call connectDatabaseEmulator
+      // Player app Vite dev server (port 5174) — primary test server
       command: 'npm run dev -- --port 5174',
       url: 'http://localhost:5174/atp-greenwich/',
+      reuseExistingServer: !process.env.CI,
+      timeout: 20000,
+      env: { VITE_USE_EMULATOR: 'true' },
+    },
+    {
+      // Admin app Vite dev server (port 5175) — separate build/entry point
+      command: 'npm run dev:admin:test',
+      url: 'http://localhost:5175/atp-greenwich/admin/',
       reuseExistingServer: !process.env.CI,
       timeout: 20000,
       env: { VITE_USE_EMULATOR: 'true' },

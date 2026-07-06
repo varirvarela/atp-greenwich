@@ -15,7 +15,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "test:all": "vitest run && playwright test",
-    "emulator": "firebase emulators:start --only database --project atp-greenwich"
+    "emulator": "firebase emulators:start --only database --project atp-greenwich",
+    "dev:admin:test": "vite --config vite.admin.config.js --port 5175"
   },
   "dependencies": {
     "@dicebear/adventurer": "^9.4.2",
