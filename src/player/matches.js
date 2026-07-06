@@ -144,7 +144,7 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
         <div class="badge badge-teal" style="font-size:11px;">${escHtml(leagueName)}</div>
       </div>
 
-      <div style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;">
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="btn btn-sm ${_matchFilter === 'all' ? 'btn-primary' : 'btn-surface'}"
           data-filter="all" style="white-space:nowrap;flex-shrink:0;">All</button>
         <button class="btn btn-sm ${_matchFilter === 'active' ? 'btn-primary' : 'btn-surface'}"

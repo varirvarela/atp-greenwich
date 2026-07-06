@@ -49,7 +49,11 @@ export function renderStandingsTab(el, player, creds) {
       if (cancelled) return;
       if (m !== null) { myLid = lid; break; }
     }
-    let activeLid = myLid || leagueList[0].lid;
+    // Default to the globally selected league (top-right switcher), falling back to home league
+    const prefLid = localStorage.getItem('atp_active_lid');
+    let activeLid = (prefLid && leagueList.find(l => l.lid === prefLid))
+      ? prefLid
+      : (myLid || leagueList[0].lid);
 
     function listenForLeague(lid) {
       if (unsub) { unsub(); unsub = null; }
@@ -92,14 +96,22 @@ export function renderStandingsTab(el, player, creds) {
     el.innerHTML = `
       <div style="padding-bottom:24px;">
         ${leagueList.length > 1 ? `
-          <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;">
-            ${leagueList.map(l => `
-              <button class="btn btn-sm ${l.lid === activeLid ? 'btn-primary' : 'btn-surface'}"
-                data-lid="${escHtml(l.lid)}"
-                style="white-space:nowrap;flex-shrink:0;">
-                ${escHtml(l.name)}${l.lid === myLid ? ' ★' : ''}
-              </button>
-            `).join('')}
+          <div style="margin-bottom:12px;">
+            <div id="league-switcher-toggle"
+              style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0;">
+              <span id="active-league-label" class="badge badge-teal"
+                style="font-size:12px;">${escHtml(leagueList.find(l=>l.lid===activeLid)?.name || activeLid)}</span>
+              <span style="font-size:11px;color:var(--text3);" id="switcher-arrow">▾ change</span>
+            </div>
+            <div id="league-options"
+              style="display:none;margin-top:8px;gap:6px;flex-wrap:wrap;">
+              ${leagueList.map(l => `
+                <button class="btn btn-sm ${l.lid === activeLid ? 'btn-primary' : 'btn-surface'}"
+                  data-lid="${escHtml(l.lid)}" style="white-space:nowrap;">
+                  ${escHtml(l.name)}${l.lid === myLid ? ' ★' : ''}
+                </button>
+              `).join('')}
+            </div>
           </div>
         ` : ''}
         <div id="standings-mount">
@@ -110,13 +122,32 @@ export function renderStandingsTab(el, player, creds) {
       </div>
     `;
 
+    // League switcher toggle
+    el.querySelector('#league-switcher-toggle')?.addEventListener('click', () => {
+      const opts = el.querySelector('#league-options');
+      const arrow = el.querySelector('#switcher-arrow');
+      if (!opts) return;
+      const open = opts.style.display === 'flex';
+      opts.style.display = open ? 'none' : 'flex';
+      if (arrow) arrow.textContent = open ? '▾ change' : '▴ close';
+    });
+
     el.querySelectorAll('[data-lid]').forEach(btn => {
       btn.addEventListener('click', () => {
         activeLid = btn.dataset.lid;
+        // Update badge label
+        const label = el.querySelector('#active-league-label');
+        if (label) label.textContent = leagueList.find(l => l.lid === activeLid)?.name || activeLid;
+        // Update button states
         el.querySelectorAll('[data-lid]').forEach(b => {
           b.className = `btn btn-sm ${b.dataset.lid === activeLid ? 'btn-primary' : 'btn-surface'}`;
-          b.style.whiteSpace = 'nowrap'; b.style.flexShrink = '0';
+          b.style.whiteSpace = 'nowrap';
         });
+        // Collapse the options
+        const opts = el.querySelector('#league-options');
+        const arrow = el.querySelector('#switcher-arrow');
+        if (opts) opts.style.display = 'none';
+        if (arrow) arrow.textContent = '▾ change';
         listenForLeague(activeLid);
       });
     });
@@ -149,11 +180,6 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName, gs, points
   const deadline    = gs.deadline;
   const pts         = pointsCfg;
 
-  function _diff(n) { return `${n > 0 ? '+' : ''}${n}`; }
-  function _diffColor(n) {
-    return n > 0 ? 'var(--ace2)' : n < 0 ? 'var(--ace3)' : 'var(--text3)';
-  }
-
   const deadlineStr = deadline
     ? new Date(deadline).toLocaleDateString('en-GB', { day:'numeric', month:'short' })
     : null;
@@ -168,65 +194,47 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName, gs, points
 
     ${showGsPts ? _rulesAccordion(pts, qualifyPts, deadlineStr) : ''}
 
-    <div class="card" style="padding:0;overflow:hidden;">
-      ${table.map((row, i) => {
-        const p      = allPlayers[row.uid] || { name: 'Unknown', alias: row.uid };
-        const isMe   = row.uid === myUid;
-        const s      = row.standing;
-        const gp     = row.groupPoints ?? null;
-        const qualifies = gp !== null && gp >= qualifyPts;
-        const isLast = i === table.length - 1;
-        const elo = allPlayers[row.uid]?.eloRating;
-        const tier = elo ? eloTierLabel(elo) : null;
-        return `
-          <div data-view-player="${row.uid}" style="padding:10px 12px;cursor:pointer;
-            ${isLast ? '' : 'border-bottom:1px solid var(--border);'}
-            ${isMe ? 'background:rgba(184,64,8,.06);' : ''}">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-              <div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);
-                width:20px;text-align:center;flex-shrink:0;">${row.rank}</div>
-              ${p.avatarId ? avatarToSvg(p.avatarId, 28) : _defaultAv(28)}
-              <span style="font-size:13px;font-weight:${isMe ? '700' : '400'};
-                flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                ${isMe ? 'You' : escHtml(p.alias || p.name)}
-              </span>
-              ${showGsPts ? `
-                <span style="font-family:var(--font-mono);font-size:15px;font-weight:800;
-                  color:${qualifies ? 'var(--ace2)' : 'var(--text)'};flex-shrink:0;">
-                  ${gp ?? 0} pts
-                </span>
-              ` : `
-                <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;
-                  flex-shrink:0;">${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L</span>
-              `}
-              ${elo ? `
-                <div style="text-align:right;flex-shrink:0;min-width:52px;">
-                  <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;
-                    color:${isMe ? 'var(--ace)' : 'var(--text)'};">${elo}</div>
-                  ${tier ? `<div style="font-size:9px;color:var(--text3);text-transform:uppercase;
-                    letter-spacing:.4px;">${escHtml(tier)}</div>` : ''}
-                </div>
-              ` : `<div style="width:52px;flex-shrink:0;"></div>`}
+    ${table.map(row => {
+      const p         = allPlayers[row.uid] || { name: 'Unknown', alias: row.uid };
+      const isMe      = row.uid === myUid;
+      const s         = row.standing;
+      const gp        = row.groupPoints ?? null;
+      const qualifies = gp !== null && gp >= qualifyPts;
+      const elo       = allPlayers[row.uid]?.eloRating;
+      const tier      = elo ? eloTierLabel(elo) : null;
+      const wl        = `${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L`;
+      return `
+        <div data-view-player="${row.uid}" style="display:flex;align-items:center;gap:8px;
+          padding:10px 12px;cursor:pointer;
+          background:${isMe ? 'rgba(184,64,8,.06)' : 'var(--surface)'};
+          border:1px solid ${isMe ? 'var(--ace)' : 'var(--border)'};
+          border-radius:var(--radius);margin-bottom:6px;">
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);
+            width:20px;text-align:center;flex-shrink:0;">${row.rank}</div>
+          ${p.avatarId ? avatarToSvg(p.avatarId, 28) : _defaultAv(28)}
+          <span style="font-size:13px;font-weight:${isMe ? '700' : '400'};
+            flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+            color:${isMe ? 'var(--ace)' : 'var(--text)'};">
+            ${isMe ? 'You' : escHtml(p.alias || p.name)}
+          </span>
+          <span style="font-family:var(--font-mono);font-size:11px;font-weight:600;
+            color:var(--text3);flex-shrink:0;">${wl}</span>
+          ${elo ? `
+            <div style="text-align:right;flex-shrink:0;min-width:46px;">
+              <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;
+                color:${isMe ? 'var(--ace)' : 'var(--text)'};">${elo}</div>
+              ${tier ? `<div style="font-size:9px;color:var(--text3);text-transform:uppercase;
+                letter-spacing:.4px;">${escHtml(tier)}</div>` : ''}
             </div>
-            <div style="display:flex;gap:12px;padding-left:28px;">
-              ${showGsPts ? `
-                <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">
-                  ${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L
-                </span>
-              ` : ''}
-              <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">
-                Sets <span style="color:var(--text);">${s.setsWon}–${s.setsLost}</span>
-                <span style="color:${_diffColor(s.setDiff)};">(${_diff(s.setDiff)})</span>
-              </div>
-              <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">
-                Games <span style="color:var(--text);">${s.gamesWon}–${s.gamesLost}</span>
-                <span style="color:${_diffColor(s.gameDiff)};">(${_diff(s.gameDiff)})</span>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
+          ` : `<div style="width:46px;flex-shrink:0;"></div>`}
+          ${showGsPts ? `
+            <span style="font-family:var(--font-mono);font-size:14px;font-weight:800;
+              color:${qualifies ? 'var(--ace2)' : 'var(--text)'};flex-shrink:0;
+              min-width:36px;text-align:right;">${gp ?? 0}pts</span>
+          ` : ''}
+        </div>
+      `;
+    }).join('')}
   `;
 }
 

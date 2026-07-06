@@ -198,26 +198,18 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
       </div>
 
       ${gsStatus !== 'pending' ? `
-        <div class="t-label t-muted" style="margin-bottom:8px;">Group Points</div>
-        ${rows.map((row, i) => {
-          const p      = allPlayers[row.uid] || {};
-          const isMe   = row.uid === myUid;
-          const gp     = row.gp ?? 0;
-          const qual   = gp >= qualifyPts;
-          const ptsLeft = Math.max(0, qualifyPts - gp);
-
-          const badgeClass = qual ? 'badge-teal' : gp > 0 ? 'badge-gold' : 'badge-muted';
-          const badgeText  = qual ? 'Qualified' : ptsLeft > 0 ? `${ptsLeft} pts needed` : 'No points yet';
-
+        <div class="t-label t-muted" style="margin-bottom:8px;">Qualified Players</div>
+        ${rows.filter(r => (r.gp ?? 0) >= qualifyPts).map((row, i) => {
+          const p    = allPlayers[row.uid] || {};
+          const isMe = row.uid === myUid;
+          const gp   = row.gp ?? 0;
           return `
             <div style="display:flex;align-items:center;gap:10px;padding:10px;
               background:${isMe ? 'var(--ace-bg)' : 'var(--surface)'};
               border:1px solid ${isMe ? 'var(--ace)' : 'var(--border)'};
               border-radius:var(--radius);margin-bottom:6px;">
               <div style="width:22px;text-align:center;font-family:var(--font-mono);font-size:11px;
-                font-weight:700;color:${qual ? 'var(--ace2)' : 'var(--text3)'};flex-shrink:0;">
-                ${i + 1}
-              </div>
+                font-weight:700;color:var(--ace2);flex-shrink:0;">${i + 1}</div>
               ${avatarToSvg(p.avatarId || null, 30)}
               <div style="flex:1;min-width:0;">
                 <div style="font-weight:700;font-size:14px;
@@ -227,18 +219,14 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
                 </div>
               </div>
               <div style="font-family:var(--font-mono);font-size:18px;font-weight:800;
-                color:${qual ? 'var(--ace2)' : 'var(--text)'};flex-shrink:0;margin-right:6px;">
-                ${gp}
-              </div>
-              <div class="badge ${badgeClass}" style="white-space:nowrap;flex-shrink:0;">
-                ${escHtml(badgeText)}
-              </div>
+                color:var(--ace2);flex-shrink:0;margin-right:6px;">${gp}</div>
+              <div class="badge badge-teal" style="white-space:nowrap;flex-shrink:0;">Qualified</div>
             </div>
           `;
         }).join('')}
-        ${rows.length === 0 ? `
+        ${qualifiedCount === 0 ? `
           <div class="empty-state" style="padding:32px 16px;">
-            <p class="t-small t-muted">No group fixtures yet.</p>
+            <p class="t-small t-muted">No players have qualified yet.</p>
           </div>
         ` : ''}
       ` : ''}
