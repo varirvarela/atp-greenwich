@@ -565,3 +565,38 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ─── Player profile modal (shared with player app) ────────────────────────── */
+/* These classes are defined in src/player/style.css but that CSS is not loaded  */
+/* in the admin app — re-declare the minimum needed for correct positioning.     */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 24, 20, 0.5);
+  z-index: 9000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: admin-fade-in 0.15s ease;
+}
+
+@keyframes admin-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal-sheet {
+  background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  padding: 0 24px 32px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90dvh;
+  overflow-y: auto;
+  animation: admin-slide-up 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes admin-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}

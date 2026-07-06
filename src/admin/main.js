@@ -150,7 +150,7 @@ function showAdminShell(app) {
           `).join('')}
         </nav>
         <div class="admin-signout">
-          <a href="${import.meta.env.BASE_URL}"
+          <a href="${import.meta.env.BASE_URL.replace('/admin/', '/')}"
             class="admin-signout-btn"
             style="display:block;text-align:center;text-decoration:none;
               margin-bottom:6px;color:var(--text2);background:var(--surface2);">
@@ -526,15 +526,10 @@ async function renderLeagues(el) {
   const defaultSid = config && config.defaultSeason;
   const seasons    = allSeasonsRaw || {};
 
-  // Active season first, then remaining sorted newest → oldest
-  const sortedSeasons = Object.entries(seasons).sort(([sA], [sB]) => {
-    if (sA === defaultSid) return -1;
-    if (sB === defaultSid) return 1;
-    return (seasons[sB].createdAt || 0) - (seasons[sA].createdAt || 0);
-  });
+  const sortedSeasons = Object.entries(seasons)
+    .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
 
-  // Default to showing active season; fall back to first
-  const viewSid = defaultSid || (sortedSeasons[0] && sortedSeasons[0][0]) || '';
+  const viewSid = (sortedSeasons[0] && sortedSeasons[0][0]) || '';
 
   el.innerHTML = `
     <div class="section-header">
@@ -564,7 +559,7 @@ async function renderLeagues(el) {
             <label class="admin-input-label" style="margin:0;flex-shrink:0;">Season</label>
             <select id="league-season-select" class="admin-input" style="flex:1;max-width:240px;">
               ${sortedSeasons.map(([sid, s]) =>
-                `<option value="${sid}" ${sid===viewSid?'selected':''}>${escHtml(s.name||sid)}${sid===defaultSid?' (active)':''}</option>`
+                `<option value="${sid}" ${sid===viewSid?'selected':''}>${escHtml(s.name||sid)}</option>`
               ).join('')}
             </select>
           </div>
@@ -1250,11 +1245,8 @@ async function renderMatches(el) {
   const defaultSid  = config?.defaultSeason;
   const seasons     = allSeasonsRaw || {};
 
-  const sortedSeasons = Object.entries(seasons).sort(([a], [b]) => {
-    if (a === defaultSid) return -1;
-    if (b === defaultSid) return 1;
-    return (seasons[b].createdAt || 0) - (seasons[a].createdAt || 0);
-  });
+  const sortedSeasons = Object.entries(seasons)
+    .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
 
   if (!sortedSeasons.length) {
     el.innerHTML = '<div class="admin-empty">No seasons found.</div>';
@@ -1262,7 +1254,7 @@ async function renderMatches(el) {
   }
 
   // Filter state
-  let activeSid    = defaultSid || sortedSeasons[0][0];
+  let activeSid    = sortedSeasons[0][0];
   let activeLid    = 'all';
   let activeStatus = 'all';
   let searchPlayer = '';
@@ -1340,7 +1332,7 @@ async function renderMatches(el) {
     if (statsEl) statsEl.innerHTML = `
       ${disputed.length ? `<span class="badge-admin badge-red">${disputed.length} disputed</span>` : ''}
       <span class="badge-admin badge-orange">${open.length} open</span>
-      <span class="badge-admin badge-green">${done.length} confirmed</span>
+      ${done.length ? `<span class="badge-admin badge-green">${done.length} confirmed</span>` : ''}
     `;
 
     const listEl = el.querySelector('#match-list');
@@ -1480,7 +1472,7 @@ function _showMatchEditModal(match, allPlayers, onDone) {
 
   function setsHtml(sets) {
     return sets.map((s, i) => `
-      <div class="admin-form-row" data-set-row="${i}" style="gap:6px;align-items:center;">
+      <div class="admin-form-row" data-set-row="${i}" style="display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;align-items:center;">
         <span style="font-size:11px;color:var(--text3);width:40px;flex-shrink:0;">Set ${i+1}</span>
         <input class="admin-input set-a" type="number" min="0" max="99" value="${s.a ?? ''}"
           placeholder="A" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
@@ -1632,15 +1624,12 @@ async function renderBracketAdmin(el) {
   const defaultSid = config?.defaultSeason;
   const seasons    = allSeasonsRaw || {};
 
-  const sortedSeasons = Object.entries(seasons).sort(([a], [b]) => {
-    if (a === defaultSid) return -1;
-    if (b === defaultSid) return 1;
-    return (seasons[b].createdAt || 0) - (seasons[a].createdAt || 0);
-  });
+  const sortedSeasons = Object.entries(seasons)
+    .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
 
   if (!sortedSeasons.length) { el.innerHTML = '<div class="admin-empty">No seasons.</div>'; return; }
 
-  let activeSid = defaultSid || sortedSeasons[0][0];
+  let activeSid = sortedSeasons[0][0];
   let activeLid = null; // null = all leagues
 
   async function loadAndRender() {
@@ -1756,7 +1745,7 @@ async function renderBracketAdmin(el) {
       ${sortedSeasons.length > 1 ? `
         <select id="bracket-season-select" class="admin-input" style="max-width:200px;">
           ${sortedSeasons.map(([sid, s]) =>
-            `<option value="${sid}" ${sid===activeSid?'selected':''}>${escHtml(s.name||sid)}${sid===defaultSid?' (active)':''}</option>`
+            `<option value="${sid}" ${sid===activeSid?'selected':''}>${escHtml(s.name||sid)}</option>`
           ).join('')}
         </select>
       ` : ''}
@@ -1827,6 +1816,7 @@ function _renderQualifiedTable(table, qualified, allPlayers, cfg, gsConfig) {
   const qualifyPts  = gsConfig?.qualifyPoints ?? 6;
 
   return `
+    <div style="overflow-x:auto;">
     <table class="admin-table">
       <thead>
         <tr>
@@ -1874,6 +1864,7 @@ function _renderQualifiedTable(table, qualified, allPlayers, cfg, gsConfig) {
         ` : ''}
       </tbody>
     </table>
+    </div>
   `;
 }
 
@@ -2005,17 +1996,6 @@ async function renderSettings(el) {
     </div>
 
     <div class="admin-form-panel">
-      <div class="admin-form-title">Default Season</div>
-      <div class="admin-input-group">
-        <label class="admin-input-label">Season ID</label>
-        <input id="season-id-input" class="admin-input"
-          value="${escHtml(config.defaultSeason || '')}"
-          placeholder="e.g. season_abc123"/>
-      </div>
-      <button class="btn-admin btn-secondary" id="btn-set-season">Set Default Season</button>
-    </div>
-
-    <div class="admin-form-panel">
       <div class="admin-form-title">App Info</div>
       <div style="font-size:13px;color:var(--text2);">
         <div style="margin-bottom:4px;">ATP Greenwich Admin · v${APP_VERSION}</div>
@@ -2037,12 +2017,6 @@ async function renderSettings(el) {
     el.querySelector('#confirm-pwd-input').value = '';
   });
 
-  el.querySelector('#btn-set-season').addEventListener('click', async () => {
-    const sid = el.querySelector('#season-id-input').value.trim();
-    if (!sid) { toast('Enter a season ID', 'error'); return; }
-    await dbUpdate(dbRef('config'), { defaultSeason: sid });
-    toast('Default season updated', 'success');
-  });
 }
 
 // ─── SVG icons ────────────────────────────────────────────────────────────────
