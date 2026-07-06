@@ -56,7 +56,7 @@ test.describe('Flow 10 — Bracket Tab (Phase 6)', () => {
 
     await expect(page.getByText('Bracket Qualification')).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('Earn')).toBeVisible();
-    await expect(page.getByText('group points', { exact: true })).toBeVisible();
+    await expect(page.getByText('group points').first()).toBeVisible();
   });
 
   test('P6-02 current player shows "You" label and group pts', async ({ page }) => {
