@@ -93,7 +93,7 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
         ` : ''}
         <div style="text-align:center;padding:40px 16px 24px;">
           <img src="${BASE}images/atp-empty-matches.png"
-            style="width:160px;height:auto;margin-bottom:16px;opacity:.85;">
+            style="width:160px;height:auto;margin-bottom:16px;opacity:.85;margin:0 auto 16px;">
           <div class="empty-state-title">No results yet</div>
           <p class="t-small t-muted" style="max-width:240px;margin:0 auto;">
             Confirmed match results will appear here.

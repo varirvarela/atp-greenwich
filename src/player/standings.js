@@ -165,7 +165,7 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName, gs, points
     el.innerHTML = `
       <div style="text-align:center;padding:24px 0;">
         <img src="${BASE}images/atp-empty-standings.png"
-          style="width:140px;height:auto;opacity:.8;margin-bottom:12px;">
+          style="width:140px;height:auto;opacity:.8;margin:0 auto 12px;">
         <p class="t-small t-muted">No confirmed matches in ${escHtml(leagueName)} yet.</p>
       </div>
     `;

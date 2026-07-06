@@ -458,12 +458,16 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         <div class="badge badge-ace" style="margin-top:8px;font-size:12px;">${escHtml(tier)}</div>
       </div>
 
-      ${player.isAdmin ? `
-      <!-- Admin access -->
+      ${(player.isAdmin || player.email === 'pablorvarela@gmail.com') ? `
+      <!-- Admin / Owner access -->
       <div class="card" style="margin-bottom:16px;background:var(--ace-bg);border-color:var(--ace);">
-        <div class="t-label" style="color:var(--ace);margin-bottom:8px;">Admin Access</div>
+        <div class="t-label" style="color:var(--ace);margin-bottom:8px;">
+          ${player.email === 'pablorvarela@gmail.com' ? 'App Owner' : 'Admin Access'}
+        </div>
         <p class="t-small" style="color:var(--text2);margin-bottom:12px;">
-          You have admin privileges. Open the dashboard to manage players, leagues, and matches.
+          ${player.email === 'pablorvarela@gmail.com'
+            ? 'You are the app owner. Open the dashboard to manage players, leagues, and matches.'
+            : 'You have admin privileges. Open the dashboard to manage players, leagues, and matches.'}
         </p>
         <a href="${import.meta.env.BASE_URL}admin/"
           style="display:block;text-align:center;text-decoration:none;

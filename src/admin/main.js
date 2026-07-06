@@ -382,12 +382,16 @@ function _playerCard(p) {
           <button class="btn-admin btn-secondary" data-action="edit-elo"
             data-uid="${p.uid}" data-name="${displayName}"
             data-elo="${p.eloRating || 1000}">Edit ELO</button>
-          <button class="btn-admin ${p.isAdmin ? 'btn-danger' : 'btn-secondary'}"
-            data-action="toggle-admin" data-uid="${p.uid}"
-            data-is-admin="${p.isAdmin ? 'true' : 'false'}"
-            title="${p.isAdmin ? 'Remove admin access' : 'Grant admin access'}">
-            ${p.isAdmin ? '★ Admin' : 'Make Admin'}
-          </button>
+          ${p.email === 'pablorvarela@gmail.com' ? `
+            <span class="badge-admin badge-teal" style="cursor:default;" title="App owner — cannot be revoked">★ Owner</span>
+          ` : `
+            <button class="btn-admin ${p.isAdmin ? 'btn-danger' : 'btn-secondary'}"
+              data-action="toggle-admin" data-uid="${p.uid}"
+              data-is-admin="${p.isAdmin ? 'true' : 'false'}"
+              title="${p.isAdmin ? 'Remove admin access' : 'Grant admin access'}">
+              ${p.isAdmin ? '★ Admin' : 'Make Admin'}
+            </button>
+          `}
         ` : ''}
         <button class="btn-admin btn-ghost" data-action="view-player"
           data-uid="${p.uid}" style="font-size:11px;">Profile</button>

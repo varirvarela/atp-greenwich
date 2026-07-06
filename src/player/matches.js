@@ -173,7 +173,7 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
       ${!hasActiveMatches && !openChallenges.length && _matchFilter === 'all' && !_matchSearch ? `
         <div style="text-align:center;padding:32px 0 0;">
           <img src="${BASE}images/atp-empty-matches.png"
-            style="width:160px;height:auto;margin-bottom:16px;opacity:.85;">
+            style="width:160px;height:auto;opacity:.85;margin:0 auto 16px;">
           <div class="empty-state-title">No active matches</div>
           <p class="t-small t-muted" style="max-width:220px;margin:0 auto;">
             Propose a match against a league opponent to get started.
@@ -1228,7 +1228,7 @@ function _showUploadPhotoModal(match, myUid, allPlayers, sid, lid) {
 
       <div style="text-align:center;padding:8px 0 16px;">
         <img src="${BASE}images/atp-match-confirmed.png"
-          style="width:120px;height:auto;opacity:.8;margin-bottom:12px;">
+          style="width:120px;height:auto;opacity:.8;margin:0 auto 12px;">
         <p class="t-small t-muted" style="line-height:1.5;max-width:260px;margin:0 auto;">
           Upload a photo of the score sheet or court.
           ELO ratings update immediately after confirmation.
