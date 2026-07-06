@@ -64,7 +64,7 @@ export async function seedLoginPlayer(page) {
 // a player-app page (port 5174) using adminWrite() above.
 
 export const ADMIN_ORIGIN = 'http://localhost:5175';
-export const ADMIN_BASE   = ADMIN_ORIGIN + '/admin.html';
+export const ADMIN_BASE   = ADMIN_ORIGIN + '/atp-greenwich/admin/';
 
 // Navigate to the admin app and wait for either the login form or the shell.
 export async function goToAdmin(page) {
