@@ -3,17 +3,28 @@
 
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { readFileSync } from 'fs';
 
-// In dev mode Vite's SPA fallback serves index.html for any 404, so navigating
-// to /atp-greenwich/admin/ would load the player app instead of admin.html.
-// This plugin intercepts the base-path request and rewrites it to /admin.html
-// so Vite serves the correct entry point for both the health-check and tests.
+// Vite dev server with a non-root `base` redirects any request that doesn't
+// start with the base back to the base path.  Rewriting req.url to '/admin.html'
+// therefore triggers an infinite redirect loop.  Instead we read admin.html,
+// run it through Vite's own HTML transform pipeline, and send the response
+// ourselves — this way Vite's routing never sees the raw request.
 const adminFallbackPlugin = {
   name: 'admin-spa-fallback',
   configureServer(server) {
-    server.middlewares.use((req, _res, next) => {
+    server.middlewares.use(async (req, res, next) => {
       if (req.url === '/atp-greenwich/admin/' || req.url === '/atp-greenwich/admin') {
-        req.url = '/admin.html';
+        try {
+          const raw         = readFileSync(resolve(process.cwd(), 'admin.html'), 'utf-8');
+          const transformed = await server.transformIndexHtml(req.url, raw);
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.end(transformed);
+        } catch (e) {
+          next(e);
+        }
+        return;
       }
       next();
     });
