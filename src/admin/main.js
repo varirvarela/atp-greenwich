@@ -398,20 +398,14 @@ function _playerCard(p) {
 
 async function _showPlayerProfileModal(player, onDone) {
   // Fetch all seasons to find which league this player belongs to
-  const [allSeasonsRaw, config] = await Promise.all([
-    dbGet(dbRef('seasons')),
-    dbGet(dbRef('config')),
-  ]);
-  const defaultSid = config && config.defaultSeason;
-  const seasons    = allSeasonsRaw || {};
+  const allSeasonsRaw = await dbGet(dbRef('seasons'));
+  const seasons = allSeasonsRaw || {};
 
-  // Find current league membership (prefer active season)
+  // Find current league membership (most recent tournament first)
   let currentSid = null, currentLid = null, currentLeagueName = '';
-  const seasonOrder = Object.keys(seasons).sort((a, b) => {
-    if (a === defaultSid) return -1;
-    if (b === defaultSid) return 1;
-    return (seasons[b].createdAt || 0) - (seasons[a].createdAt || 0);
-  });
+  const seasonOrder = Object.keys(seasons).sort((a, b) =>
+    (seasons[b].createdAt || 0) - (seasons[a].createdAt || 0)
+  );
   for (const sid of seasonOrder) {
     const leagues = (seasons[sid] && seasons[sid].leagues) || {};
     for (const [lid, league] of Object.entries(leagues)) {
@@ -424,10 +418,11 @@ async function _showPlayerProfileModal(player, onDone) {
     if (currentSid) break;
   }
 
-  // Build league options for the dropdown (from default season)
-  const defaultSeasonLeagues = (defaultSid && seasons[defaultSid] && seasons[defaultSid].leagues) || {};
-  const leagueOptions = Object.entries(defaultSeasonLeagues).map(([lid, l]) => ({
-    sid: defaultSid, lid, name: l.name || lid,
+  // Build league options for the dropdown (from most recent tournament)
+  const mostRecentSid = seasonOrder[0] || null;
+  const mostRecentLeagues = (mostRecentSid && seasons[mostRecentSid]?.leagues) || {};
+  const leagueOptions = Object.entries(mostRecentLeagues).map(([lid, l]) => ({
+    sid: mostRecentSid, lid, name: l.name || lid,
   }));
 
   const overlay = document.createElement('div');
@@ -461,7 +456,7 @@ async function _showPlayerProfileModal(player, onDone) {
 
       ${leagueOptions.length ? `
         <div class="admin-input-group">
-          <label class="admin-input-label">Change League (active season)</label>
+          <label class="admin-input-label">Change League</label>
           <select id="player-league-select" class="admin-input">
             <option value="">— no change —</option>
             ${leagueOptions.map(opt =>
@@ -472,7 +467,7 @@ async function _showPlayerProfileModal(player, onDone) {
             ).join('')}
           </select>
         </div>
-      ` : '<p style="font-size:13px;color:var(--text3);">No leagues in active season.</p>'}
+      ` : '<p style="font-size:13px;color:var(--text3);">No leagues available.</p>'}
 
       <div style="display:flex;gap:10px;margin-top:16px;">
         ${leagueOptions.length ? `
@@ -503,8 +498,8 @@ async function _showPlayerProfileModal(player, onDone) {
     if (currentSid && currentLid) {
       updates[`seasons/${currentSid}/leagues/${currentLid}/members/${player.uid}`] = null;
     }
-    // Add to new league in active season
-    updates[`seasons/${defaultSid}/leagues/${toLid}/members/${player.uid}`] = {
+    // Add to new league in most recent tournament
+    updates[`seasons/${mostRecentSid}/leagues/${toLid}/members/${player.uid}`] = {
       joinedAt:     Date.now(),
       transferredAt: Date.now(),
     };
@@ -518,13 +513,11 @@ async function _showPlayerProfileModal(player, onDone) {
 // ─── Leagues ──────────────────────────────────────────────────────────────────
 
 async function renderLeagues(el) {
-  const [config, allPlayers, allSeasonsRaw] = await Promise.all([
-    dbGet(dbRef('config')),
+  const [allPlayers, allSeasonsRaw] = await Promise.all([
     dbGet(pRef()),
     dbGet(dbRef('seasons')),
   ]);
-  const defaultSid = config && config.defaultSeason;
-  const seasons    = allSeasonsRaw || {};
+  const seasons = allSeasonsRaw || {};
 
   const sortedSeasons = Object.entries(seasons)
     .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
@@ -535,28 +528,28 @@ async function renderLeagues(el) {
     <div class="section-header">
       <div class="section-title">Leagues</div>
       <div class="section-actions">
-        <button class="btn-admin btn-primary" id="btn-new-season">+ New Season</button>
+        <button class="btn-admin btn-primary" id="btn-new-tournament">+ New Tournament</button>
       </div>
     </div>
 
-    <!-- New season form (hidden by default) -->
-    <div id="new-season-form" style="display:none;" class="admin-form-panel">
-      <div class="admin-form-title">Create Season</div>
+    <!-- New tournament form (hidden by default) -->
+    <div id="new-tournament-form" style="display:none;" class="admin-form-panel">
+      <div class="admin-form-title">Create Tournament</div>
       <div class="admin-form-row">
         <div class="admin-input-group" style="flex:1;">
-          <label class="admin-input-label">Season Name</label>
+          <label class="admin-input-label">Tournament Name</label>
           <input id="season-name-input" class="admin-input" placeholder="e.g. 2026 Spring"/>
         </div>
-        <button class="btn-admin btn-primary" id="btn-create-season">Create</button>
+        <button class="btn-admin btn-primary" id="btn-create-tournament">Create</button>
       </div>
     </div>
 
     ${sortedSeasons.length === 0
-      ? `<div class="admin-empty">No seasons yet. Create one above.</div>`
+      ? `<div class="admin-empty">No tournaments yet. Create one above.</div>`
       : `
         ${sortedSeasons.length > 1 ? `
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
-            <label class="admin-input-label" style="margin:0;flex-shrink:0;">Season</label>
+            <label class="admin-input-label" style="margin:0;flex-shrink:0;">Tournament</label>
             <select id="league-season-select" class="admin-input" style="flex:1;max-width:240px;">
               ${sortedSeasons.map(([sid, s]) =>
                 `<option value="${sid}" ${sid===viewSid?'selected':''}>${escHtml(s.name||sid)}</option>`
@@ -567,12 +560,19 @@ async function renderLeagues(el) {
         <div id="league-season-panel">
           ${sortedSeasons.map(([sid, season]) => `
             <div data-season-panel="${sid}" style="${sid===viewSid?'':'display:none;'}">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
                 <div class="section-group-label" style="margin:0;">${escHtml(season.name||sid)}</div>
-                ${sid===defaultSid
-                  ? `<span class="badge-admin badge-green">Active</span>`
-                  : `<button class="btn-admin btn-ghost" style="font-size:11px;"
-                       data-action="set-default-season" data-sid="${sid}">Set as active</button>`}
+                ${season.status === 'over' ? `<span class="badge-admin badge-muted" style="background:#e0e0e0;">Over</span>` : ''}
+                <div style="display:flex;gap:6px;margin-left:auto;">
+                  <button class="btn-admin btn-ghost" style="font-size:11px;"
+                    data-action="toggle-tournament-over" data-sid="${sid}"
+                    data-is-over="${season.status === 'over'}">
+                    ${season.status === 'over' ? 'Reopen' : 'Mark as Over'}
+                  </button>
+                  <button class="btn-admin btn-danger" style="font-size:11px;"
+                    data-action="delete-tournament" data-sid="${sid}"
+                    data-name="${escHtml(season.name||sid)}">Delete</button>
+                </div>
               </div>
               ${_renderSeason(sid, season, allPlayers||{})}
             </div>
@@ -581,8 +581,8 @@ async function renderLeagues(el) {
       `}
   `;
 
-  el.querySelector('#btn-new-season').addEventListener('click', () => {
-    const form = el.querySelector('#new-season-form');
+  el.querySelector('#btn-new-tournament').addEventListener('click', () => {
+    const form = el.querySelector('#new-tournament-form');
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
   });
 
@@ -596,24 +596,33 @@ async function renderLeagues(el) {
     });
   }
 
-  el.querySelector('#btn-create-season').addEventListener('click', async () => {
+  el.querySelector('#btn-create-tournament').addEventListener('click', async () => {
     const name = el.querySelector('#season-name-input').value.trim();
-    if (!name) { toast('Enter a season name', 'error'); return; }
+    if (!name) { toast('Enter a tournament name', 'error'); return; }
     const sid = 'season_' + Date.now().toString(36);
     await dbSet(sRef(sid, null), { name, createdAt: Date.now() });
-    await dbUpdate(dbRef('config'), { defaultSeason: sid });
-    toast('Season created and set as active', 'success');
+    toast('Tournament created', 'success');
     renderLeagues(el);
   });
 
-  // Set a past season as the active one
-  el.querySelectorAll('[data-action="set-default-season"]').forEach(btn => {
+  el.querySelectorAll('[data-action="toggle-tournament-over"]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const { sid } = btn.dataset;
-      const seasonName = seasons[sid] && seasons[sid].name ? seasons[sid].name : sid;
-      if (!confirm(`Set "${seasonName}" as the active season? Players will see matches from this season.`)) return;
-      await dbUpdate(dbRef('config'), { defaultSeason: sid });
-      toast(`"${seasonName}" is now the active season`, 'success');
+      const isOver = btn.dataset.isOver === 'true';
+      const name = seasons[sid]?.name || sid;
+      await dbUpdate(sRef(sid, null), { status: isOver ? null : 'over' });
+      toast(isOver ? `"${name}" reopened` : `"${name}" marked as over`, 'success');
+      renderLeagues(el);
+    });
+  });
+
+  el.querySelectorAll('[data-action="delete-tournament"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid } = btn.dataset;
+      const name = btn.dataset.name || sid;
+      if (!confirm(`Delete tournament "${name}"? All leagues and matches within it will be permanently deleted.`)) return;
+      await dbRemove(sRef(sid, null));
+      toast('Tournament deleted', 'success');
       renderLeagues(el);
     });
   });
@@ -960,7 +969,7 @@ function _showMovePlayerModal(uid, playerName, sid, fromLid, allLeagues, onDone)
 }
 
 function _renderSeason(sid, season, allPlayers) {
-  if (!season) return '<div class="admin-empty">Season data not found.</div>';
+  if (!season) return '<div class="admin-empty">Tournament data not found.</div>';
   const leagues = season.leagues || {};
 
   return `
@@ -1236,20 +1245,18 @@ function _inviteCard(c, isUsed) {
 // ─── Matches ──────────────────────────────────────────────────────────────────
 
 async function renderMatches(el) {
-  const [config, allSeasonsRaw, allPlayers] = await Promise.all([
-    dbGet(dbRef('config')),
+  const [allSeasonsRaw, allPlayers] = await Promise.all([
     dbGet(dbRef('seasons')),
     dbGet(pRef()),
   ]);
-  const players     = allPlayers || {};
-  const defaultSid  = config?.defaultSeason;
-  const seasons     = allSeasonsRaw || {};
+  const players = allPlayers || {};
+  const seasons = allSeasonsRaw || {};
 
   const sortedSeasons = Object.entries(seasons)
     .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
 
   if (!sortedSeasons.length) {
-    el.innerHTML = '<div class="admin-empty">No seasons found.</div>';
+    el.innerHTML = '<div class="admin-empty">No tournaments found.</div>';
     return;
   }
 
@@ -1463,6 +1470,15 @@ function _matchCard(m, allPlayers) {
   `;
 }
 
+function _isAdminValidTennisSet(a, b) {
+  if (isNaN(a) || isNaN(b) || a < 0 || b < 0) return false;
+  const w = Math.max(a, b), l = Math.min(a, b);
+  if (w === 6 && l <= 4) return true;
+  if (w === 7 && l === 5) return true;
+  if (w === 7 && l === 6) return true;
+  return false;
+}
+
 function _showMatchEditModal(match, allPlayers, onDone) {
   const pA = allPlayers[match.playerA] || {};
   const pB = allPlayers[match.playerB] || {};
@@ -1471,18 +1487,31 @@ function _showMatchEditModal(match, allPlayers, onDone) {
   const existingSets = match.result?.sets?.length ? match.result.sets : [{ a: '', b: '' }];
 
   function setsHtml(sets) {
-    return sets.map((s, i) => `
-      <div class="admin-form-row" data-set-row="${i}" style="display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;align-items:center;">
-        <span style="font-size:11px;color:var(--text3);width:40px;flex-shrink:0;">Set ${i+1}</span>
-        <input class="admin-input set-a" type="number" min="0" max="99" value="${s.a ?? ''}"
-          placeholder="A" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
-        <span style="color:var(--text3);">—</span>
-        <input class="admin-input set-b" type="number" min="0" max="99" value="${s.b ?? ''}"
-          placeholder="B" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
-        <button type="button" class="btn-admin btn-ghost" data-remove-set="${i}"
-          style="color:var(--ace3);padding:4px 8px;font-size:18px;line-height:1;">×</button>
-      </div>
-    `).join('');
+    return sets.map((s, i) => {
+      const hasTb = (s.a === 7 && s.b === 6) || (s.a === 6 && s.b === 7);
+      return `
+        <div data-set-row="${i}" style="margin-bottom:4px;">
+          <div class="admin-form-row" style="display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;align-items:center;">
+            <span style="font-size:11px;color:var(--text3);width:40px;flex-shrink:0;">Set ${i+1}</span>
+            <input class="admin-input set-a" type="number" min="0" max="7" inputmode="numeric" value="${s.a ?? ''}"
+              placeholder="A" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
+            <span style="color:var(--text3);">—</span>
+            <input class="admin-input set-b" type="number" min="0" max="7" inputmode="numeric" value="${s.b ?? ''}"
+              placeholder="B" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
+            <button type="button" class="btn-admin btn-ghost" data-remove-set="${i}"
+              style="color:var(--ace3);padding:4px 8px;font-size:18px;line-height:1;">×</button>
+          </div>
+          <div data-tb-row="${i}" style="display:${hasTb ? 'flex' : 'none'};gap:6px;align-items:center;padding-left:46px;margin-top:3px;">
+            <span style="font-size:11px;color:var(--text3);width:24px;flex-shrink:0;">TB</span>
+            <input class="admin-input tb-a" type="number" min="0" max="99" inputmode="numeric" value="${s.tb?.a ?? ''}"
+              placeholder="A" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
+            <span style="color:var(--text3);">—</span>
+            <input class="admin-input tb-b" type="number" min="0" max="99" inputmode="numeric" value="${s.tb?.b ?? ''}"
+              placeholder="B" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   const isConfirmed = match.status === 'confirmed';
@@ -1549,12 +1578,28 @@ function _showMatchEditModal(match, allPlayers, onDone) {
           r.querySelector('span').textContent = `Set ${i+1}`;
           const rmBtn = r.querySelector('[data-remove-set]');
           if (rmBtn) rmBtn.dataset.removeSet = i;
+          const tbRow = r.querySelector('[data-tb-row]');
+          if (tbRow) tbRow.dataset.tbRow = i;
         });
         refreshRemoveButtons();
       };
     });
   }
   refreshRemoveButtons();
+
+  setRowsEl.addEventListener('input', e => {
+    const inp = e.target;
+    if (!inp.classList.contains('set-a') && !inp.classList.contains('set-b')) return;
+    const row = inp.closest('[data-set-row]');
+    if (!row) return;
+    const a = parseInt(row.querySelector('.set-a').value, 10);
+    const b = parseInt(row.querySelector('.set-b').value, 10);
+    const tbRow = row.querySelector('[data-tb-row]');
+    if (!tbRow) return;
+    const show = (a === 7 && b === 6) || (a === 6 && b === 7);
+    tbRow.style.display = show ? 'flex' : 'none';
+    if (!show) { tbRow.querySelector('.tb-a').value = ''; tbRow.querySelector('.tb-b').value = ''; }
+  });
 
   overlay.querySelector('#btn-add-set').addEventListener('click', () => {
     const idx = setRowsEl.querySelectorAll('[data-set-row]').length;
@@ -1574,11 +1619,26 @@ function _showMatchEditModal(match, allPlayers, onDone) {
     saveBtn.disabled = true; saveBtn.textContent = '…';
 
     const setRows = [...setRowsEl.querySelectorAll('[data-set-row]')];
-    const sets = setRows.map(r => {
+    const sets = [];
+    for (const r of setRows) {
       const a = parseInt(r.querySelector('.set-a').value, 10);
       const b = parseInt(r.querySelector('.set-b').value, 10);
-      return isNaN(a) || isNaN(b) ? null : { a, b };
-    }).filter(Boolean);
+      if (isNaN(a) || isNaN(b)) continue;
+      if (!_isAdminValidTennisSet(a, b)) {
+        toast(`Invalid set score ${a}–${b}. Valid: 6-0 to 6-4, 7-5, 7-6`, 'error');
+        saveBtn.disabled = false; saveBtn.textContent = 'Save Result';
+        return;
+      }
+      const tbRow = r.querySelector('[data-tb-row]');
+      const tbVisible = tbRow && tbRow.style.display !== 'none';
+      let tb = null;
+      if (tbVisible) {
+        const tba = parseInt(tbRow.querySelector('.tb-a').value, 10);
+        const tbb = parseInt(tbRow.querySelector('.tb-b').value, 10);
+        if (!isNaN(tba) && !isNaN(tbb)) tb = { a: tba, b: tbb };
+      }
+      sets.push(tb ? { a, b, tb } : { a, b });
+    }
 
     // Auto-derive winner from sets if not manually chosen
     let winner = overlay.querySelector('#winner-select').value;
@@ -1615,19 +1675,17 @@ function _showMatchEditModal(match, allPlayers, onDone) {
 // ─── Bracket ──────────────────────────────────────────────────────────────────
 
 async function renderBracketAdmin(el) {
-  const [config, allSeasonsRaw, allPlayers] = await Promise.all([
-    dbGet(dbRef('config')),
+  const [allSeasonsRaw, allPlayers] = await Promise.all([
     dbGet(dbRef('seasons')),
     dbGet(pRef()),
   ]);
-  const players    = allPlayers || {};
-  const defaultSid = config?.defaultSeason;
-  const seasons    = allSeasonsRaw || {};
+  const players = allPlayers || {};
+  const seasons = allSeasonsRaw || {};
 
   const sortedSeasons = Object.entries(seasons)
     .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
 
-  if (!sortedSeasons.length) { el.innerHTML = '<div class="admin-empty">No seasons.</div>'; return; }
+  if (!sortedSeasons.length) { el.innerHTML = '<div class="admin-empty">No tournaments.</div>'; return; }
 
   let activeSid = sortedSeasons[0][0];
   let activeLid = null; // null = all leagues

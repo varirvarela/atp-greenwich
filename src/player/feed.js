@@ -19,34 +19,53 @@ export function renderFeedTab(el, player, creds) {
   </div>`;
 
   const unsubs = [];
-  let cancelled = false;
+  let cancelled  = false;
+  let activeLeague = 'all'; // local filter state
 
   (async () => {
-    const sid = await dbGet(dbRef('config/defaultSeason'));
-    if (cancelled || !sid) { if (!cancelled) _renderNoLeague(el); return; }
-
-    const leagues = await dbGet(sRef(sid, null, 'leagues'));
-    if (cancelled || !leagues) { if (!cancelled) _renderNoLeague(el); return; }
-
-    const myLeagues = [];
-    for (const [lid, league] of Object.entries(leagues)) {
-      const member = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
-      if (cancelled) return;
-      if (member !== null) myLeagues.push({ sid, lid, leagueName: league.name || 'League' });
-    }
-    const prefLid   = localStorage.getItem('atp_active_lid');
-    const leagueCtx = myLeagues.find(l => l.lid === prefLid) || myLeagues[0] || null;
-
-    if (cancelled || !leagueCtx) { if (!cancelled) _renderNoLeague(el); return; }
-
-    const { sid: resolvedSid, lid, leagueName } = leagueCtx;
-    const allPlayers = await dbGet(pRef());
+    const [allSeasons, allPlayers] = await Promise.all([
+      dbGet(dbRef('seasons')),
+      dbGet(pRef()),
+    ]);
     if (cancelled) return;
+    if (!allSeasons || !allPlayers) { _renderNoLeague(el); return; }
 
-    unsubs.push(dbListen(sRef(resolvedSid, lid, 'matches'), (matchesObj) => {
-      _renderFeed(el, matchesObj || {}, creds.uid, allPlayers || {}, leagueName,
-                  resolvedSid, lid);
+    const seasonOrder = Object.keys(allSeasons).sort((a, b) =>
+      (allSeasons[b].createdAt || 0) - (allSeasons[a].createdAt || 0)
+    );
+    if (!seasonOrder.length) { _renderNoLeague(el); return; }
+
+    const sid        = seasonOrder[0];
+    const leaguesMap = allSeasons[sid]?.leagues || {};
+    const leagueList = Object.entries(leaguesMap).map(([lid, l]) => ({
+      lid, name: l.name || lid,
     }));
+    if (!leagueList.length) { _renderNoLeague(el); return; }
+
+    const matchesByLeague = {};
+
+    function renderAll() {
+      if (cancelled) return;
+      const allConfirmed = [];
+      for (const [lid, matchesObj] of Object.entries(matchesByLeague)) {
+        if (activeLeague !== 'all' && activeLeague !== lid) continue;
+        for (const [mid, m] of Object.entries(matchesObj)) {
+          if (m.status === 'confirmed' && m.result) {
+            allConfirmed.push({ mid, lid, ...m });
+          }
+        }
+      }
+      allConfirmed.sort((a, b) => (b.confirmedAt || 0) - (a.confirmedAt || 0));
+      _renderFeed(el, allConfirmed, creds.uid, allPlayers || {}, leagueList, sid,
+        activeLeague, (newLeague) => { activeLeague = newLeague; renderAll(); });
+    }
+
+    for (const { lid } of leagueList) {
+      unsubs.push(dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
+        matchesByLeague[lid] = matchesObj || {};
+        renderAll();
+      }));
+    }
   })().catch(() => _renderError(el));
 
   return () => { cancelled = true; unsubs.forEach(u => u()); };
@@ -54,41 +73,74 @@ export function renderFeedTab(el, player, creds) {
 
 // ─── Feed renderer ────────────────────────────────────────────────────────────
 
-function _renderFeed(el, matchesObj, myUid, allPlayers, leagueName, sid, lid) {
-  const confirmed = Object.entries(matchesObj)
-    .map(([mid, m]) => ({ mid, ...m }))
-    .filter(m => m.status === 'confirmed' && m.result)
-    .sort((a, b) => (b.confirmedAt || 0) - (a.confirmedAt || 0))
-    .slice(0, 30);
+function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLeague, onFilterChange) {
+  confirmed = confirmed.slice(0, 50);
+  const showLeagueFilter = leagueList.length > 1;
 
   if (confirmed.length === 0) {
     el.innerHTML = `
-      <div style="text-align:center;padding:40px 16px 24px;">
-        <img src="${BASE}images/atp-empty-matches.png"
-          style="width:160px;height:auto;margin-bottom:16px;opacity:.85;">
-        <div class="empty-state-title">No results yet</div>
-        <p class="t-small t-muted" style="max-width:240px;margin:0 auto;">
-          Confirmed match results in ${escHtml(leagueName)} will appear here.
-        </p>
+      <div>
+        ${showLeagueFilter ? `
+          <div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 4px;">
+            <button class="btn btn-sm ${activeLeague === 'all' ? 'btn-primary' : 'btn-surface'}"
+              data-feed-league="all" style="white-space:nowrap;flex-shrink:0;">All Leagues</button>
+            ${leagueList.map(l => `
+              <button class="btn btn-sm ${activeLeague === l.lid ? 'btn-primary' : 'btn-surface'}"
+                data-feed-league="${escHtml(l.lid)}"
+                style="white-space:nowrap;flex-shrink:0;">${escHtml(l.name)}</button>
+            `).join('')}
+          </div>
+        ` : ''}
+        <div style="text-align:center;padding:40px 16px 24px;">
+          <img src="${BASE}images/atp-empty-matches.png"
+            style="width:160px;height:auto;margin-bottom:16px;opacity:.85;">
+          <div class="empty-state-title">No results yet</div>
+          <p class="t-small t-muted" style="max-width:240px;margin:0 auto;">
+            Confirmed match results will appear here.
+          </p>
+        </div>
       </div>
     `;
+    // Wire filter even on empty state
+    if (showLeagueFilter) {
+      el.querySelectorAll('[data-feed-league]').forEach(btn => {
+        btn.addEventListener('click', () => onFilterChange(btn.dataset.feedLeague));
+      });
+    }
     return;
   }
 
   el.innerHTML = `
     <div style="padding-bottom:24px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;
-        padding:16px 0 12px;">
-        <div class="badge badge-teal" style="font-size:11px;">${escHtml(leagueName)}</div>
-        <span class="t-label t-muted">${confirmed.length} result${confirmed.length > 1 ? 's' : ''}</span>
+      ${showLeagueFilter ? `
+        <div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 4px;margin-bottom:4px;">
+          <button class="btn btn-sm ${activeLeague === 'all' ? 'btn-primary' : 'btn-surface'}"
+            data-feed-league="all" style="white-space:nowrap;flex-shrink:0;">All Leagues</button>
+          ${leagueList.map(l => `
+            <button class="btn btn-sm ${activeLeague === l.lid ? 'btn-primary' : 'btn-surface'}"
+              data-feed-league="${escHtml(l.lid)}"
+              style="white-space:nowrap;flex-shrink:0;">${escHtml(l.name)}</button>
+          `).join('')}
+        </div>
+      ` : ''}
+      <div style="display:flex;justify-content:flex-end;padding:4px 0 8px;">
+        <span class="t-label t-muted">${confirmed.length} result${confirmed.length !== 1 ? 's' : ''}</span>
       </div>
-      ${confirmed.map(m => _feedItem(m, myUid, allPlayers)).join('')}
+      ${confirmed.map(m => _feedItem(m, myUid, allPlayers, showLeagueFilter ? leagueList : null)).join('')}
     </div>
   `;
 
-  // Wire reaction buttons and player-click handlers
-  confirmed.forEach(m => _wireReactions(el, m.mid, myUid, sid, lid));
+  // League filter
+  if (showLeagueFilter) {
+    el.querySelectorAll('[data-feed-league]').forEach(btn => {
+      btn.addEventListener('click', () => onFilterChange(btn.dataset.feedLeague));
+    });
+  }
 
+  // Reactions
+  confirmed.forEach(m => _wireReactions(el, m.mid, myUid, sid, m.lid));
+
+  // Player clicks
   el.querySelectorAll('[data-player-click]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -96,7 +148,7 @@ function _renderFeed(el, matchesObj, myUid, allPlayers, leagueName, sid, lid) {
     });
   });
 
-  // Wire match-photo click for full-screen view
+  // Photo zoom
   el.querySelectorAll('[data-photo-click]').forEach(img => {
     img.addEventListener('click', () => _showPhotoModal(img.dataset.photoClick));
   });
@@ -104,7 +156,8 @@ function _renderFeed(el, matchesObj, myUid, allPlayers, leagueName, sid, lid) {
 
 // ─── Feed item ────────────────────────────────────────────────────────────────
 
-function _feedItem(match, myUid, allPlayers) {
+function _feedItem(match, myUid, allPlayers, leagueList) {
+  const leagueName = leagueList ? leagueList.find(l => l.lid === match.lid)?.name : null;
   const pA    = allPlayers[match.playerA] || { name: 'Player A', alias: match.playerA };
   const pB    = allPlayers[match.playerB] || { name: 'Player B', alias: match.playerB };
   const avA   = pA.avatarId ? avatarToSvg(pA.avatarId, 32) : _defaultAv(32);
@@ -185,6 +238,7 @@ function _feedItem(match, myUid, allPlayers) {
             </span>
           ` : ''}
         </div>
+        ${leagueName ? `<span class="badge badge-muted" style="font-size:9px;">${escHtml(leagueName)}</span>` : ''}
         <span class="t-label t-muted" style="font-size:10px;">${escHtml(when)}</span>
       </div>
 

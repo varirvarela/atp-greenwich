@@ -17,12 +17,17 @@ export function renderBracketTab(el, player, creds) {
   let cancelled = false;
 
   (async () => {
-    const sid = await dbGet(dbRef('config/defaultSeason'));
+    const allSeasons = await dbGet(dbRef('seasons'));
     if (cancelled) return;
-    if (!sid) { _noSeason(el); return; }
+    if (!allSeasons) { _noSeason(el); return; }
 
-    const leagues = await dbGet(sRef(sid, null, 'leagues'));
-    if (cancelled) return;
+    const seasonOrder = Object.keys(allSeasons).sort((a, b) =>
+      (allSeasons[b].createdAt || 0) - (allSeasons[a].createdAt || 0)
+    );
+    if (!seasonOrder.length) { _noSeason(el); return; }
+
+    const sid     = seasonOrder[0];
+    const leagues = allSeasons[sid]?.leagues;
     if (!leagues) { _noSeason(el); return; }
 
     // Find which league the current player is in
@@ -77,7 +82,6 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
   const qualifyPts = gs.qualifyPoints ?? 6;
   const deadline   = gs.deadline;
 
-  // Build rows: uid + group points (if group stage is running) or W-L fallback
   const rows = memberUids.map(uid => {
     const gp = (gsStatus === 'active' || gsStatus === 'closed')
       ? calculateGroupPoints(allMatches, uid, pointsCfg)
@@ -90,6 +94,66 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
   }
 
   const qualifiedCount = rows.filter(r => r.gp !== null && r.gp >= qualifyPts).length;
+
+  // Threshold guard: nobody qualified yet → show regular standings view
+  if ((gsStatus === 'active' || gsStatus === 'closed') && qualifiedCount === 0) {
+    const table = buildLeagueTable(allMatches, memberUids);
+    table.sort((a, b) => b.standing.matchesWon - a.standing.matchesWon
+      || b.standing.setDiff - a.standing.setDiff);
+    let rank = 1;
+    table.forEach((r, i) => {
+      if (i > 0 && r.standing.matchesWon !== table[i-1].standing.matchesWon) rank = i + 1;
+      r.rank = rank;
+    });
+    el.innerHTML = `
+      <div style="padding-bottom:80px;">
+        <div style="display:flex;align-items:center;gap:8px;padding:16px 0 12px;">
+          <div class="badge badge-teal">${escHtml(league.name || 'League')}</div>
+        </div>
+        <div class="card" style="text-align:center;margin-bottom:16px;border-left:3px solid var(--ace4);background:var(--ace4-bg);">
+          <p class="t-small" style="color:var(--ace4);">
+            No players have reached the qualifying threshold yet
+            (${qualifyPts} pts needed). Bracket will appear here once
+            the first player qualifies.
+          </p>
+        </div>
+        <div class="t-label t-muted" style="margin-bottom:8px;">Current Standings</div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          ${table.map((row, i) => {
+            const p    = allPlayers[row.uid] || {};
+            const isMe = row.uid === myUid;
+            const s    = row.standing;
+            const gp   = rows.find(r => r.uid === row.uid)?.gp ?? 0;
+            const isLast = i === table.length - 1;
+            return `
+              <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;
+                ${isLast ? '' : 'border-bottom:1px solid var(--border);'}
+                ${isMe ? 'background:rgba(184,64,8,.06);' : ''}">
+                <div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);
+                  width:20px;text-align:center;flex-shrink:0;">${row.rank}</div>
+                ${avatarToSvg(p.avatarId || null, 28)}
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:13px;font-weight:${isMe ? '700' : '400'};
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    ${isMe ? 'You' : escHtml(p.alias || p.name || row.uid)}
+                  </div>
+                  <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);">
+                    ${s.setsWon}–${s.setsLost} sets
+                  </div>
+                </div>
+                <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;flex-shrink:0;">
+                  ${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L
+                </span>
+                <span style="font-family:var(--font-mono);font-size:13px;font-weight:800;
+                  color:var(--text3);flex-shrink:0;min-width:36px;text-align:right;">${gp}pts</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    return;
+  }
   const deadlineStr = deadline
     ? new Date(deadline).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : null;

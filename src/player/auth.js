@@ -948,9 +948,8 @@ function showCompleteRegistration(container, code, uid, onAuthenticated) {
 // ─── Screen F — Self Assessment ───────────────────────────────────────────────
 
 const LEVEL_OPTIONS = [
-  { key: 'beginner',     label: 'Beginner',     sub: 'Know the rules, still building consistency' },
-  { key: 'intermediate', label: 'Intermediate', sub: 'Play regularly, solid all-round game' },
-  { key: 'advanced',     label: 'Advanced',     sub: 'Compete regularly, strong technique' },
+  { key: 'beginner', label: 'Beginner', sub: 'Know the rules, still building consistency' },
+  { key: 'advanced', label: 'Advanced', sub: 'Compete regularly, strong technique' },
 ];
 
 async function showSelfAssessment(container, uid, onAuthenticated) {

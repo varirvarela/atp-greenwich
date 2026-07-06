@@ -11,6 +11,24 @@ import { showPlayerModal } from '@player/player-modal.js';
 
 const BASE = import.meta.env.BASE_URL;
 
+let _matchFilter = 'all'; // 'all' | 'active' | 'completed'
+let _matchSearch = '';
+
+// ─── Tennis score helpers ─────────────────────────────────────────────────────
+
+function _isValidTennisSet(me, op) {
+  if (isNaN(me) || isNaN(op) || me < 0 || op < 0) return false;
+  const w = Math.max(me, op), l = Math.min(me, op);
+  if (w === 6 && l <= 4) return true;
+  if (w === 7 && l === 5) return true;
+  if (w === 7 && l === 6) return true;
+  return false;
+}
+
+function _needsTiebreak(me, op) {
+  return (me === 7 && op === 6) || (me === 6 && op === 7);
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export function renderMatchesTab(el, player, creds) {
@@ -92,12 +110,30 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
   const matches = Object.entries(matchesObj).map(([mid, m]) => ({ mid, ...m }));
   const mine    = matches.filter(m => m.playerA === myUid || m.playerB === myUid);
 
-  const actionNeeded = mine.filter(m => _needsMyAction(m, myUid));
-  const inProgress   = mine.filter(m => !_needsMyAction(m, myUid) && m.status !== 'confirmed');
-  const completed    = mine
+  // Open challenges from others that the current player can accept
+  const openChallenges = matches.filter(m =>
+    m.status === 'open_challenge' && m.playerA !== myUid && m.playerB === null
+  );
+
+  // Apply status + search filters to own matches
+  const statusFilter = m =>
+    _matchFilter === 'active'    ? m.status !== 'confirmed' :
+    _matchFilter === 'completed' ? m.status === 'confirmed' : true;
+  const searchFilter = m => {
+    if (!_matchSearch) return true;
+    const opUid = m.playerA === myUid ? m.playerB : m.playerA;
+    const op = allPlayers[opUid] || {};
+    return ((op.alias || '') + ' ' + (op.name || '')).toLowerCase()
+      .includes(_matchSearch.toLowerCase());
+  };
+  const filteredMine = mine.filter(m => statusFilter(m) && searchFilter(m));
+
+  const actionNeeded = filteredMine.filter(m => _needsMyAction(m, myUid));
+  const inProgress   = filteredMine.filter(m => !_needsMyAction(m, myUid) && m.status !== 'confirmed');
+  const completed    = filteredMine
     .filter(m => m.status === 'confirmed')
     .sort((a, b) => (b.confirmedAt || 0) - (a.confirmedAt || 0))
-    .slice(0, 10);
+    .slice(0, 20);
 
   const hasActiveMatches = actionNeeded.length || inProgress.length;
 
@@ -107,6 +143,22 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
         padding:16px 0 8px;margin-bottom:4px;">
         <div class="badge badge-teal" style="font-size:11px;">${escHtml(leagueName)}</div>
       </div>
+
+      <div style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;padding-bottom:2px;">
+        <button class="btn btn-sm ${_matchFilter === 'all' ? 'btn-primary' : 'btn-surface'}"
+          data-filter="all" style="white-space:nowrap;flex-shrink:0;">All</button>
+        <button class="btn btn-sm ${_matchFilter === 'active' ? 'btn-primary' : 'btn-surface'}"
+          data-filter="active" style="white-space:nowrap;flex-shrink:0;">Active</button>
+        <button class="btn btn-sm ${_matchFilter === 'completed' ? 'btn-primary' : 'btn-surface'}"
+          data-filter="completed" style="white-space:nowrap;flex-shrink:0;">Completed</button>
+      </div>
+      <input class="input" id="opponent-search" type="search" placeholder="Search opponent…"
+        value="${escHtml(_matchSearch)}" style="font-size:14px;margin-bottom:12px;">
+
+      ${openChallenges.length ? `
+        <div class="t-label t-muted" style="margin:4px 0 8px;">Open challenges</div>
+        ${openChallenges.map(m => _openChallengeCard(m, allPlayers)).join('')}
+      ` : ''}
 
       ${actionNeeded.length ? `
         <div class="t-label t-muted" style="margin:12px 0 8px;">Needs your action</div>
@@ -118,7 +170,7 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
         ${inProgress.map(m => _matchCard(m, myUid, allPlayers)).join('')}
       ` : ''}
 
-      ${!hasActiveMatches ? `
+      ${!hasActiveMatches && !openChallenges.length && _matchFilter === 'all' && !_matchSearch ? `
         <div style="text-align:center;padding:32px 0 0;">
           <img src="${BASE}images/atp-empty-matches.png"
             style="width:160px;height:auto;margin-bottom:16px;opacity:.85;">
@@ -127,7 +179,9 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
             Propose a match against a league opponent to get started.
           </p>
         </div>
-      ` : ''}
+      ` : (!hasActiveMatches && !openChallenges.length ? `
+        <p class="t-small t-muted" style="text-align:center;padding:24px 0;">No matches found.</p>
+      ` : '')}
 
       ${completed.length ? `
         <div class="t-label t-muted" style="margin:20px 0 8px;">Recent results</div>
@@ -144,20 +198,40 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
     </div>
   `;
 
-  el.querySelectorAll('[data-action]').forEach(btn => {
+  // Filter buttons
+  el.querySelectorAll('[data-filter]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const { action, mid } = btn.dataset;
-      const match = mine.find(m => m.mid === mid);
-      if (!match) return;
-      if (action === 'enter-result')   _showEnterResultModal(match, myUid, allPlayers, sid, lid);
-      if (action === 'confirm-result') _showConfirmResultModal(match, myUid, allPlayers, sid, lid);
-      if (action === 'upload-photo')   _showUploadPhotoModal(match, myUid, allPlayers, sid, lid);
-      if (action === 'adjust-result')  _showAdjustResultModal(match, myUid, allPlayers, sid, lid);
-      if (action === 'forfeit')        _showForfeitModal(match, myUid, allPlayers, sid, lid);
+      _matchFilter = btn.dataset.filter;
+      _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName);
     });
   });
 
-  // Click player name → profile modal
+  // Search input
+  el.querySelector('#opponent-search')?.addEventListener('input', e => {
+    _matchSearch = e.target.value;
+    _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName);
+  });
+
+  // Action buttons (mine + open challenges)
+  el.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { action, mid } = btn.dataset;
+      const match = matches.find(m => m.mid === mid);
+      if (!match) return;
+      if (action === 'enter-result')      _showEnterResultModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'confirm-result')    _showConfirmResultModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'upload-photo')      _showUploadPhotoModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'adjust-result')     _showAdjustResultModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'forfeit')           _showForfeitModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'accept-challenge')  _showAcceptChallengeModal(match, myUid, allPlayers, matchesObj, sid, lid);
+      if (action === 'cancel-challenge')  _showCancelProposalModal(match, myUid, sid, lid);
+      if (action === 'cancel-proposal')   _showCancelProposalModal(match, myUid, sid, lid);
+      if (action === 'edit-proposal')     _showEditProposalModal(match, myUid, sid, lid);
+      if (action === 'decline-proposal')  _showCancelProposalModal(match, myUid, sid, lid);
+    });
+  });
+
+  // Player name click → profile modal
   el.querySelectorAll('[data-view-player]').forEach(span => {
     span.addEventListener('click', e => {
       e.stopPropagation();
@@ -165,7 +239,7 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
     });
   });
 
-  // Click confirmed match card body → match detail modal
+  // Confirmed card body → match detail
   el.querySelectorAll('[data-view-match]').forEach(card => {
     card.addEventListener('click', e => {
       if (e.target.closest('button')) return;
@@ -190,20 +264,21 @@ function _needsMyAction(match, myUid) {
 }
 
 function _matchCard(match, myUid, allPlayers) {
-  const opUid   = match.playerA === myUid ? match.playerB : match.playerA;
-  const op      = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
-  const meData  = allPlayers[myUid];
-  const isMeA   = match.playerA === myUid;
+  const opUid  = match.playerA === myUid ? match.playerB : match.playerA;
+  const op     = opUid ? (allPlayers[opUid] || { name: 'Unknown', alias: opUid })
+                       : { name: 'Open', alias: 'Any challenger' };
+  const meData = allPlayers[myUid];
+  const isMeA  = match.playerA === myUid;
 
   const meAv = meData?.avatarId ? avatarToSvg(meData.avatarId, 36) : _defaultAv(36);
-  const opAv = op.avatarId      ? avatarToSvg(op.avatarId, 36)     : _defaultAv(36);
+  const opAv = opUid && op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36);
 
-  const score        = _formatScore(match.result, isMeA);
+  const score             = _formatScore(match.result, isMeA);
   const { badge, action } = _cardMeta(match, myUid);
+  const isConfirmed       = match.status === 'confirmed';
 
-  // ELO delta on confirmed matches
   let eloBadge = '';
-  if (match.status === 'confirmed' && match.eloDeltas?.[myUid] !== undefined) {
+  if (isConfirmed && match.eloDeltas?.[myUid] !== undefined) {
     const d = match.eloDeltas[myUid];
     eloBadge = `<span class="t-label" style="font-family:var(--font-mono);font-size:10px;
       color:${d >= 0 ? 'var(--ace2)' : 'var(--ace3)'};">
@@ -214,28 +289,49 @@ function _matchCard(match, myUid, allPlayers) {
   const formatBadge = match.format === 'pro10'
     ? `<span class="badge badge-muted" style="font-size:10px;letter-spacing:.5px;">Pro 10</span>`
     : '';
-
-  const groupBadge = match.groupMatch
+  const groupBadge  = match.groupMatch
     ? `<span class="badge" style="font-size:10px;background:rgba(0,100,220,.10);color:#0054c4;">Group</span>`
     : '';
-
-  const dateBadge = (match.status === 'scheduled' && match.scheduledAt)
+  const dateBadge   = (match.status === 'scheduled' && match.scheduledAt)
     ? `<span class="t-label t-muted" style="font-size:10px;">
          📅 ${new Date(match.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
        </span>`
     : '';
-
   const deadlineBadge = (match.groupMatch && match.deadline && match.status !== 'confirmed')
     ? `<span class="t-label" style="font-size:10px;color:var(--ace3);">
          Play by ${new Date(match.deadline).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}
        </span>`
     : '';
 
-  // Forfeit is only available on unfinished group matches that haven't already been forfeited
   const canForfeit = match.groupMatch && !match.forfeited && match.status !== 'confirmed';
 
-  const opponentUid = match.playerA === myUid ? match.playerB : match.playerA;
-  const isConfirmed = match.status === 'confirmed';
+  // Management buttons for non-group matches
+  const isMyOpenChallenge = match.status === 'open_challenge' && match.playerA === myUid;
+  const isMyProposal      = !match.groupMatch && match.proposedBy === myUid && match.status === 'scheduled';
+  const isTheirProposal   = !match.groupMatch && match.playerB === myUid && match.proposedBy !== myUid && match.status === 'scheduled';
+
+  const mgmtBtns = isMyOpenChallenge
+    ? `<button class="btn btn-ghost btn-sm" data-action="cancel-challenge" data-mid="${escHtml(match.mid)}"
+        style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Cancel Challenge</button>`
+    : isMyProposal
+    ? `<button class="btn btn-ghost btn-sm" data-action="edit-proposal" data-mid="${escHtml(match.mid)}"
+        style="width:auto;">Edit Time</button>
+       <button class="btn btn-ghost btn-sm" data-action="cancel-proposal" data-mid="${escHtml(match.mid)}"
+        style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Cancel</button>`
+    : isTheirProposal
+    ? `<button class="btn btn-ghost btn-sm" data-action="decline-proposal" data-mid="${escHtml(match.mid)}"
+        style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Decline</button>`
+    : '';
+
+  const hasAnyAction = action || canForfeit || mgmtBtns;
+
+  const opDisplay = opUid
+    ? `<span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;text-align:right;cursor:pointer;"
+        data-view-player="${escHtml(opUid)}">
+        ${escHtml(op.alias || op.name)}
+      </span>`
+    : `<span class="t-small t-muted" style="font-style:italic;">Any challenger</span>`;
 
   return `
     <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;
@@ -253,11 +349,7 @@ function _matchCard(match, myUid, allPlayers) {
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;
           justify-content:flex-end;">
-          <span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
-            text-overflow:ellipsis;text-align:right;cursor:pointer;"
-            data-view-player="${escHtml(opponentUid)}">
-            ${escHtml(op.alias || op.name)}
-          </span>
+          ${opDisplay}
           ${opAv}
         </div>
       </div>
@@ -269,15 +361,14 @@ function _matchCard(match, myUid, allPlayers) {
         ${dateBadge}
         ${deadlineBadge}
       </div>
-      <div style="display:flex;gap:8px;margin-top:${action || canForfeit ? '8px' : '0'};">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:${hasAnyAction ? '8px' : '0'};">
         ${action ? `<button class="${action === 'adjust-result' ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}"
           data-action="${action}" data-mid="${escHtml(match.mid)}"
           style="${action === 'adjust-result' ? 'width:auto;' : 'flex:1;'}">${_actionLabel(action)}</button>` : ''}
         ${canForfeit ? `<button class="btn btn-ghost btn-sm" data-action="forfeit"
           data-mid="${escHtml(match.mid)}"
-          style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">
-          Forfeit
-        </button>` : ''}
+          style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Forfeit</button>` : ''}
+        ${mgmtBtns}
       </div>
     </div>
   `;
@@ -307,9 +398,37 @@ function _cardMeta(match, myUid) {
         action: 'adjust-result',
       };
     }
+    case 'open_challenge':
+      return {
+        badge:  `<span class="badge" style="background:rgba(184,64,8,.1);color:var(--ace);">Open Challenge</span>`,
+        action: null,
+      };
     default:
       return { badge: `<span class="badge badge-muted">${escHtml(match.status || '')}</span>`, action: null };
   }
+}
+
+function _openChallengeCard(match, allPlayers) {
+  const op   = allPlayers[match.playerA] || { name: 'Unknown', alias: match.playerA };
+  const when = match.scheduledAt
+    ? new Date(match.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+    : null;
+  return `
+    <div class="card" style="margin-bottom:10px;padding:14px 16px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        ${op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36)}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:14px;">${escHtml(op.alias || op.name)}</div>
+          ${when ? `<div class="t-small t-muted" style="font-size:11px;">📅 ${when}</div>` : ''}
+        </div>
+        <span class="badge" style="background:rgba(184,64,8,.1);color:var(--ace);flex-shrink:0;">Open</span>
+      </div>
+      <button class="btn btn-primary btn-sm"
+        data-action="accept-challenge" data-mid="${escHtml(match.mid)}">
+        Accept Challenge
+      </button>
+    </div>
+  `;
 }
 
 function _actionLabel(action) {
@@ -342,6 +461,8 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
     .map(uid => allPlayers[uid] ? { ...allPlayers[uid], uid } : null)
     .filter(Boolean);
 
+  const minDate = new Date(Date.now() + 60000).toISOString().slice(0, 16);
+
   const overlay = _createOverlay();
   overlay.innerHTML = `
     <div class="modal-sheet">
@@ -350,124 +471,165 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
         <div style="font-size:16px;font-weight:700;">Propose a Match</div>
         <button class="btn-icon" id="btn-close">${_closeIcon()}</button>
       </div>
-      ${opponents.length === 0 ? `
-        <p class="t-small t-muted" style="text-align:center;padding:24px 0;">
-          No other players in your league yet.
-        </p>
-      ` : `
-        <p class="t-small t-muted" style="margin-bottom:16px;">Select your opponent:</p>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
-          ${opponents.map(op => {
-            const matchCount = Object.values(existingMatches || {}).filter(m => {
-              const involves = (m.playerA === myUid && m.playerB === op.uid)
-                            || (m.playerA === op.uid && m.playerB === myUid);
-              return involves && ['scheduled','result_pending','photo_pending','confirmed']
-                .includes(m.status);
-            }).length;
-            const atCap = matchCount >= 2;
-            return `
-              <div class="tap-card" data-uid="${escHtml(op.uid)}"
-                style="${atCap ? 'opacity:.4;pointer-events:none;' : ''}">
-                <div style="display:flex;align-items:center;gap:10px;">
-                  ${op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36)}
-                  <div style="flex:1;min-width:0;">
-                    <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;
-                      text-overflow:ellipsis;">${escHtml(op.name || op.alias)}</div>
-                    <div class="t-small t-muted">@${escHtml(op.alias || op.username || '')}</div>
+
+      <div style="display:flex;gap:4px;margin-bottom:16px;background:var(--surface2);
+        border-radius:var(--radius);padding:4px;">
+        <button id="mode-btn-direct"
+          style="flex:1;padding:8px;border:none;border-radius:calc(var(--radius) - 2px);
+            font-size:13px;font-weight:700;cursor:pointer;
+            background:var(--surface);color:var(--text);">
+          Vs Opponent
+        </button>
+        <button id="mode-btn-open"
+          style="flex:1;padding:8px;border:none;border-radius:calc(var(--radius) - 2px);
+            font-size:13px;font-weight:400;cursor:pointer;
+            background:transparent;color:var(--text3);">
+          Open Challenge
+        </button>
+      </div>
+
+      <div id="section-direct">
+        ${opponents.length === 0 ? `
+          <p class="t-small t-muted" style="text-align:center;padding:24px 0;">
+            No other players in your league yet.
+          </p>
+        ` : `
+          <p class="t-small t-muted" style="margin-bottom:12px;">Select your opponent:</p>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+            ${opponents.map(op => {
+              const matchCount = Object.values(existingMatches || {}).filter(m => {
+                const involves = (m.playerA === myUid && m.playerB === op.uid)
+                              || (m.playerA === op.uid && m.playerB === myUid);
+                return involves && ['scheduled','result_pending','photo_pending','confirmed']
+                  .includes(m.status);
+              }).length;
+              const atCap = matchCount >= 2;
+              return `
+                <div class="tap-card" data-uid="${escHtml(op.uid)}"
+                  style="${atCap ? 'opacity:.4;pointer-events:none;' : ''}">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    ${op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36)}
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;
+                        text-overflow:ellipsis;">${escHtml(op.name || op.alias)}</div>
+                      <div class="t-small t-muted">@${escHtml(op.alias || op.username || '')}</div>
+                    </div>
+                    ${atCap
+                      ? `<span class="badge badge-muted" style="flex-shrink:0;">2/2</span>`
+                      : matchCount === 1
+                        ? `<span class="badge badge-muted" style="flex-shrink:0;">1/2</span>`
+                        : ''}
                   </div>
-                  ${atCap
-                    ? `<span class="badge badge-muted" style="flex-shrink:0;">2/2</span>`
-                    : matchCount === 1
-                      ? `<span class="badge badge-muted" style="flex-shrink:0;">1/2</span>`
-                      : ''}
                 </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-        <div style="margin-bottom:16px;">
-          <div class="t-label t-muted" style="margin-bottom:8px;">Match format</div>
-          <div style="display:flex;gap:8px;">
-            <div class="tap-card selected" data-format="bo3"
-              style="flex:1;text-align:center;padding:12px 8px;">
-              <div style="font-weight:700;font-size:13px;">Best of 3</div>
-              <div class="t-small t-muted">3 sets max</div>
-            </div>
-            <div class="tap-card" data-format="pro10"
-              style="flex:1;text-align:center;padding:12px 8px;">
-              <div style="font-weight:700;font-size:13px;">Pro 10</div>
-              <div class="t-small t-muted">Single score 0–10</div>
-            </div>
+              `;
+            }).join('')}
           </div>
+          <div style="margin-bottom:20px;">
+            <div class="t-label t-muted" style="margin-bottom:8px;">
+              Suggested date &amp; time <span style="font-weight:400;opacity:.6;">(optional)</span>
+            </div>
+            <input class="input" id="propose-date-direct" type="datetime-local"
+              style="font-size:14px;" min="${minDate}">
+          </div>
+          <button class="btn btn-primary" id="btn-confirm-direct" disabled>
+            Propose Match
+          </button>
+        `}
+      </div>
+
+      <div id="section-open" style="display:none;">
+        <div class="card" style="margin-bottom:16px;background:rgba(184,64,8,.06);
+          border-color:rgba(184,64,8,.2);">
+          <p class="t-small" style="color:var(--ace);line-height:1.5;">
+            Any available league player can accept this challenge.
+          </p>
         </div>
         <div style="margin-bottom:20px;">
           <div class="t-label t-muted" style="margin-bottom:8px;">
             Suggested date &amp; time <span style="font-weight:400;opacity:.6;">(optional)</span>
           </div>
-          <input class="input" id="propose-date" type="datetime-local"
-            style="font-size:14px;"
-            min="${new Date(Date.now() + 60000).toISOString().slice(0,16)}">
+          <input class="input" id="propose-date-open" type="datetime-local"
+            style="font-size:14px;" min="${minDate}">
         </div>
-        <button class="btn btn-primary" id="btn-confirm-propose" disabled>
-          Propose Match
+        <button class="btn btn-primary" id="btn-confirm-open">
+          Post Open Challenge
         </button>
-      `}
+      </div>
     </div>
   `;
 
   document.body.appendChild(overlay);
-
   overlay.querySelector('#btn-close')?.addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  let selectedUid    = null;
-  let selectedFormat = 'bo3';
+  // Mode switcher
+  const modeDirect = overlay.querySelector('#mode-btn-direct');
+  const modeOpen   = overlay.querySelector('#mode-btn-open');
+  const secDirect  = overlay.querySelector('#section-direct');
+  const secOpen    = overlay.querySelector('#section-open');
 
-  overlay.querySelectorAll('.tap-card[data-format]').forEach(card => {
-    card.addEventListener('click', () => {
-      selectedFormat = card.dataset.format;
-      overlay.querySelectorAll('.tap-card[data-format]').forEach(c => c.classList.remove('selected'));
-      card.classList.add('selected');
-    });
-  });
+  function setMode(m) {
+    const isDirect = m === 'direct';
+    modeDirect.style.background = isDirect ? 'var(--surface)' : 'transparent';
+    modeDirect.style.color      = isDirect ? 'var(--text)' : 'var(--text3)';
+    modeDirect.style.fontWeight = isDirect ? '700' : '400';
+    modeOpen.style.background   = !isDirect ? 'var(--surface)' : 'transparent';
+    modeOpen.style.color        = !isDirect ? 'var(--text)' : 'var(--text3)';
+    modeOpen.style.fontWeight   = !isDirect ? '700' : '400';
+    secDirect.style.display     = isDirect ? '' : 'none';
+    secOpen.style.display       = !isDirect ? '' : 'none';
+  }
+  modeDirect.addEventListener('click', () => setMode('direct'));
+  modeOpen.addEventListener('click',   () => setMode('open'));
 
+  // Opponent selection
+  let selectedUid = null;
   overlay.querySelectorAll('.tap-card[data-uid]').forEach(card => {
     card.addEventListener('click', () => {
       selectedUid = card.dataset.uid;
       overlay.querySelectorAll('.tap-card[data-uid]').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
-      overlay.querySelector('#btn-confirm-propose').disabled = false;
+      const btn = overlay.querySelector('#btn-confirm-direct');
+      if (btn) btn.disabled = false;
     });
   });
 
-  overlay.querySelector('#btn-confirm-propose')?.addEventListener('click', async () => {
+  // Direct confirm
+  overlay.querySelector('#btn-confirm-direct')?.addEventListener('click', async () => {
     if (!selectedUid) return;
-    const btn = overlay.querySelector('#btn-confirm-propose');
-    btn.disabled = true;
-    btn.textContent = 'Proposing…';
+    const btn = overlay.querySelector('#btn-confirm-direct');
+    btn.disabled = true; btn.textContent = 'Proposing…';
     try {
-      const dateInput = overlay.querySelector('#propose-date');
-      const scheduledAt = dateInput?.value
-        ? new Date(dateInput.value).getTime()
-        : null;
+      const val = overlay.querySelector('#propose-date-direct')?.value;
+      const scheduledAt = val ? new Date(val).getTime() : null;
       await dbPush(sRef(sid, lid, 'matches'), {
-        playerA:    myUid,
-        playerB:    selectedUid,
-        proposedBy: myUid,
-        proposedAt: Date.now(),
-        format:     selectedFormat,
-        scheduledAt,
-        status:     'scheduled',
-        result:     null,
-        photoUrl:   null,
-        eloDeltas:  null,
-        confirmedAt: null,
+        playerA: myUid, playerB: selectedUid, proposedBy: myUid,
+        proposedAt: Date.now(), scheduledAt, status: 'scheduled',
+        result: null, photoUrl: null, eloDeltas: null, confirmedAt: null,
       });
       overlay.remove();
     } catch (err) {
       console.error('Propose error:', err);
-      btn.disabled = false;
-      btn.textContent = 'Propose Match';
+      btn.disabled = false; btn.textContent = 'Propose Match';
+    }
+  });
+
+  // Open challenge confirm
+  overlay.querySelector('#btn-confirm-open')?.addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-confirm-open');
+    btn.disabled = true; btn.textContent = 'Posting…';
+    try {
+      const val = overlay.querySelector('#propose-date-open')?.value;
+      const scheduledAt = val ? new Date(val).getTime() : null;
+      await dbPush(sRef(sid, lid, 'matches'), {
+        playerA: myUid, playerB: null, proposedBy: myUid,
+        proposedAt: Date.now(), scheduledAt, status: 'open_challenge',
+        result: null, photoUrl: null, eloDeltas: null, confirmedAt: null,
+      });
+      overlay.remove();
+    } catch (err) {
+      console.error('Open challenge error:', err);
+      btn.disabled = false; btn.textContent = 'Post Open Challenge';
     }
   });
 }
@@ -483,13 +645,17 @@ function _showAdjustResultModal(match, myUid, allPlayers, sid, lid) {
 }
 
 function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
-  const isPro10 = match.format === 'pro10';
-  const opUid   = match.playerA === myUid ? match.playerB : match.playerA;
-  const op      = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
-  const opName  = op.alias || op.name;
-  const isMeA   = match.playerA === myUid;
+  let isPro10 = match.format === 'pro10';
+  const opUid  = match.playerA === myUid ? match.playerB : match.playerA;
+  const op     = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
+  const opName = op.alias || op.name;
+  const isMeA  = match.playerA === myUid;
+  const prev   = isAdjust ? match.result : null;
 
-  const prev = isAdjust ? match.result : null;
+  // When adjusting and format was already set, restore pro10 choice from prev score shape
+  if (isAdjust && !match.format) {
+    isPro10 = !!(prev?.score);
+  }
 
   const overlay = _createOverlay();
   overlay.innerHTML = `
@@ -508,7 +674,25 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         </div>
       ` : ''}
 
-      ${isPro10 ? `
+      ${!match.format ? `
+        <div style="margin-bottom:16px;">
+          <div class="t-label t-muted" style="margin-bottom:8px;">Match format</div>
+          <div style="display:flex;gap:8px;">
+            <div class="tap-card ${!isPro10 ? 'selected' : ''}" data-format="bo3"
+              style="flex:1;text-align:center;padding:10px 8px;">
+              <div style="font-weight:700;font-size:13px;">Best of 3</div>
+              <div class="t-small t-muted">Sets</div>
+            </div>
+            <div class="tap-card ${isPro10 ? 'selected' : ''}" data-format="pro10"
+              style="flex:1;text-align:center;padding:10px 8px;">
+              <div style="font-weight:700;font-size:13px;">Pro 10</div>
+              <div class="t-small t-muted">0–10 games</div>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      <div id="section-pro10" style="display:${isPro10 ? '' : 'none'};">
         <div style="margin-bottom:20px;">
           <div class="t-label t-muted" style="margin-bottom:12px;">Score (0 – 10)</div>
           <div style="display:flex;align-items:flex-end;gap:12px;justify-content:center;">
@@ -529,7 +713,9 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
             </div>
           </div>
         </div>
-      ` : `
+      </div>
+
+      <div id="section-bo3" style="display:${!isPro10 ? '' : 'none'};">
         <div style="margin-bottom:20px;">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;padding-bottom:2px;
             border-bottom:1px solid var(--border);">
@@ -549,7 +735,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
             + Add 3rd set
           </button>
         </div>
-      `}
+      </div>
 
       <div id="winner-display" data-op-name="${escHtml(opName)}"
         style="display:none;text-align:center;margin-bottom:16px;padding:8px 12px;
@@ -603,35 +789,47 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
   let thirdSetAdded = !!(prev?.sets?.length >= 3);
   let selectedFile  = null;
 
+  // Format picker (only when format not pre-set)
+  if (!match.format) {
+    overlay.querySelectorAll('[data-format]').forEach(card => {
+      card.addEventListener('click', () => {
+        const fmt = card.dataset.format;
+        isPro10 = fmt === 'pro10';
+        overlay.querySelectorAll('[data-format]').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        overlay.querySelector('#section-pro10').style.display = isPro10 ? '' : 'none';
+        overlay.querySelector('#section-bo3').style.display   = !isPro10 ? '' : 'none';
+        _checkResultReady(overlay, isPro10, isAdjust);
+      });
+    });
+  }
+
   overlay.addEventListener('third-set-removed', () => {
     thirdSetAdded = false;
     _checkResultReady(overlay, isPro10, isAdjust);
   });
 
-  // --- Score inputs ---
-  if (isPro10) {
-    overlay.querySelector('#score-me').addEventListener('input', () =>
-      _checkResultReady(overlay, true, isAdjust));
-    overlay.querySelector('#score-op').addEventListener('input', () =>
-      _checkResultReady(overlay, true, isAdjust));
-  } else {
-    overlay.querySelector('#sets-container').addEventListener('input', () =>
-      _checkResultReady(overlay, false, isAdjust));
+  // Wire all score inputs — use current isPro10 from closure at call time
+  overlay.querySelector('#score-me')?.addEventListener('input', () =>
+    _checkResultReady(overlay, isPro10, isAdjust));
+  overlay.querySelector('#score-op')?.addEventListener('input', () =>
+    _checkResultReady(overlay, isPro10, isAdjust));
+  overlay.querySelector('#sets-container')?.addEventListener('input', () =>
+    _checkResultReady(overlay, isPro10, isAdjust));
 
-    overlay.querySelector('#btn-add-set')?.addEventListener('click', () => {
-      if (thirdSetAdded) return;
-      thirdSetAdded = true;
-      overlay.querySelector('#sets-container').insertAdjacentHTML('beforeend', _setRow(3, true));
-      overlay.querySelector('#btn-add-set').style.display = 'none';
-      _wireSetRowEvents(overlay, 3);
-      _checkResultReady(overlay, false, isAdjust);
-    });
+  overlay.querySelector('#btn-add-set')?.addEventListener('click', () => {
+    if (thirdSetAdded) return;
+    thirdSetAdded = true;
+    overlay.querySelector('#sets-container').insertAdjacentHTML('beforeend', _setRow(3, true));
+    overlay.querySelector('#btn-add-set').style.display = 'none';
+    _wireSetRowEvents(overlay, 3);
+    _checkResultReady(overlay, isPro10, isAdjust);
+  });
 
-    [1, 2].forEach(n => _wireSetRowEvents(overlay, n));
-    if (thirdSetAdded) _wireSetRowEvents(overlay, 3);
-  }
+  [1, 2].forEach(n => _wireSetRowEvents(overlay, n));
+  if (thirdSetAdded) _wireSetRowEvents(overlay, 3);
 
-  // --- Photo ---
+  // Photo
   overlay.querySelector('#photo-input').addEventListener('change', e => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -650,10 +848,9 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     _checkResultReady(overlay, isPro10, isAdjust);
   });
 
-  // Show initial winner derivation (for adjustments with pre-filled scores)
   _checkResultReady(overlay, isPro10, isAdjust);
 
-  // --- Submit ---
+  // Submit
   overlay.querySelector('#btn-submit-result').addEventListener('click', async () => {
     const derivedWinner = _deriveWinner(overlay, isPro10);
     if (!derivedWinner) return;
@@ -672,32 +869,28 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
       const me  = parseInt(overlay.querySelector('#score-me').value, 10);
       const opp = parseInt(overlay.querySelector('#score-op').value, 10);
       resultData = {
-        winner:    winnerUid,
-        loser:     loserUid,
-        score:     isMeA ? { a: me, b: opp } : { a: opp, b: me },
-        enteredBy: myUid,
-        enteredAt: Date.now(),
+        winner: winnerUid, loser: loserUid,
+        score: isMeA ? { a: me, b: opp } : { a: opp, b: me },
+        enteredBy: myUid, enteredAt: Date.now(),
       };
     } else {
       const setCount = thirdSetAdded ? 3 : 2;
-      const sets     = _collectSets(overlay, setCount);
+      const sets = _collectSets(overlay, setCount);
       if (!sets) {
         btn.disabled = false;
         overlay.querySelector('#submit-status').style.display = 'none';
         return;
       }
       resultData = {
-        winner:    winnerUid,
-        loser:     loserUid,
-        sets:      sets.map(s => {
+        winner: winnerUid, loser: loserUid,
+        sets: sets.map(s => {
           const base = isMeA ? { a: s.me, b: s.op } : { a: s.op, b: s.me };
           if (s.tbMe !== null && s.tbOp !== null) {
             base.tb = isMeA ? { a: s.tbMe, b: s.tbOp } : { a: s.tbOp, b: s.tbMe };
           }
           return base;
         }),
-        enteredBy: myUid,
-        enteredAt: Date.now(),
+        enteredBy: myUid, enteredAt: Date.now(),
       };
     }
 
@@ -707,7 +900,8 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         ? await uploadMatchPhoto(match.mid, photoFile)
         : (match.photoUrl || null);
       const prevEloDeltas = isAdjust ? (match.eloDeltas || null) : null;
-      await _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers, prevEloDeltas);
+      const resultFormat  = isPro10 ? 'pro10' : 'bo3';
+      await _finalizeResult(match, resultData, photoUrl, resultFormat, sid, lid, allPlayers, prevEloDeltas);
       overlay.remove();
     } catch (err) {
       console.error('Submit result error:', err);
@@ -721,18 +915,23 @@ function _wireSetRowEvents(overlay, num) {
   const container = overlay.querySelector('#sets-container') || overlay.querySelector(`[data-set-row="${num}"]`)?.parentElement;
   if (!container) return;
 
-  // Tiebreak toggle
-  const toggleBtn = container.querySelector(`[data-toggle-tb="${num}"]`);
-  if (toggleBtn) {
-    toggleBtn.addEventListener('click', () => {
-      const tbRow = container.querySelector(`[data-tb-row="${num}"]`);
-      const visible = tbRow.style.display !== 'none';
-      tbRow.style.display = visible ? 'none' : 'flex';
-      toggleBtn.textContent = visible ? '+ tiebreak' : '− remove tiebreak';
-      if (visible) {
+  // Auto-show/hide tiebreak based on score inputs
+  const row = container.querySelector(`[data-set-row="${num}"]`);
+  if (row) {
+    const updateTb = () => {
+      const me    = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
+      const op    = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
+      const tbRow = row.querySelector(`[data-tb-row="${num}"]`);
+      if (!tbRow) return;
+      const needs = _needsTiebreak(me, op);
+      if (needs && tbRow.style.display === 'none') {
+        tbRow.style.display = 'flex';
+      } else if (!needs && tbRow.style.display !== 'none') {
+        tbRow.style.display = 'none';
         tbRow.querySelectorAll('input').forEach(i => { i.value = ''; });
       }
-    });
+    };
+    row.querySelectorAll('[data-score]').forEach(input => input.addEventListener('input', updateTb));
   }
 
   // Remove set button (3rd set only)
@@ -761,8 +960,8 @@ function _setRowWithPrefill(num, removable, prev, isMeA) {
 }
 
 function _setRow(num, removable = false, prefill = null) {
-  const me = prefill?.me ?? '';
-  const op = prefill?.op ?? '';
+  const me   = prefill?.me ?? '';
+  const op   = prefill?.op ?? '';
   const tbMe = prefill?.tbMe ?? '';
   const tbOp = prefill?.tbOp ?? '';
   const showTb = prefill?.tbMe !== undefined && prefill?.tbMe !== null;
@@ -771,11 +970,11 @@ function _setRow(num, removable = false, prefill = null) {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">
         <span class="t-label t-muted" style="width:48px;flex-shrink:0;">Set ${num}</span>
         <input type="number" class="input" data-score="me"
-          min="0" max="99" placeholder="You" value="${escHtml(String(me))}"
+          min="0" max="7" inputmode="numeric" placeholder="You" value="${escHtml(String(me))}"
           style="flex:1;text-align:center;height:44px;padding:8px 4px;">
         <span style="color:var(--text3);font-size:16px;">–</span>
         <input type="number" class="input" data-score="op"
-          min="0" max="99" placeholder="Opp" value="${escHtml(String(op))}"
+          min="0" max="7" inputmode="numeric" placeholder="Opp" value="${escHtml(String(op))}"
           style="flex:1;text-align:center;height:44px;padding:8px 4px;">
         ${removable
           ? `<button type="button" data-remove-set="${num}" aria-label="Remove set 3"
@@ -792,40 +991,39 @@ function _setRow(num, removable = false, prefill = null) {
         align-items:center;gap:10px;padding:4px 0 8px;margin-left:58px;">
         <span class="t-label t-muted" style="width:24px;flex-shrink:0;font-size:10px;">TB</span>
         <input type="number" class="input" data-tb="me"
-          min="0" placeholder="You" value="${escHtml(String(tbMe))}"
+          min="0" inputmode="numeric" placeholder="You" value="${escHtml(String(tbMe))}"
           style="flex:1;text-align:center;height:38px;padding:6px 4px;font-size:15px;">
         <span style="color:var(--text3);font-size:14px;">–</span>
         <input type="number" class="input" data-tb="op"
-          min="0" placeholder="Opp" value="${escHtml(String(tbOp))}"
+          min="0" inputmode="numeric" placeholder="Opp" value="${escHtml(String(tbOp))}"
           style="flex:1;text-align:center;height:38px;padding:6px 4px;font-size:15px;">
         <div style="width:24px;flex-shrink:0;"></div>
       </div>
-      <button type="button" data-toggle-tb="${num}"
-        style="background:none;border:none;padding:0 0 8px 58px;cursor:pointer;
-               font-size:11px;color:var(--text3);display:block;">
-        ${showTb ? '− remove tiebreak' : '+ tiebreak'}
-      </button>
     </div>
   `;
 }
 
 function _deriveWinner(overlay, isPro10) {
   if (isPro10) {
-    const me = parseInt(overlay.querySelector('#score-me')?.value ?? '', 10);
-    const op = parseInt(overlay.querySelector('#score-op')?.value ?? '', 10);
+    const c  = overlay.querySelector('#section-pro10') || overlay;
+    const me = parseInt(c.querySelector('#score-me')?.value ?? '', 10);
+    const op = parseInt(c.querySelector('#score-op')?.value ?? '', 10);
     if (isNaN(me) || isNaN(op) || me === op) return null;
+    if (me < 0 || me > 10 || op < 0 || op > 10) return null;
     return me > op ? 'me' : 'op';
   }
-  const rows = overlay.querySelectorAll('[data-set-row]');
+  const c    = overlay.querySelector('#section-bo3') || overlay;
+  const rows = c.querySelectorAll('[data-set-row]');
   if (!rows.length) return null;
   let meWins = 0, opWins = 0;
   for (const row of rows) {
     const me = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
     const op = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
     if (isNaN(me) || isNaN(op)) return null;
+    if (!_isValidTennisSet(me, op)) return null;
     if (me > op) meWins++;
     else if (op > me) opWins++;
-    else return null; // tied set — can't determine winner
+    else return null;
   }
   if (meWins === opWins) return null;
   return meWins > opWins ? 'me' : 'op';
@@ -835,41 +1033,56 @@ function _checkResultReady(overlay, isPro10, isAdjust) {
   const hasPhoto = isAdjust || !!(overlay.querySelector('#photo-input')?.files?.length);
   const winner   = _deriveWinner(overlay, isPro10);
 
+  // Tiebreak inputs must be filled when visible (bo3 mode)
+  let tbReady = true;
+  if (!isPro10) {
+    const c = overlay.querySelector('#section-bo3') || overlay;
+    c.querySelectorAll('[data-tb-row]').forEach(tbRow => {
+      if (tbRow.style.display !== 'none') {
+        const v1 = parseInt(tbRow.querySelector('[data-tb="me"]')?.value ?? '', 10);
+        const v2 = parseInt(tbRow.querySelector('[data-tb="op"]')?.value ?? '', 10);
+        if (isNaN(v1) || isNaN(v2)) tbReady = false;
+      }
+    });
+  }
+
   const display = overlay.querySelector('#winner-display');
   if (display) {
     if (winner === 'me') {
-      display.textContent  = 'You win';
-      display.style.color  = 'var(--ace2)';
-      display.style.background = 'rgba(34,197,94,.1)';
-      display.style.display    = 'block';
+      display.textContent       = 'You win';
+      display.style.color       = 'var(--ace2)';
+      display.style.background  = 'rgba(34,197,94,.1)';
+      display.style.display     = 'block';
     } else if (winner === 'op') {
       const opName = display.dataset.opName || 'Opponent';
-      display.textContent  = `${opName} wins`;
-      display.style.color  = 'var(--text)';
-      display.style.background = 'var(--surface2)';
-      display.style.display    = 'block';
+      display.textContent       = `${opName} wins`;
+      display.style.color       = 'var(--text)';
+      display.style.background  = 'var(--surface2)';
+      display.style.display     = 'block';
     } else {
       display.style.display = 'none';
     }
   }
 
-  overlay.querySelector('#btn-submit-result').disabled = !(winner !== null && hasPhoto);
+  overlay.querySelector('#btn-submit-result').disabled = !(winner !== null && hasPhoto && tbReady);
 }
 
 function _collectSets(overlay, count) {
+  const c    = overlay.querySelector('#section-bo3') || overlay;
   const sets = [];
   for (let i = 1; i <= count; i++) {
-    const row = overlay.querySelector(`[data-set-row="${i}"]`);
+    const row = c.querySelector(`[data-set-row="${i}"]`);
     if (!row) break;
     const me = parseInt(row.querySelector('[data-score="me"]').value, 10);
     const op = parseInt(row.querySelector('[data-score="op"]').value, 10);
-    if (isNaN(me) || isNaN(op)) return null;
+    if (isNaN(me) || isNaN(op) || !_isValidTennisSet(me, op)) return null;
     const entry = { me, op, tbMe: null, tbOp: null };
     const tbRow = row.querySelector(`[data-tb-row="${i}"]`);
     if (tbRow && tbRow.style.display !== 'none') {
       const tbMe = parseInt(tbRow.querySelector('[data-tb="me"]')?.value ?? '', 10);
       const tbOp = parseInt(tbRow.querySelector('[data-tb="op"]')?.value ?? '', 10);
       if (!isNaN(tbMe) && !isNaN(tbOp)) { entry.tbMe = tbMe; entry.tbOp = tbOp; }
+      else return null; // tiebreak shown but incomplete
     }
     sets.push(entry);
   }
@@ -1098,10 +1311,7 @@ function _setUploadingState(overlay, loading) {
   });
 }
 
-// _finalizeResult: writes confirmed status + calculates ELO.
-// prevEloDeltas: pass match.eloDeltas when adjusting an existing confirmed result
-//   so we revert the old deltas before applying the new ones.
-async function _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers, prevEloDeltas) {
+async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, allPlayers, prevEloDeltas) {
   const uidA = match.playerA;
   const uidB = match.playerB;
 
@@ -1134,6 +1344,7 @@ async function _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
+    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:      format || match.format || null,
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
     [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:   {
@@ -1147,9 +1358,8 @@ async function _finalizeResult(match, resultData, photoUrl, sid, lid, allPlayers
   });
 }
 
-// Keep old name as alias for backward compat (used by _showUploadPhotoModal for legacy flow)
 async function _confirmMatchWithElo(match, photoUrl, sid, lid, allPlayers) {
-  return _finalizeResult(match, match.result, photoUrl, sid, lid, allPlayers, null);
+  return _finalizeResult(match, match.result, photoUrl, match.format || null, sid, lid, allPlayers, null);
 }
 
 // ─── Match detail modal ───────────────────────────────────────────────────────
@@ -1377,4 +1587,148 @@ function _defaultAv(sz) {
       <circle cx="12" cy="7" r="4"/>
     </svg>
   </div>`;
+}
+
+// ─── Accept / Cancel / Edit proposal modals ────────────────────────────────────
+
+function _showAcceptChallengeModal(match, myUid, allPlayers, existingMatches, sid, lid) {
+  const op = allPlayers[match.playerA] || { name: 'Unknown', alias: match.playerA };
+  const matchCount = Object.values(existingMatches || {}).filter(m => {
+    const inv = (m.playerA === myUid && m.playerB === match.playerA)
+             || (m.playerA === match.playerA && m.playerB === myUid);
+    return inv && ['scheduled','result_pending','photo_pending','confirmed'].includes(m.status);
+  }).length;
+  const atCap = matchCount >= 2;
+
+  const overlay = _createOverlay();
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
+        <div style="font-size:16px;font-weight:700;">Accept Challenge</div>
+        <button class="btn-icon" id="btn-close">${_closeIcon()}</button>
+      </div>
+      ${atCap ? `
+        <div class="card" style="border-left:3px solid var(--ace3);background:rgba(190,30,30,.05);">
+          <p class="t-small" style="color:var(--ace3);">
+            You already have 2 matches against ${escHtml(op.alias || op.name)}.
+            You cannot accept another.
+          </p>
+        </div>
+      ` : `
+        <p class="t-small t-muted" style="margin-bottom:20px;">
+          Accept the open challenge from <strong>${escHtml(op.alias || op.name)}</strong>?
+          You will be matched up for a ranked game.
+        </p>
+        <button class="btn btn-primary" id="btn-confirm-accept">Accept Challenge</button>
+      `}
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  if (atCap) return;
+
+  overlay.querySelector('#btn-confirm-accept').addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-confirm-accept');
+    btn.disabled = true; btn.textContent = 'Accepting…';
+    try {
+      await dbMultiUpdate({
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/playerB`]:    myUid,
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:     'scheduled',
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/acceptedBy`]: myUid,
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/acceptedAt`]: Date.now(),
+      });
+      overlay.remove();
+    } catch (err) {
+      console.error('Accept error:', err);
+      btn.disabled = false; btn.textContent = 'Accept Challenge';
+    }
+  });
+}
+
+function _showCancelProposalModal(match, myUid, sid, lid) {
+  const isOpen = match.status === 'open_challenge';
+  const overlay = _createOverlay();
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
+        <div style="font-size:16px;font-weight:700;">${isOpen ? 'Cancel Challenge' : 'Cancel Match'}</div>
+        <button class="btn-icon" id="btn-close">${_closeIcon()}</button>
+      </div>
+      <p class="t-small t-muted" style="margin-bottom:20px;">
+        ${isOpen
+          ? 'This will remove your open challenge. Other players will no longer be able to accept it.'
+          : 'This will cancel the proposed match.'}
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:8px;">
+        <button class="btn btn-primary" id="btn-confirm-cancel"
+          style="background:var(--ace3);border-color:var(--ace3);">Yes, cancel</button>
+        <button class="btn btn-ghost" id="btn-keep">Keep it</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-close').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#btn-keep').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#btn-confirm-cancel').addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-confirm-cancel');
+    btn.disabled = true; btn.textContent = 'Cancelling…';
+    try {
+      await dbMultiUpdate({ [`seasons/${sid}/leagues/${lid}/matches/${match.mid}`]: null });
+      overlay.remove();
+    } catch (err) {
+      console.error('Cancel error:', err);
+      btn.disabled = false; btn.textContent = 'Yes, cancel';
+    }
+  });
+}
+
+function _showEditProposalModal(match, myUid, sid, lid) {
+  const current = match.scheduledAt
+    ? new Date(match.scheduledAt).toISOString().slice(0, 16)
+    : '';
+  const overlay = _createOverlay();
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
+        <div style="font-size:16px;font-weight:700;">Edit Proposed Time</div>
+        <button class="btn-icon" id="btn-close">${_closeIcon()}</button>
+      </div>
+      <div style="margin-bottom:20px;">
+        <div class="t-label t-muted" style="margin-bottom:8px;">Suggested date &amp; time</div>
+        <input class="input" id="edit-date" type="datetime-local"
+          value="${current}"
+          min="${new Date(Date.now() + 60000).toISOString().slice(0, 16)}"
+          style="font-size:14px;">
+      </div>
+      <button class="btn btn-primary" id="btn-save-time">Save</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#btn-save-time').addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-save-time');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const val = overlay.querySelector('#edit-date').value;
+      const scheduledAt = val ? new Date(val).getTime() : null;
+      await dbMultiUpdate({
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/scheduledAt`]: scheduledAt,
+      });
+      overlay.remove();
+    } catch (err) {
+      console.error('Edit proposal error:', err);
+      btn.disabled = false; btn.textContent = 'Save';
+    }
+  });
 }
