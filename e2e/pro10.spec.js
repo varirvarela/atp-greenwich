@@ -24,24 +24,21 @@ test.describe('Flow 11 — Pro10 Match Format', () => {
     await page.locator('button[data-tab="matches"]').click();
   });
 
-  test('P11-01 propose modal shows Match format section with Best of 3 selected', async ({ page }) => {
+  test('P11-01 propose modal shows Vs Opponent and Open Challenge mode tabs', async ({ page }) => {
     await page.locator('#btn-propose').click();
     await expect(page.locator('.modal-sheet')).toBeVisible();
-    await expect(page.getByText('Match format')).toBeVisible();
-    const bo3Card = page.locator('div.tap-card').filter({ hasText: 'Best of 3' });
-    await expect(bo3Card).toBeVisible();
-    const pro10Card = page.locator('div.tap-card').filter({ hasText: 'Pro 10' });
-    await expect(pro10Card).toBeVisible();
-    await expect(bo3Card).toHaveClass(/selected/);
+    await expect(page.locator('#mode-btn-direct')).toBeVisible();
+    await expect(page.locator('#mode-btn-open')).toBeVisible();
+    await expect(page.getByText('Vs Opponent')).toBeVisible();
+    await expect(page.getByText('Open Challenge')).toBeVisible();
   });
 
-  test('P11-02 Pro 10 tap-card shows correct title and subtitle', async ({ page }) => {
+  test('P11-02 switching to Open Challenge mode shows post challenge button', async ({ page }) => {
     await page.locator('#btn-propose').click();
     await expect(page.locator('.modal-sheet')).toBeVisible();
-    const pro10Card = page.locator('div.tap-card').filter({ hasText: 'Pro 10' });
-    await expect(pro10Card).toBeVisible();
-    await expect(pro10Card).toContainText('Pro 10');
-    await expect(pro10Card).toContainText('Single score 0–10');
+    await page.locator('#mode-btn-open').click();
+    await expect(page.locator('#btn-confirm-open')).toBeVisible();
+    await expect(page.getByText('Post Open Challenge')).toBeVisible();
   });
 
   test('P11-03 enter result modal for pro10 match shows Score (0 – 10) and not Set scores', async ({ page }) => {

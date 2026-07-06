@@ -105,7 +105,7 @@ test.describe('Flow 7 — Matches Tab', () => {
     await page.locator('#btn-propose').click();
     await expect(page.locator('.modal-sheet')).toBeVisible();
     await expect(page.locator('div.tap-card[data-uid]')).not.toHaveCount(0);
-    await expect(page.locator('#btn-confirm-propose')).toBeDisabled();
+    await expect(page.locator('#btn-confirm-direct')).toBeDisabled();
   });
 
   test('P3-10 opponent at 2/2 cap is not selectable', async ({ page }) => {
@@ -119,7 +119,7 @@ test.describe('Flow 7 — Matches Tab', () => {
       );
       expect(pointerEvents).toBe('none');
       // Propose button stays disabled (no eligible opponent selected)
-      await expect(page.locator('#btn-confirm-propose')).toBeDisabled();
+      await expect(page.locator('#btn-confirm-direct')).toBeDisabled();
     }
   });
 
@@ -128,8 +128,8 @@ test.describe('Flow 7 — Matches Tab', () => {
     // Select any opponent not at cap (no "2/2" badge)
     const eligible = page.locator('div.tap-card[data-uid]').filter({ hasNot: page.locator('text=2/2') });
     await eligible.first().click();
-    await expect(page.locator('#btn-confirm-propose')).toBeEnabled();
-    await page.locator('#btn-confirm-propose').click();
+    await expect(page.locator('#btn-confirm-direct')).toBeEnabled();
+    await page.locator('#btn-confirm-direct').click();
 
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 8000 });
     // "In progress" section should now have the new scheduled card

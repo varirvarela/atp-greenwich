@@ -24,22 +24,22 @@ test.describe('Flow 8 — Standings Tab', () => {
     await page.locator('button[data-tab="standings"]').click();
   });
 
-  test('P4-01 both sections render', async ({ page }) => {
-    await expect(page.getByText('League Table')).toBeVisible();
-    await expect(page.getByText('ELO Rankings')).toBeVisible();
+  test('P4-01 standings renders league table with player rows', async ({ page }) => {
+    await expect(page.locator('#standings-mount')).toBeVisible({ timeout: 7000 });
+    await expect(page.getByText('A Division')).toBeVisible();
   });
 
   test('P4-02 league table shows A Division badge and inline stats', async ({ page }) => {
     await expect(page.getByText('A Division')).toBeVisible();
     // Inline W-L and sets/games stats (no column headers — stats are per-row)
-    await expect(page.locator('#league-table-mount').getByText(/\dW–\dL/).first()).toBeVisible();
-    await expect(page.locator('#league-table-mount').getByText('Sets').first()).toBeVisible();
-    await expect(page.locator('#league-table-mount').getByText('Games').first()).toBeVisible();
+    await expect(page.locator('#standings-mount').getByText(/\dW–\dL/).first()).toBeVisible();
+    await expect(page.locator('#standings-mount').getByText('Sets').first()).toBeVisible();
+    await expect(page.locator('#standings-mount').getByText('Games').first()).toBeVisible();
   });
 
   test('P4-02 league table has a row for all 4 seeded players', async ({ page }) => {
     // Current player renders as "You" — scope to the table to avoid the ELO section duplicate
-    const table = page.locator('#league-table-mount');
+    const table = page.locator('#standings-mount');
     await expect(table.getByText('You')).toBeVisible();
     await expect(table.getByText('marco')).toBeVisible();
     await expect(table.getByText('sofia')).toBeVisible();

@@ -114,7 +114,7 @@ test.describe('Flow 15 — Group Stage Standings', () => {
 
   test('F15-03 Group points shown as "X pts" in standings rows', async ({ page }) => {
     // Group pts are rendered as "${gp} pts" — devplayer and sofia both have 3 pts
-    const tableMount = page.locator('#league-table-mount');
+    const tableMount = page.locator('#standings-mount');
     await expect(tableMount).toBeVisible({ timeout: 8000 });
     await expect(tableMount.getByText('3 pts', { exact: true }).first()).toBeVisible({ timeout: 8000 });
   });
@@ -130,14 +130,14 @@ test.describe('Flow 15 — Group Stage Standings', () => {
   test('F15-05 Two players show 3 pts (devplayer + sofia qualify at qualifyPoints=3)', async ({ page }) => {
     // Standings renders pts as "${gp} pts" — devplayer and sofia both have 3 pts (= qualifyPoints)
     // Their pts number is shown in green (var(--ace2)) — count the "3 pts" occurrences
-    const tableMount = page.locator('#league-table-mount');
+    const tableMount = page.locator('#standings-mount');
     const ptsBadges = tableMount.getByText('3 pts', { exact: true });
     await expect(ptsBadges).toHaveCount(2, { timeout: 8000 });
   });
 
   test('F15-06 Current player row shows "You" label in standings', async ({ page }) => {
     // Wait for the table to render (group pts present) then check "You" label
-    await expect(page.locator('#league-table-mount').getByText('3 pts', { exact: true }).first()).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('#standings-mount').getByText('3 pts', { exact: true }).first()).toBeVisible({ timeout: 8000 });
     await expect(page.getByText('You', { exact: true }).first()).toBeVisible();
   });
 

@@ -126,7 +126,7 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
       <div style="display:flex;justify-content:flex-end;padding:4px 0 8px;">
         <span class="t-label t-muted">${confirmed.length} result${confirmed.length !== 1 ? 's' : ''}</span>
       </div>
-      ${confirmed.map(m => _feedItem(m, myUid, allPlayers, showLeagueFilter ? leagueList : null)).join('')}
+      ${confirmed.map(m => _feedItem(m, myUid, allPlayers, leagueList)).join('')}
     </div>
   `;
 

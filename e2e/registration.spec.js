@@ -127,7 +127,7 @@ test.describe('Flow 1 — Request Access Registration', () => {
     await expect(page.getByText(/beginner|intermediate|advanced/i).first()).toBeVisible({ timeout: 8000 });
   });
 
-  test('F1-14/15 self assessment shows exactly 3 level cards', async ({ page }) => {
+  test('F1-14/15 self assessment shows exactly 2 level cards', async ({ page }) => {
     // Register and advance to self assessment
     await page.locator('#ra-name').fill('E2E Tester');
     await page.locator('#ra-email').fill(REG_EMAIL);
@@ -140,10 +140,9 @@ test.describe('Flow 1 — Request Access Registration', () => {
     const uid = await adminRead(page, `email_index/${REG_EMAIL_KEY}`).catch(() => null);
     if (uid) await adminWrite(page, `players/${uid}/status`, 'onboarding');
 
-    // Exactly 3 tap cards
-    await expect(page.locator('.tap-card')).toHaveCount(3, { timeout: 8000 });
+    // Exactly 2 tap cards (Beginner + Advanced)
+    await expect(page.locator('.tap-card')).toHaveCount(2, { timeout: 8000 });
     await expect(page.getByText('Beginner')).toBeVisible();
-    await expect(page.getByText('Intermediate')).toBeVisible();
     await expect(page.getByText('Advanced')).toBeVisible();
 
     // Only last-tapped card is active
