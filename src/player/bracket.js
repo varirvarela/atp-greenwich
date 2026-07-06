@@ -145,7 +145,7 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
                   ${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L
                 </span>
                 <span style="font-family:var(--font-mono);font-size:13px;font-weight:800;
-                  color:var(--text3);flex-shrink:0;min-width:36px;text-align:right;">${gp}pts</span>
+                  color:var(--text3);flex-shrink:0;min-width:36px;text-align:right;">${gp} pts</span>
               </div>
             `;
           }).join('')}

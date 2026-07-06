@@ -31,10 +31,9 @@ test.describe('Flow 8 — Standings Tab', () => {
 
   test('P4-02 league table shows A Division badge and inline stats', async ({ page }) => {
     await expect(page.getByText('A Division')).toBeVisible();
-    // Inline W-L and sets/games stats (no column headers — stats are per-row)
+    // Inline W-L stats and ELO values (bracket-card style rows)
     await expect(page.locator('#standings-mount').getByText(/\dW–\dL/).first()).toBeVisible();
-    await expect(page.locator('#standings-mount').getByText('Sets').first()).toBeVisible();
-    await expect(page.locator('#standings-mount').getByText('Games').first()).toBeVisible();
+    await expect(page.locator('#standings-mount').getByText('1262')).toBeVisible(); // sofia ELO
   });
 
   test('P4-02 league table has a row for all 4 seeded players', async ({ page }) => {

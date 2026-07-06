@@ -230,7 +230,7 @@ function _renderLeagueTable(el, table, allPlayers, myUid, leagueName, gs, points
           ${showGsPts ? `
             <span style="font-family:var(--font-mono);font-size:14px;font-weight:800;
               color:${qualifies ? 'var(--ace2)' : 'var(--text)'};flex-shrink:0;
-              min-width:36px;text-align:right;">${gp ?? 0}pts</span>
+              min-width:36px;text-align:right;">${gp ?? 0} pts</span>
           ` : ''}
         </div>
       `;
