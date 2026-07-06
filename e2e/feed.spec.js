@@ -26,7 +26,7 @@ test.describe('Flow 9 — Feed Tab', () => {
   });
 
   test('P5-01 shows league badge and result count', async ({ page }) => {
-    await expect(page.getByText('A Division')).toBeVisible();
+    await expect(page.getByText('A Division').first()).toBeVisible();
     await expect(page.getByText(/\d+ results?/)).toBeVisible();
   });
 

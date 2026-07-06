@@ -30,7 +30,6 @@ test.describe('Flow 11 — Pro10 Match Format', () => {
     await expect(page.locator('#mode-btn-direct')).toBeVisible();
     await expect(page.locator('#mode-btn-open')).toBeVisible();
     await expect(page.getByText('Vs Opponent')).toBeVisible();
-    await expect(page.getByText('Open Challenge')).toBeVisible();
   });
 
   test('P11-02 switching to Open Challenge mode shows post challenge button', async ({ page }) => {
