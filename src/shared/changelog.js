@@ -10,6 +10,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.3.3',
+    date:    '2026-07-05',
+    changes: [
+      'Admin: "← Player App" link in sidebar to return from admin to player view',
+      'Admin — Matches: filter by season, league, status, and player name; click any match to edit result',
+      'Admin — Leagues: season filter dropdown; Release Fixtures now shows a modal with smart qualify-point defaults',
+      'Admin — Bracket: season and league selector; standings table adds group-points column; click any player to see profile',
+      'Admin — Settings: version number now reflects the actual app version',
+    ],
+  },
+  {
     version: '1.3.2',
     date:    '2026-07-05',
     changes: [

@@ -9,6 +9,7 @@ import { escHtml, simpleHash, generateUid, generateInviteCode, timeAgo } from '@
 import { buildLeagueTable, isQualified, getQualifiedPlayers, calculateGroupPoints, generateFixtures } from '@shared/scoring.js';
 import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
+import { showPlayerModal } from '@player/player-modal.js';
 
 const ADMIN_CREDS_KEY  = 'atp_admin_creds';
 const DEFAULT_PASSWORD = 'atpgreenwich2026';
@@ -149,6 +150,12 @@ function showAdminShell(app) {
           `).join('')}
         </nav>
         <div class="admin-signout">
+          <a href="${import.meta.env.BASE_URL}"
+            class="admin-signout-btn"
+            style="display:block;text-align:center;text-decoration:none;
+              margin-bottom:6px;color:var(--text2);background:var(--surface2);">
+            ← Player App
+          </a>
           <button class="admin-signout-btn" id="btn-admin-signout">Sign out</button>
         </div>
       </aside>
@@ -526,6 +533,9 @@ async function renderLeagues(el) {
     return (seasons[sB].createdAt || 0) - (seasons[sA].createdAt || 0);
   });
 
+  // Default to showing active season; fall back to first
+  const viewSid = defaultSid || (sortedSeasons[0] && sortedSeasons[0][0]) || '';
+
   el.innerHTML = `
     <div class="section-header">
       <div class="section-title">Leagues</div>
@@ -548,28 +558,48 @@ async function renderLeagues(el) {
 
     ${sortedSeasons.length === 0
       ? `<div class="admin-empty">No seasons yet. Create one above.</div>`
-      : sortedSeasons.map(([sid, season]) => `
-          <div style="margin-bottom:24px;">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-              <div class="section-group-label" style="margin:0;">
-                ${escHtml(season.name || sid)}
-              </div>
-              ${sid === defaultSid
-                ? `<span class="badge-admin badge-green">Active</span>`
-                : `<button class="btn-admin btn-ghost" style="font-size:11px;"
-                     data-action="set-default-season" data-sid="${sid}">
-                     Set as active
-                   </button>`}
-            </div>
-            ${_renderSeason(sid, season, allPlayers || {})}
+      : `
+        ${sortedSeasons.length > 1 ? `
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+            <label class="admin-input-label" style="margin:0;flex-shrink:0;">Season</label>
+            <select id="league-season-select" class="admin-input" style="flex:1;max-width:240px;">
+              ${sortedSeasons.map(([sid, s]) =>
+                `<option value="${sid}" ${sid===viewSid?'selected':''}>${escHtml(s.name||sid)}${sid===defaultSid?' (active)':''}</option>`
+              ).join('')}
+            </select>
           </div>
-        `).join('')}
+        ` : ''}
+        <div id="league-season-panel">
+          ${sortedSeasons.map(([sid, season]) => `
+            <div data-season-panel="${sid}" style="${sid===viewSid?'':'display:none;'}">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                <div class="section-group-label" style="margin:0;">${escHtml(season.name||sid)}</div>
+                ${sid===defaultSid
+                  ? `<span class="badge-admin badge-green">Active</span>`
+                  : `<button class="btn-admin btn-ghost" style="font-size:11px;"
+                       data-action="set-default-season" data-sid="${sid}">Set as active</button>`}
+              </div>
+              ${_renderSeason(sid, season, allPlayers||{})}
+            </div>
+          `).join('')}
+        </div>
+      `}
   `;
 
   el.querySelector('#btn-new-season').addEventListener('click', () => {
     const form = el.querySelector('#new-season-form');
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
   });
+
+  // Season filter
+  const leagueSeasonSel = el.querySelector('#league-season-select');
+  if (leagueSeasonSel) {
+    leagueSeasonSel.addEventListener('change', e => {
+      el.querySelectorAll('[data-season-panel]').forEach(p => {
+        p.style.display = p.dataset.seasonPanel === e.target.value ? '' : 'none';
+      });
+    });
+  }
 
   el.querySelector('#btn-create-season').addEventListener('click', async () => {
     const name = el.querySelector('#season-name-input').value.trim();
@@ -696,45 +726,12 @@ async function renderLeagues(el) {
     });
   });
 
-  // Release Fixtures
+  // Release Fixtures — open a modal with smart defaults
   el.querySelectorAll('[data-action="release-fixtures"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const { sid, lid } = btn.dataset;
-      const league    = seasons[sid]?.leagues?.[lid] || {};
-      const gs        = league.groupStageConfig || {};
-      const mpp       = gs.matchesPerPlayer || 4;
-      const deadline  = gs.deadline || null;
-      const memberUids = Object.keys(league.members || {});
-
-      if (memberUids.length < 2) { toast('Need at least 2 members', 'error'); return; }
-
-      const numFixtures = Math.floor(memberUids.length * mpp / 2);
-      if (!confirm(
-        `Release ${numFixtures} group fixtures for ${memberUids.length} players?\n` +
-        `(${mpp} matches per player target)\n\nThis cannot be undone.`
-      )) return;
-
-      const pairs = generateFixtures(memberUids, mpp);
-      if (!pairs.length) { toast('Could not generate fixtures — check player count vs matches per player', 'error'); return; }
-
-      const now = Date.now();
-      const updates = {};
-      for (const [playerA, playerB] of pairs) {
-        const mid = 'gm_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 7);
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/playerA`]    = playerA;
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/playerB`]    = playerB;
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/proposedBy`] = 'admin';
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/proposedAt`] = now;
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/status`]     = 'scheduled';
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/groupMatch`] = true;
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/deadline`]   = deadline;
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/result`]     = null;
-      }
-      updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/status`] = 'active';
-
-      await dbMultiUpdate(updates);
-      toast(`${pairs.length} fixtures released`, 'success');
-      renderLeagues(el);
+      const league = seasons[sid]?.leagues?.[lid] || {};
+      _showReleaseFixturesModal(sid, lid, league, allPlayers || {}, () => renderLeagues(el));
     });
   });
 
@@ -778,6 +775,129 @@ async function renderLeagues(el) {
       toast('Group stage closed. Qualifiers marked.', 'success');
       renderLeagues(el);
     });
+  });
+}
+
+function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
+  const gs          = league.groupStageConfig || {};
+  const pts         = league.pointsConfig     || {};
+  const memberUids  = Object.keys(league.members || {});
+  const mpp         = gs.matchesPerPlayer || 4;
+  const qualifyPts  = gs.qualifyPoints ?? 6;
+
+  // Smart default for qualifyPoints: 2/3 of max achievable pts (played+wonBonus per win)
+  const ptsPerWin   = (pts.played ?? 1) + (pts.wonBonus ?? 2);
+  const smartQP     = Math.round(mpp * ptsPerWin * (2 / 3));
+
+  const deadlineDefault = gs.deadline
+    ? new Date(gs.deadline - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+    : '';
+
+  const previewCount = Math.floor(memberUids.length * mpp / 2);
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
+    display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;`;
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;
+      width:100%;max-width:440px;box-shadow:0 8px 32px rgba(28,24,20,0.2);">
+      <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;margin-bottom:4px;">
+        Release Group Fixtures
+      </div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">
+        ${memberUids.length} players · <span id="fixture-preview">${previewCount}</span> fixtures will be created
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div class="admin-input-group">
+          <label class="admin-input-label">Matches per player</label>
+          <input id="rf-mpp" class="admin-input" type="number" min="1" max="20" value="${mpp}"/>
+        </div>
+        <div class="admin-input-group">
+          <label class="admin-input-label">
+            Qualify points (≥)
+            <span style="color:var(--text3);font-weight:400;"> — recommended ${smartQP}</span>
+          </label>
+          <input id="rf-qp" class="admin-input" type="number" min="0" value="${qualifyPts}"/>
+        </div>
+        <div class="admin-input-group" style="grid-column:1/-1;">
+          <label class="admin-input-label">Deadline to complete all matches</label>
+          <input id="rf-deadline" class="admin-input" type="datetime-local" value="${deadlineDefault}"/>
+        </div>
+      </div>
+
+      <div style="background:rgba(184,64,8,.06);border-radius:8px;padding:10px 12px;
+        font-size:12px;color:var(--ace);margin-bottom:16px;">
+        Point system: won ${(pts.played??1)+(pts.wonBonus??2)} pts &nbsp;·&nbsp;
+        lost ${pts.played??1} pts &nbsp;·&nbsp;
+        missed ${pts.missed??-1} pts &nbsp;·&nbsp;
+        forfeit ${pts.forfeitLoser??-1} / +${pts.forfeitWinner??2} pts
+      </div>
+
+      <div style="display:flex;gap:10px;">
+        <button id="btn-rf-confirm" class="btn-admin btn-teal" style="flex:1;">
+          Release Fixtures
+        </button>
+        <button id="btn-rf-cancel" class="btn-admin btn-secondary">Cancel</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">
+        This action cannot be undone.
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Live-update fixture count preview
+  const mppInput = overlay.querySelector('#rf-mpp');
+  mppInput.addEventListener('input', () => {
+    const n = parseInt(mppInput.value, 10) || 0;
+    overlay.querySelector('#fixture-preview').textContent = Math.floor(memberUids.length * n / 2);
+  });
+
+  overlay.querySelector('#btn-rf-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#btn-rf-confirm').addEventListener('click', async () => {
+    if (memberUids.length < 2) { toast('Need at least 2 members', 'error'); return; }
+
+    const newMpp = parseInt(mppInput.value, 10) || mpp;
+    const newQP  = parseInt(overlay.querySelector('#rf-qp').value, 10) ?? qualifyPts;
+    const dlRaw  = overlay.querySelector('#rf-deadline').value;
+    const dl     = dlRaw ? new Date(dlRaw).getTime() : null;
+
+    const btn = overlay.querySelector('#btn-rf-confirm');
+    btn.disabled = true; btn.textContent = '…';
+
+    const pairs = generateFixtures(memberUids, newMpp);
+    if (!pairs.length) {
+      toast('Could not generate fixtures — check player count vs matches per player', 'error');
+      btn.disabled = false; btn.textContent = 'Release Fixtures';
+      return;
+    }
+
+    const now = Date.now();
+    const updates = {};
+    for (const [playerA, playerB] of pairs) {
+      const mid = 'gm_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+      const base = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
+      updates[base + '/playerA']    = playerA;
+      updates[base + '/playerB']    = playerB;
+      updates[base + '/proposedBy'] = 'admin';
+      updates[base + '/proposedAt'] = now;
+      updates[base + '/status']     = 'scheduled';
+      updates[base + '/groupMatch'] = true;
+      updates[base + '/deadline']   = dl;
+      updates[base + '/result']     = null;
+    }
+    updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/status`]          = 'active';
+    updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/matchesPerPlayer`] = newMpp;
+    updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyPoints`]    = newQP;
+    if (dl) updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/deadline`] = dl;
+
+    await dbMultiUpdate(updates);
+    overlay.remove();
+    toast(`${pairs.length} fixtures released`, 'success');
+    onDone();
   });
 }
 
@@ -1121,223 +1241,381 @@ function _inviteCard(c, isUsed) {
 // ─── Matches ──────────────────────────────────────────────────────────────────
 
 async function renderMatches(el) {
-  const config  = await dbGet(dbRef('config'));
-  const sid     = config && config.defaultSeason;
-  if (!sid) { el.innerHTML = '<div class="admin-empty">No active season.</div>'; return; }
+  const [config, allSeasonsRaw, allPlayers] = await Promise.all([
+    dbGet(dbRef('config')),
+    dbGet(dbRef('seasons')),
+    dbGet(pRef()),
+  ]);
+  const players     = allPlayers || {};
+  const defaultSid  = config?.defaultSeason;
+  const seasons     = allSeasonsRaw || {};
 
-  const leagues = await dbGet(sRef(sid, null, 'leagues'));
-  if (!leagues) { el.innerHTML = '<div class="admin-empty">No leagues in this season.</div>'; return; }
+  const sortedSeasons = Object.entries(seasons).sort(([a], [b]) => {
+    if (a === defaultSid) return -1;
+    if (b === defaultSid) return 1;
+    return (seasons[b].createdAt || 0) - (seasons[a].createdAt || 0);
+  });
 
-  const allPlayers = await dbGet(pRef()) || {};
-  let allRows = [];
-
-  for (const [lid, league] of Object.entries(leagues)) {
-    const matchesObj = await dbGet(sRef(sid, lid, 'matches'));
-    if (!matchesObj) continue;
-    const rows = Object.entries(matchesObj).map(([mid, m]) => ({ mid, lid, sid, league, ...m }));
-    allRows = allRows.concat(rows);
+  if (!sortedSeasons.length) {
+    el.innerHTML = '<div class="admin-empty">No seasons found.</div>';
+    return;
   }
 
-  allRows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  // Filter state
+  let activeSid    = defaultSid || sortedSeasons[0][0];
+  let activeLid    = 'all';
+  let activeStatus = 'all';
+  let searchPlayer = '';
 
-  const disputed = allRows.filter(m => m.status === 'result_pending' && m.disputed);
-  const pending  = allRows.filter(m => ['scheduled','result_pending','photo_pending'].includes(m.status) && !m.disputed);
-  const done     = allRows.filter(m => m.status === 'confirmed').slice(0, 20);
+  let allRows  = [];
+  let leagueMap = {};
 
+  async function loadMatches() {
+    const leagues = await dbGet(sRef(activeSid, null, 'leagues'));
+    leagueMap = leagues || {};
+    allRows = [];
+    for (const [lid, league] of Object.entries(leagueMap)) {
+      const matchesObj = await dbGet(sRef(activeSid, lid, 'matches'));
+      if (!matchesObj) continue;
+      for (const [mid, m] of Object.entries(matchesObj)) {
+        allRows.push({ mid, lid, sid: activeSid, leagueName: league.name || lid, ...m });
+      }
+    }
+    allRows.sort((a, b) => (b.proposedAt || b.createdAt || 0) - (a.proposedAt || a.createdAt || 0));
+  }
+
+  function filteredRows() {
+    return allRows.filter(m => {
+      if (activeLid !== 'all' && m.lid !== activeLid) return false;
+      if (activeStatus === 'open' && !['scheduled','result_pending','photo_pending'].includes(m.status)) return false;
+      if (activeStatus === 'complete' && m.status !== 'confirmed') return false;
+      if (activeStatus === 'disputed' && !m.disputed) return false;
+      if (activeStatus === 'cancelled' && m.status !== 'cancelled') return false;
+      if (searchPlayer) {
+        const pA = players[m.playerA] || {};
+        const pB = players[m.playerB] || {};
+        const names = [pA.name, pA.alias, pB.name, pB.alias].filter(Boolean).join(' ').toLowerCase();
+        if (!names.includes(searchPlayer.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderFilters() {
+    const leagueOpts = Object.entries(leagueMap)
+      .map(([lid, l]) => `<option value="${lid}" ${activeLid===lid?'selected':''}>${escHtml(l.name||lid)}</option>`)
+      .join('');
+    return `
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+        <select id="filter-season" class="admin-input" style="flex:1;min-width:120px;">
+          ${sortedSeasons.map(([sid, s]) =>
+            `<option value="${sid}" ${sid===activeSid?'selected':''}>${escHtml(s.name||sid)}</option>`
+          ).join('')}
+        </select>
+        <select id="filter-league" class="admin-input" style="flex:1;min-width:100px;">
+          <option value="all" ${activeLid==='all'?'selected':''}>All leagues</option>
+          ${leagueOpts}
+        </select>
+        <select id="filter-status" class="admin-input" style="flex:1;min-width:100px;">
+          <option value="all"      ${activeStatus==='all'?'selected':''}>All statuses</option>
+          <option value="open"     ${activeStatus==='open'?'selected':''}>Open</option>
+          <option value="complete" ${activeStatus==='complete'?'selected':''}>Confirmed</option>
+          <option value="disputed" ${activeStatus==='disputed'?'selected':''}>Disputed</option>
+          <option value="cancelled"${activeStatus==='cancelled'?'selected':''}>Cancelled</option>
+        </select>
+        <input id="filter-player" class="admin-input" placeholder="Search player…"
+          value="${escHtml(searchPlayer)}" style="flex:2;min-width:120px;"/>
+      </div>
+    `;
+  }
+
+  function renderList() {
+    const rows     = filteredRows();
+    const disputed = rows.filter(m => m.disputed);
+    const open     = rows.filter(m => !m.disputed && ['scheduled','result_pending','photo_pending'].includes(m.status));
+    const done     = rows.filter(m => m.status === 'confirmed');
+    const other    = rows.filter(m => !['scheduled','result_pending','photo_pending','confirmed'].includes(m.status) && !m.disputed);
+
+    const statsEl = el.querySelector('#match-stats');
+    if (statsEl) statsEl.innerHTML = `
+      ${disputed.length ? `<span class="badge-admin badge-red">${disputed.length} disputed</span>` : ''}
+      <span class="badge-admin badge-orange">${open.length} open</span>
+      <span class="badge-admin badge-green">${done.length} confirmed</span>
+    `;
+
+    const listEl = el.querySelector('#match-list');
+    if (!listEl) return;
+
+    if (!rows.length) {
+      listEl.innerHTML = '<div class="admin-empty">No matches match your filters.</div>';
+      return;
+    }
+
+    listEl.innerHTML = `
+      ${disputed.length ? `<div class="section-group-label">Disputed (${disputed.length})</div>
+        ${disputed.map(m => _matchCard(m, players)).join('')}` : ''}
+      ${open.length ? `<div class="section-group-label">Open (${open.length})</div>
+        ${open.map(m => _matchCard(m, players)).join('')}` : ''}
+      ${done.length ? `<div class="section-group-label">Confirmed (${done.length})</div>
+        ${done.map(m => _matchCard(m, players)).join('')}` : ''}
+      ${other.length ? `<div class="section-group-label">Other (${other.length})</div>
+        ${other.map(m => _matchCard(m, players)).join('')}` : ''}
+    `;
+
+    // Click card → edit modal
+    listEl.querySelectorAll('.admin-card[data-mid]').forEach(card => {
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', e => {
+        if (e.target.closest('button')) return;
+        const row = rows.find(m => m.mid === card.dataset.mid);
+        if (row) _showMatchEditModal(row, players, () => loadMatches().then(renderList));
+      });
+    });
+
+    // Dismiss dispute
+    listEl.querySelectorAll('[data-action="dismiss-dispute"]').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        if (!confirm('Dismiss this dispute and uphold the existing result?')) return;
+        const { sid, lid, mid } = btn.dataset;
+        const base = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
+        await dbMultiUpdate({ [base+'/disputed']: null, [base+'/adminReviewed']: true, [base+'/reviewedAt']: Date.now() });
+        toast('Dispute dismissed — result upheld', 'success');
+        loadMatches().then(renderList);
+      });
+    });
+
+    // Cancel match
+    listEl.querySelectorAll('[data-action="cancel-match"]').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        if (!confirm('Cancel this match?')) return;
+        const { sid, lid, mid } = btn.dataset;
+        await dbUpdate(sRef(sid, lid, 'matches/' + mid), { status: 'cancelled', cancelledAt: Date.now() });
+        toast('Match cancelled', 'success');
+        loadMatches().then(renderList);
+      });
+    });
+  }
+
+  // Initial shell
   el.innerHTML = `
     <div class="section-header">
       <div class="section-title">Matches</div>
-      <div class="section-actions">
-        ${disputed.length ? `<span class="badge-admin badge-red">${disputed.length} disputed</span>` : ''}
-        <span class="badge-admin badge-orange">${pending.length} in progress</span>
-        <span class="badge-admin badge-muted">${done.length} recent confirmed</span>
-      </div>
+      <div class="section-actions" id="match-stats"></div>
     </div>
-
-    ${disputed.length ? `
-      <div class="section-group-label">Disputed — needs resolution</div>
-      ${disputed.map(m => _matchCard(m, allPlayers, true)).join('')}
-    ` : ''}
-
-    <div class="section-group-label">In Progress (${pending.length})</div>
-    ${pending.length ? pending.map(m => _matchCard(m, allPlayers, false)).join('') : `<div class="admin-empty">No in-progress matches.</div>`}
-
-    ${done.length ? `
-      <div class="section-group-label">Recent Confirmed (${done.length})</div>
-      ${done.map(m => _matchCard(m, allPlayers, false)).join('')}
-    ` : ''}
+    ${renderFilters()}
+    <div id="match-list"><div class="admin-loading"><div class="spinner"></div></div></div>
   `;
 
-  // Dismiss dispute (uphold original result)
-  el.querySelectorAll('[data-action="dismiss-dispute"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const { sid, lid, mid } = btn.dataset;
-      if (!confirm('Dismiss this dispute and uphold the existing result?')) return;
-      const base = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
-      await dbMultiUpdate({
-        [base + '/disputed']:     null,
-        [base + '/adminReviewed']: true,
-        [base + '/reviewedAt']:   Date.now(),
-      });
-      toast('Dispute dismissed — result upheld', 'success');
-      renderMatches(el);
-    });
+  // Wire filter controls
+  el.querySelector('#filter-season').addEventListener('change', async e => {
+    activeSid = e.target.value;
+    activeLid = 'all';
+    el.querySelector('#match-list').innerHTML = '<div class="admin-loading"><div class="spinner"></div></div>';
+    await loadMatches();
+    el.querySelector('#filter-league').innerHTML =
+      `<option value="all">All leagues</option>` +
+      Object.entries(leagueMap).map(([lid, l]) =>
+        `<option value="${lid}">${escHtml(l.name||lid)}</option>`
+      ).join('');
+    renderList();
   });
+  el.querySelector('#filter-league').addEventListener('change', e => { activeLid = e.target.value; renderList(); });
+  el.querySelector('#filter-status').addEventListener('change', e => { activeStatus = e.target.value; renderList(); });
+  el.querySelector('#filter-player').addEventListener('input',  e => { searchPlayer = e.target.value; renderList(); });
 
-  // Override result buttons
-  el.querySelectorAll('[data-action="override-match"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const { sid, lid, mid } = btn.dataset;
-      const matchRow = allRows.find(m => m.mid === mid);
-      if (matchRow) _showOverrideModal(matchRow, allPlayers, () => renderMatches(el));
-    });
-  });
-
-  // Cancel match
-  el.querySelectorAll('[data-action="cancel-match"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (!confirm('Cancel this match?')) return;
-      const { sid, lid, mid } = btn.dataset;
-      await dbUpdate(sRef(sid, lid, 'matches/' + mid), { status: 'cancelled', cancelledAt: Date.now() });
-      toast('Match cancelled', 'success');
-      renderMatches(el);
-    });
-  });
+  await loadMatches();
+  renderList();
 }
 
-function _matchCard(m, allPlayers, showOverride) {
+function _matchCard(m, allPlayers) {
   const pA = allPlayers[m.playerA] || {};
   const pB = allPlayers[m.playerB] || {};
   const statusClass = {
-    scheduled:      'badge-muted',
-    result_pending: 'badge-orange',
-    photo_pending:  'badge-orange',
-    confirmed:      'badge-green',
-    cancelled:      'badge-muted',
+    scheduled: 'badge-muted', result_pending: 'badge-orange',
+    photo_pending: 'badge-orange', confirmed: 'badge-green', cancelled: 'badge-muted',
   }[m.status] || 'badge-muted';
-
-  const score = m.result && m.result.sets
-    ? m.result.sets.map(s => `${s.a}-${s.b}`).join(' ')
-    : '';
-
+  const score = m.result?.sets ? m.result.sets.map(s => `${s.a}-${s.b}`).join(' ') : '';
   return `
-    <div class="admin-card">
+    <div class="admin-card" data-mid="${m.mid}">
       <div class="admin-card-body">
         <div class="admin-card-name">
-          ${escHtml(pA.alias || pA.name || m.playerA)}
-          vs
-          ${escHtml(pB.alias || pB.name || m.playerB)}
+          ${escHtml(pA.alias||pA.name||m.playerA)} vs ${escHtml(pB.alias||pB.name||m.playerB)}
         </div>
         <div class="admin-card-sub">
-          ${escHtml(m.league && m.league.name || '')}
+          ${escHtml(m.leagueName||'')}
           ${score ? ' &middot; ' + escHtml(score) : ''}
-          ${m.createdAt ? ' &middot; ' + timeAgo(m.createdAt) : ''}
+          ${m.proposedAt||m.createdAt ? ' &middot; ' + timeAgo(m.proposedAt||m.createdAt) : ''}
           ${m.disputed ? ' &middot; <span style="color:var(--ace3);">Disputed</span>' : ''}
+          ${m.groupMatch ? ' &middot; <span style="color:#0a7a5e;">Group</span>' : ''}
         </div>
       </div>
       <div class="admin-card-actions">
-        <span class="badge-admin ${statusClass}">${escHtml(m.status || '?')}</span>
+        <span class="badge-admin ${statusClass}">${escHtml(m.status||'?')}</span>
         ${m.disputed ? `
           <button class="btn-admin btn-teal" data-action="dismiss-dispute"
-            data-sid="${m.sid}" data-lid="${m.lid}" data-mid="${m.mid}">
-            Dismiss
-          </button>
+            data-sid="${m.sid}" data-lid="${m.lid}" data-mid="${m.mid}">Dismiss</button>
         ` : ''}
-        ${m.status !== 'confirmed' && m.status !== 'cancelled' ? `
-          <button class="btn-admin btn-secondary" data-action="override-match"
-            data-sid="${m.sid}" data-lid="${m.lid}" data-mid="${m.mid}">
-            Set Result
-          </button>
+        ${m.status !== 'cancelled' ? `
+          <button class="btn-admin btn-secondary"
+            onclick="event.stopPropagation();"
+            data-action="open-edit" data-mid="${m.mid}">Edit</button>
+        ` : ''}
+        ${!['confirmed','cancelled'].includes(m.status) ? `
           <button class="btn-admin btn-danger" data-action="cancel-match"
-            data-sid="${m.sid}" data-lid="${m.lid}" data-mid="${m.mid}">
-            Cancel
-          </button>
+            data-sid="${m.sid}" data-lid="${m.lid}" data-mid="${m.mid}">Cancel</button>
         ` : ''}
       </div>
     </div>
   `;
 }
 
-function _showOverrideModal(match, allPlayers, onDone) {
+function _showMatchEditModal(match, allPlayers, onDone) {
   const pA = allPlayers[match.playerA] || {};
   const pB = allPlayers[match.playerB] || {};
+
+  // Build initial sets from existing result, or one blank set
+  const existingSets = match.result?.sets?.length ? match.result.sets : [{ a: '', b: '' }];
+
+  function setsHtml(sets) {
+    return sets.map((s, i) => `
+      <div class="admin-form-row" data-set-row="${i}" style="gap:6px;align-items:center;">
+        <span style="font-size:11px;color:var(--text3);width:40px;flex-shrink:0;">Set ${i+1}</span>
+        <input class="admin-input set-a" type="number" min="0" max="99" value="${s.a ?? ''}"
+          placeholder="A" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
+        <span style="color:var(--text3);">—</span>
+        <input class="admin-input set-b" type="number" min="0" max="99" value="${s.b ?? ''}"
+          placeholder="B" style="width:56px;text-align:center;padding:6px 4px;flex-shrink:0;"/>
+        <button type="button" class="btn-admin btn-ghost" data-remove-set="${i}"
+          style="color:var(--ace3);padding:4px 8px;font-size:18px;line-height:1;">×</button>
+      </div>
+    `).join('');
+  }
+
+  const isConfirmed = match.status === 'confirmed';
+
   const overlay = document.createElement('div');
-  overlay.style.cssText = `
-    position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
-    display:flex;align-items:center;justify-content:center;padding:24px;
-  `;
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
+    display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;`;
   overlay.innerHTML = `
     <div style="background:var(--surface);border-radius:16px;padding:24px;
-      width:100%;max-width:420px;box-shadow:0 8px 32px rgba(28,24,20,0.2);">
-      <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;
-        margin-bottom:16px;">Set Match Result</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">
-        ${escHtml(pA.alias || pA.name || match.playerA)}
-        vs
-        ${escHtml(pB.alias || pB.name || match.playerB)}
+      width:100%;max-width:440px;box-shadow:0 8px 32px rgba(28,24,20,0.2);">
+      <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;margin-bottom:4px;">
+        Edit Match
       </div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:${isConfirmed?'10':'16'}px;">
+        ${escHtml(pA.alias||pA.name||match.playerA)} vs ${escHtml(pB.alias||pB.name||match.playerB)}
+        &nbsp;·&nbsp;<span class="badge-admin ${isConfirmed?'badge-green':'badge-orange'}">${escHtml(match.status)}</span>
+      </div>
+      ${isConfirmed ? `
+        <div style="background:rgba(184,64,8,.08);border-radius:8px;padding:8px 10px;
+          font-size:12px;color:var(--ace);margin-bottom:14px;">
+          This match is confirmed. Saving will override the result and recalculate ELO.
+        </div>
+      ` : ''}
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+        color:var(--text3);margin-bottom:8px;">
+        Score &nbsp;
+        <span style="font-size:11px;color:var(--text3);font-weight:400;">(${escHtml(pA.alias||pA.name||'A')} — ${escHtml(pB.alias||pB.name||'B')})</span>
+      </div>
+      <div id="set-rows">${setsHtml(existingSets)}</div>
+      <button type="button" id="btn-add-set" class="btn-admin btn-ghost"
+        style="margin-top:4px;margin-bottom:14px;font-size:12px;">+ Add Set</button>
 
       <div class="admin-input-group">
         <label class="admin-input-label">Winner</label>
         <select id="winner-select" class="admin-input">
-          <option value="">Select winner…</option>
-          <option value="${match.playerA}">${escHtml(pA.alias || pA.name || match.playerA)}</option>
-          <option value="${match.playerB}">${escHtml(pB.alias || pB.name || match.playerB)}</option>
+          <option value="">Auto (from sets)</option>
+          <option value="${match.playerA}" ${match.result?.winner===match.playerA?'selected':''}>
+            ${escHtml(pA.alias||pA.name||match.playerA)}</option>
+          <option value="${match.playerB}" ${match.result?.winner===match.playerB?'selected':''}>
+            ${escHtml(pB.alias||pB.name||match.playerB)}</option>
         </select>
       </div>
 
-      <div class="admin-input-group">
-        <label class="admin-input-label">Score (e.g. 6-3 6-4)</label>
-        <input id="score-input" class="admin-input" placeholder="6-3 7-5"/>
-      </div>
-
       <div style="display:flex;gap:10px;margin-top:16px;">
-        <button id="btn-confirm-override" class="btn-admin btn-primary" style="flex:1;">
-          Confirm Result
-        </button>
-        <button id="btn-cancel-override" class="btn-admin btn-secondary">Cancel</button>
+        <button id="btn-save-match" class="btn-admin btn-primary" style="flex:1;">Save Result</button>
+        <button id="btn-close-match" class="btn-admin btn-secondary">Cancel</button>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
 
-  overlay.querySelector('#btn-cancel-override').addEventListener('click', () => overlay.remove());
+  const setRowsEl = overlay.querySelector('#set-rows');
+
+  function refreshRemoveButtons() {
+    overlay.querySelectorAll('[data-remove-set]').forEach(btn => {
+      btn.onclick = () => {
+        const rows = [...setRowsEl.querySelectorAll('[data-set-row]')];
+        if (rows.length <= 1) return;
+        rows[parseInt(btn.dataset.removeSet)].remove();
+        // re-index labels
+        setRowsEl.querySelectorAll('[data-set-row]').forEach((r, i) => {
+          r.dataset.setRow = i;
+          r.querySelector('span').textContent = `Set ${i+1}`;
+          const rmBtn = r.querySelector('[data-remove-set]');
+          if (rmBtn) rmBtn.dataset.removeSet = i;
+        });
+        refreshRemoveButtons();
+      };
+    });
+  }
+  refreshRemoveButtons();
+
+  overlay.querySelector('#btn-add-set').addEventListener('click', () => {
+    const idx = setRowsEl.querySelectorAll('[data-set-row]').length;
+    const div = document.createElement('div');
+    div.innerHTML = setsHtml([{ a: '', b: '' }]).replace('Set 1', `Set ${idx+1}`)
+      .replace('data-set-row="0"', `data-set-row="${idx}"`)
+      .replace('data-remove-set="0"', `data-remove-set="${idx}"`);
+    setRowsEl.appendChild(div.firstElementChild);
+    refreshRemoveButtons();
+  });
+
+  overlay.querySelector('#btn-close-match').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  overlay.querySelector('#btn-confirm-override').addEventListener('click', async () => {
-    const winner = overlay.querySelector('#winner-select').value;
-    const score  = overlay.querySelector('#score-input').value.trim();
-    if (!winner) { toast('Select a winner', 'error'); return; }
+  overlay.querySelector('#btn-save-match').addEventListener('click', async () => {
+    const saveBtn = overlay.querySelector('#btn-save-match');
+    saveBtn.disabled = true; saveBtn.textContent = '…';
 
-    // Parse sets
-    const sets = score.split(/\s+/).map(s => {
-      const [a, b] = s.split('-').map(Number);
+    const setRows = [...setRowsEl.querySelectorAll('[data-set-row]')];
+    const sets = setRows.map(r => {
+      const a = parseInt(r.querySelector('.set-a').value, 10);
+      const b = parseInt(r.querySelector('.set-b').value, 10);
       return isNaN(a) || isNaN(b) ? null : { a, b };
     }).filter(Boolean);
 
-    // Calculate ELO
+    // Auto-derive winner from sets if not manually chosen
+    let winner = overlay.querySelector('#winner-select').value;
+    if (!winner && sets.length) {
+      const aWins = sets.filter(s => s.a > s.b).length;
+      const bWins = sets.filter(s => s.b > s.a).length;
+      if (aWins > bWins) winner = match.playerA;
+      else if (bWins > aWins) winner = match.playerB;
+    }
+    if (!winner) { toast('Could not determine winner — select manually', 'error'); saveBtn.disabled = false; saveBtn.textContent = 'Save Result'; return; }
+
     const pAData = allPlayers[match.playerA] || {};
     const pBData = allPlayers[match.playerB] || {};
-    const eloA = pAData.eloRating || 1000;
-    const eloB = pBData.eloRating || 1000;
-    const aWins = winner === match.playerA;
-    const eloResult = calculateElo(eloA, eloB, aWins ? 'a' : 'b');
+    const eloResult = calculateElo(pAData.eloRating||1000, pBData.eloRating||1000, winner===match.playerA ? 'a' : 'b');
 
-    const now = Date.now();
-    const updates = {};
+    const now  = Date.now();
     const base = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
-    updates[base + '/status']        = 'confirmed';
-    updates[base + '/confirmedAt']   = now;
-    updates[base + '/adminOverride'] = true;
-    updates[base + '/disputed']      = null;
-    updates[base + '/result']        = { winner, sets };
-    if (score) updates[base + '/score'] = score;
-    updates[`players/${match.playerA}/eloRating`] = eloResult.newA;
-    updates[`players/${match.playerB}/eloRating`] = eloResult.newB;
-
+    const updates = {
+      [base + '/status']:        'confirmed',
+      [base + '/confirmedAt']:   match.confirmedAt || now,
+      [base + '/adminOverride']: true,
+      [base + '/disputed']:      null,
+      [base + '/result']:        { winner, sets },
+      [`players/${match.playerA}/eloRating`]: eloResult.newA,
+      [`players/${match.playerB}/eloRating`]: eloResult.newB,
+    };
     await dbMultiUpdate(updates);
     overlay.remove();
-    toast('Result confirmed — ELO updated', 'success');
+    toast('Match saved — ELO updated', 'success');
     onDone();
   });
 }
@@ -1345,92 +1623,158 @@ function _showOverrideModal(match, allPlayers, onDone) {
 // ─── Bracket ──────────────────────────────────────────────────────────────────
 
 async function renderBracketAdmin(el) {
-  const config = await dbGet(dbRef('config'));
-  const sid    = config && config.defaultSeason;
-  if (!sid) { el.innerHTML = '<div class="admin-empty">No active season.</div>'; return; }
+  const [config, allSeasonsRaw, allPlayers] = await Promise.all([
+    dbGet(dbRef('config')),
+    dbGet(dbRef('seasons')),
+    dbGet(pRef()),
+  ]);
+  const players    = allPlayers || {};
+  const defaultSid = config?.defaultSeason;
+  const seasons    = allSeasonsRaw || {};
 
-  const leagues = await dbGet(sRef(sid, null, 'leagues'));
-  if (!leagues) { el.innerHTML = '<div class="admin-empty">No leagues in this season.</div>'; return; }
+  const sortedSeasons = Object.entries(seasons).sort(([a], [b]) => {
+    if (a === defaultSid) return -1;
+    if (b === defaultSid) return 1;
+    return (seasons[b].createdAt || 0) - (seasons[a].createdAt || 0);
+  });
 
-  const allPlayers = await dbGet(pRef()) || {};
+  if (!sortedSeasons.length) { el.innerHTML = '<div class="admin-empty">No seasons.</div>'; return; }
 
-  el.innerHTML = `
-    <div class="section-header">
-      <div class="section-title">Playoff Bracket</div>
-    </div>
-    <div id="bracket-leagues"></div>
-  `;
+  let activeSid = defaultSid || sortedSeasons[0][0];
+  let activeLid = null; // null = all leagues
 
-  const leaguesEl = el.querySelector('#bracket-leagues');
+  async function loadAndRender() {
+    const leagues = await dbGet(sRef(activeSid, null, 'leagues'));
+    if (!leagues) { el.querySelector('#bracket-body').innerHTML = '<div class="admin-empty">No leagues.</div>'; return; }
 
-  for (const [lid, league] of Object.entries(leagues)) {
+    const leagueEntries = Object.entries(leagues);
+    if (!activeLid) activeLid = leagueEntries[0]?.[0] || null;
+
+    // Update league tabs
+    const tabsEl = el.querySelector('#bracket-league-tabs');
+    if (tabsEl) {
+      tabsEl.innerHTML = leagueEntries.map(([lid, l]) => `
+        <button class="btn-admin ${lid===activeLid?'btn-primary':'btn-ghost'}"
+          data-lid="${lid}" style="font-size:12px;">${escHtml(l.name||lid)}</button>
+      `).join('');
+      tabsEl.querySelectorAll('button[data-lid]').forEach(btn => {
+        btn.addEventListener('click', () => { activeLid = btn.dataset.lid; loadAndRender(); });
+      });
+    }
+
+    const bodyEl = el.querySelector('#bracket-body');
+    bodyEl.innerHTML = '<div class="admin-loading"><div class="spinner"></div></div>';
+
+    if (!activeLid || !leagues[activeLid]) { bodyEl.innerHTML = '<div class="admin-empty">Select a league.</div>'; return; }
+    const lid    = activeLid;
+    const league = leagues[lid];
+
     const [membersObj, matchesObj, bracketData, scoringConfig] = await Promise.all([
-      dbGet(sRef(sid, lid, 'members')),
-      dbGet(sRef(sid, lid, 'matches')),
-      dbGet(sRef(sid, lid, 'bracket')),
-      dbGet(sRef(sid, lid, 'scoringConfig')),
+      dbGet(sRef(activeSid, lid, 'members')),
+      dbGet(sRef(activeSid, lid, 'matches')),
+      dbGet(sRef(activeSid, lid, 'bracket')),
+      dbGet(sRef(activeSid, lid, 'scoringConfig')),
     ]);
 
-    const memberUids = Object.keys(membersObj || {});
-    const cfg        = scoringConfig || { minMatches: 6, minWins: 4, bracketSize: 4 };
-    const table      = buildLeagueTable(matchesObj || {}, memberUids);
-    const qualified  = getQualifiedPlayers(table, cfg);
+    const memberUids  = Object.keys(membersObj || {});
+    const allMatches  = matchesObj || {};
+    const cfg         = scoringConfig || { minMatches: 6, minWins: 4, bracketSize: 4 };
+    const gsConfig    = league.groupStageConfig || {};
+    const pointsCfg   = league.pointsConfig     || {};
+    const table       = buildLeagueTable(allMatches, memberUids);
+    const qualified   = getQualifiedPlayers(table, cfg);
+
+    // Attach group points to table rows
+    for (const row of table) {
+      row.groupPoints = calculateGroupPoints(allMatches, row.uid, pointsCfg);
+    }
 
     const div = document.createElement('div');
     div.innerHTML = `
       <div class="admin-form-panel">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-          <div style="font-weight:700;">${escHtml(league.name || lid)}</div>
+          <div style="font-weight:700;">${escHtml(league.name||lid)}</div>
           <div style="display:flex;gap:8px;">
             ${!bracketData || bracketData.status === 'pending' ? `
-              <button class="btn-admin btn-primary" id="btn-gen-bracket-${lid}">
+              <button class="btn-admin btn-primary" id="btn-gen-bracket">
                 Generate Bracket (${qualified.length} qualified)
               </button>
             ` : `
               <span class="badge-admin badge-green">Bracket Active</span>
-              <button class="btn-admin btn-danger" id="btn-reset-bracket-${lid}">Reset</button>
+              <button class="btn-admin btn-danger" id="btn-reset-bracket">Reset</button>
             `}
           </div>
         </div>
-
         ${bracketData && bracketData.status !== 'pending'
-          ? _renderBracketAdminView(bracketData, allPlayers, sid, lid)
-          : _renderQualifiedTable(table, qualified, allPlayers, cfg)
-        }
+          ? _renderBracketAdminView(bracketData, players, activeSid, lid)
+          : _renderQualifiedTable(table, qualified, players, cfg, gsConfig)}
       </div>
     `;
-    leaguesEl.appendChild(div);
+    bodyEl.innerHTML = '';
+    bodyEl.appendChild(div);
 
-    const genBtn = div.querySelector(`#btn-gen-bracket-${lid}`);
+    // Player row click-through
+    div.querySelectorAll('[data-view-player]').forEach(row => {
+      row.addEventListener('click', () => {
+        showPlayerModal(row.dataset.viewPlayer, players, allMatches, null);
+      });
+    });
+
+    const genBtn = div.querySelector('#btn-gen-bracket');
     if (genBtn) {
       genBtn.addEventListener('click', async () => {
         if (qualified.length < 2) { toast('Need at least 2 qualified players', 'error'); return; }
         if (!confirm(`Generate bracket for ${qualified.length} players?`)) return;
-        const bracket = _generateBracket(qualified, allPlayers);
-        await dbSet(sRef(sid, lid, 'bracket'), bracket);
+        const bracket = _generateBracket(qualified, players);
+        await dbSet(sRef(activeSid, lid, 'bracket'), bracket);
         toast('Bracket generated!', 'success');
-        renderBracketAdmin(el);
+        loadAndRender();
       });
     }
-
-    const resetBtn = div.querySelector(`#btn-reset-bracket-${lid}`);
+    const resetBtn = div.querySelector('#btn-reset-bracket');
     if (resetBtn) {
       resetBtn.addEventListener('click', async () => {
         if (!confirm('Reset the bracket? All bracket results will be lost.')) return;
-        await dbRemove(sRef(sid, lid, 'bracket'));
+        await dbRemove(sRef(activeSid, lid, 'bracket'));
         toast('Bracket reset', 'success');
-        renderBracketAdmin(el);
+        loadAndRender();
       });
     }
-
-    // Wire bracket result buttons
     div.querySelectorAll('[data-action="set-bracket-result"]').forEach(btn => {
       btn.addEventListener('click', () => {
         const { sid: s, lid: l, rk, mk } = btn.dataset;
-        _showBracketResultModal(s, l, rk, mk, bracketData, allPlayers, () => renderBracketAdmin(el));
+        _showBracketResultModal(s, l, rk, mk, bracketData, players, loadAndRender);
       });
     });
   }
+
+  el.innerHTML = `
+    <div class="section-header">
+      <div class="section-title">Playoff Bracket</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center;">
+      ${sortedSeasons.length > 1 ? `
+        <select id="bracket-season-select" class="admin-input" style="max-width:200px;">
+          ${sortedSeasons.map(([sid, s]) =>
+            `<option value="${sid}" ${sid===activeSid?'selected':''}>${escHtml(s.name||sid)}${sid===defaultSid?' (active)':''}</option>`
+          ).join('')}
+        </select>
+      ` : ''}
+      <div id="bracket-league-tabs" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    </div>
+    <div id="bracket-body"><div class="admin-loading"><div class="spinner"></div></div></div>
+  `;
+
+  const seasonSel = el.querySelector('#bracket-season-select');
+  if (seasonSel) {
+    seasonSel.addEventListener('change', e => {
+      activeSid = e.target.value;
+      activeLid = null;
+      loadAndRender();
+    });
+  }
+
+  await loadAndRender();
 }
 
 function _generateBracket(qualified, allPlayers) {
@@ -1476,24 +1820,45 @@ function _generateBracket(qualified, allPlayers) {
   return { status: 'active', bracketSize: n, createdAt: Date.now(), rounds };
 }
 
-function _renderQualifiedTable(table, qualified, allPlayers, cfg) {
+function _renderQualifiedTable(table, qualified, allPlayers, cfg, gsConfig) {
   const bracketSize = cfg.bracketSize || 4;
+  const gsStatus    = gsConfig?.status || 'pending';
+  const showPts     = gsStatus === 'active' || gsStatus === 'closed';
+  const qualifyPts  = gsConfig?.qualifyPoints ?? 6;
+
   return `
     <table class="admin-table">
       <thead>
-        <tr><th>#</th><th>Player</th><th>W</th><th>P</th><th>GD</th><th>Status</th></tr>
+        <tr>
+          <th>#</th>
+          <th>Player</th>
+          ${showPts ? '<th>Pts</th>' : ''}
+          <th>W</th>
+          <th>P</th>
+          <th>GD</th>
+          <th>Status</th>
+        </tr>
       </thead>
       <tbody>
         ${table.map((row, i) => {
-          const p   = allPlayers[row.uid] || {};
-          const q   = isQualified(row.standing, cfg);
-          const s   = row.standing;
+          const p  = allPlayers[row.uid] || {};
+          const q  = showPts ? (row.groupPoints ?? 0) >= qualifyPts : isQualified(row.standing, cfg);
+          const s  = row.standing;
+          const gp = row.groupPoints ?? null;
           return `
-            <tr>
+            <tr data-view-player="${row.uid}" style="cursor:pointer;"
+              title="Click to view player profile">
               <td style="font-family:var(--font-mono);color:var(--text3);">${i + 1}</td>
-              <td style="font-weight:${i < bracketSize ? '700' : '400'};">
-                ${escHtml(p.alias || p.name || row.uid)}
+              <td style="font-weight:${q ? '700' : '400'};">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  ${avatarToSvg(p.avatarId || null, 22)}
+                  ${escHtml(p.alias || p.name || row.uid)}
+                </div>
               </td>
+              ${showPts ? `
+                <td style="font-family:var(--font-mono);font-weight:700;
+                  color:${q ? 'var(--ace2)' : 'var(--text)'}">${gp ?? 0}</td>
+              ` : ''}
               <td style="font-family:var(--font-mono);">${s.matchesWon}</td>
               <td style="font-family:var(--font-mono);">${s.matchesPlayed}</td>
               <td style="font-family:var(--font-mono);">${s.gameDiff >= 0 ? '+' : ''}${s.gameDiff}</td>
@@ -1503,7 +1868,10 @@ function _renderQualifiedTable(table, qualified, allPlayers, cfg) {
             </tr>
           `;
         }).join('')}
-        ${table.length === 0 ? `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:16px;">No data</td></tr>` : ''}
+        ${table.length === 0 ? `
+          <tr><td colspan="${showPts ? 7 : 6}"
+            style="text-align:center;color:var(--text3);padding:16px;">No data</td></tr>
+        ` : ''}
       </tbody>
     </table>
   `;
@@ -1650,7 +2018,7 @@ async function renderSettings(el) {
     <div class="admin-form-panel">
       <div class="admin-form-title">App Info</div>
       <div style="font-size:13px;color:var(--text2);">
-        <div style="margin-bottom:4px;">ATP Greenwich Admin · v0.06</div>
+        <div style="margin-bottom:4px;">ATP Greenwich Admin · v${APP_VERSION}</div>
         <div style="color:var(--text3);">Firebase project: atp-greenwich</div>
       </div>
     </div>
