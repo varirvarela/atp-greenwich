@@ -284,7 +284,6 @@ export function calculateGroupPoints(allMatches, uid, pointsConfig) {
   let points = 0;
 
   for (const match of Object.values(allMatches || {})) {
-    if (!match.groupMatch) continue;
     const isA = match.playerA === uid;
     const isB = match.playerB === uid;
     if (!isA && !isB) continue;

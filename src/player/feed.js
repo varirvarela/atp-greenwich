@@ -79,23 +79,43 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
   confirmed = confirmed.slice(0, 50);
   const showLeagueFilter = leagueList.length > 1;
 
+  const activeName = activeLeague === 'all'
+    ? 'All leagues'
+    : (leagueList.find(l => l.lid === activeLeague)?.name || activeLeague);
+
+  const filterHtml = showLeagueFilter ? `
+    <div style="margin-bottom:8px;">
+      <button id="feed-filter-toggle"
+        style="display:flex;align-items:center;gap:6px;background:var(--surface2);
+          border:1px solid var(--border);border-radius:20px;padding:4px 12px;
+          font-size:11px;font-weight:700;cursor:pointer;color:var(--text2);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/>
+          <line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+        </svg>
+        <span id="feed-filter-cur">${escHtml(activeName)}</span>
+        <span id="feed-filter-arrow" style="font-size:9px;color:var(--text3);">▾</span>
+      </button>
+      <div id="feed-filter-panel"
+        style="display:none;margin-top:6px;display:none;gap:6px;flex-wrap:wrap;padding:2px 0;">
+        <button class="btn btn-sm ${activeLeague === 'all' ? 'btn-primary' : 'btn-surface'}"
+          data-feed-league="all" style="white-space:nowrap;">All Leagues</button>
+        ${leagueList.map(l => `
+          <button class="btn btn-sm ${activeLeague === l.lid ? 'btn-primary' : 'btn-surface'}"
+            data-feed-league="${escHtml(l.lid)}"
+            style="white-space:nowrap;">${escHtml(l.name)}</button>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
   if (confirmed.length === 0) {
     el.innerHTML = `
       <div>
-        ${showLeagueFilter ? `
-          <div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 4px;">
-            <button class="btn btn-sm ${activeLeague === 'all' ? 'btn-primary' : 'btn-surface'}"
-              data-feed-league="all" style="white-space:nowrap;flex-shrink:0;">All Leagues</button>
-            ${leagueList.map(l => `
-              <button class="btn btn-sm ${activeLeague === l.lid ? 'btn-primary' : 'btn-surface'}"
-                data-feed-league="${escHtml(l.lid)}"
-                style="white-space:nowrap;">${escHtml(l.name)}</button>
-            `).join('')}
-          </div>
-        ` : ''}
+        ${filterHtml}
         <div style="text-align:center;padding:40px 16px 24px;">
           <img src="${BASE}images/atp-empty-matches.png"
-            style="width:160px;height:auto;margin-bottom:16px;opacity:.85;margin:0 auto 16px;">
+            style="width:160px;height:auto;opacity:.85;margin:0 auto 16px;">
           <div class="empty-state-title">No results yet</div>
           <p class="t-small t-muted" style="max-width:240px;margin:0 auto;">
             Confirmed match results will appear here.
@@ -103,28 +123,13 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
         </div>
       </div>
     `;
-    // Wire filter even on empty state
-    if (showLeagueFilter) {
-      el.querySelectorAll('[data-feed-league]').forEach(btn => {
-        btn.addEventListener('click', () => onFilterChange(btn.dataset.feedLeague));
-      });
-    }
+    _wireFeedFilter(el, showLeagueFilter, onFilterChange);
     return;
   }
 
   el.innerHTML = `
     <div style="padding-bottom:24px;">
-      ${showLeagueFilter ? `
-        <div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 4px;margin-bottom:4px;">
-          <button class="btn btn-sm ${activeLeague === 'all' ? 'btn-primary' : 'btn-surface'}"
-            data-feed-league="all" style="white-space:nowrap;flex-shrink:0;">All Leagues</button>
-          ${leagueList.map(l => `
-            <button class="btn btn-sm ${activeLeague === l.lid ? 'btn-primary' : 'btn-surface'}"
-              data-feed-league="${escHtml(l.lid)}"
-              style="white-space:nowrap;">${escHtml(l.name)}</button>
-          `).join('')}
-        </div>
-      ` : ''}
+      ${filterHtml}
       <div style="display:flex;justify-content:flex-end;padding:4px 0 8px;">
         <span class="t-label t-muted">${confirmed.length} result${confirmed.length !== 1 ? 's' : ''}</span>
       </div>
@@ -132,12 +137,7 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
     </div>
   `;
 
-  // League filter
-  if (showLeagueFilter) {
-    el.querySelectorAll('[data-feed-league]').forEach(btn => {
-      btn.addEventListener('click', () => onFilterChange(btn.dataset.feedLeague));
-    });
-  }
+  _wireFeedFilter(el, showLeagueFilter, onFilterChange);
 
   // Reactions
   confirmed.forEach(m => _wireReactions(el, m.mid, myUid, sid, m.lid));
@@ -153,6 +153,31 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
   // Photo zoom
   el.querySelectorAll('[data-photo-click]').forEach(img => {
     img.addEventListener('click', () => _showPhotoModal(img.dataset.photoClick));
+  });
+}
+
+// ─── Filter toggle ───────────────────────────────────────────────────────────
+
+function _wireFeedFilter(el, showLeagueFilter, onFilterChange) {
+  if (!showLeagueFilter) return;
+  const toggle  = el.querySelector('#feed-filter-toggle');
+  const panel   = el.querySelector('#feed-filter-panel');
+  const arrow   = el.querySelector('#feed-filter-arrow');
+  const curLbl  = el.querySelector('#feed-filter-cur');
+  if (!toggle || !panel) return;
+
+  toggle.addEventListener('click', () => {
+    const open = panel.style.display === 'flex';
+    panel.style.display = open ? 'none' : 'flex';
+    if (arrow) arrow.textContent = open ? '▾' : '▴';
+  });
+
+  el.querySelectorAll('[data-feed-league]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      panel.style.display = 'none';
+      if (arrow) arrow.textContent = '▾';
+      onFilterChange(btn.dataset.feedLeague);
+    });
   });
 }
 

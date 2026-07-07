@@ -10,6 +10,31 @@
 
 export const CHANGELOG = [
   {
+    version: '1.4.1',
+    date:    '2026-07-06',
+    changes: [
+      'Tournament switcher: pill in top bar now truncates long names and fits on mobile',
+      'Feed: league filter is now collapsed by default — tap to expand, auto-closes after selection',
+      'Admin: bracket section now persists the selected tournament when navigating away',
+      'Admin: bottom nav includes a "Player App" shortcut to return to the player view',
+      'All matches (not just fixture matches) now count toward group stage points',
+      'Player app: tab content constrained to 640px on wide screens for better readability',
+    ],
+  },
+  {
+    version: '1.4.0',
+    date:    '2026-07-06',
+    changes: [
+      'Onboarding: league selection step removed — admin assigns players to leagues',
+      'Standings: unassigned players see an empty state instead of another league\'s standings',
+      'Admin: last-selected tournament persists across all admin sections',
+      'Admin: mobile bottom nav replaces the hamburger menu at narrow widths',
+      'Tournament switcher: players in multiple seasons can switch from the top bar',
+      'All tabs (matches, feed, bracket) now follow the active tournament selection',
+      'Feed: league filter bar wraps instead of scrolling horizontally',
+    ],
+  },
+  {
     version: '1.3.3',
     date:    '2026-07-05',
     changes: [
@@ -40,7 +65,7 @@ export const CHANGELOG = [
   },
   {
     version: '1.3.0',
-    date:    '2026-07-05',
+    date:    '2026-07-03',
     changes: [
       'Group stage: admin can now release randomised group fixtures with a deadline and point system',
       'Group stage: standings show group points as the primary ranking during the group phase',

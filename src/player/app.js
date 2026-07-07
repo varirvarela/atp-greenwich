@@ -101,10 +101,11 @@ export function showApp(container, player, creds, onSignOut) {
             <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);
               letter-spacing:.3px;">v${APP_VERSION}</span>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <div id="tournament-switcher-area" style="display:none;"></div>
-            <div id="league-switcher-area" style="display:none;"></div>
-            <div class="top-bar-right" id="topbar-right">Greenwich</div>
+          <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">
+            <div id="tournament-switcher-area" style="display:none;flex-shrink:0;"></div>
+            <div id="league-switcher-area" style="display:none;flex-shrink:0;"></div>
+            <div class="top-bar-right" id="topbar-right"
+              style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Greenwich</div>
           </div>
         </div>
 
@@ -230,10 +231,14 @@ export function showApp(container, player, creds, onSignOut) {
           style="display:flex;align-items:center;gap:4px;background:rgba(184,64,8,.1);
             border:1px solid var(--ace);border-radius:20px;padding:3px 10px;
             font-size:11px;font-weight:700;font-family:var(--font-mono);cursor:pointer;
-            color:var(--ace);white-space:nowrap;letter-spacing:.3px;">
-          ${escHtml(cur.name)}
+            color:var(--ace);max-width:100px;letter-spacing:.3px;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escHtml(cur.name)}
+          </span>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
         </button>
       `;
       tArea.querySelector('#tournament-switch-btn').addEventListener('click', () => {
@@ -269,15 +274,22 @@ export function showApp(container, player, creds, onSignOut) {
     function _renderSwitcher() {
       const cur = _currentLeague();
       area.style.display = '';
+      // Hide the tab name when a league switcher is showing — not enough space for both
+      const topRight = container.querySelector('#topbar-right');
+      if (topRight) topRight.style.display = 'none';
       area.innerHTML = `
         <button id="league-switch-btn"
           style="display:flex;align-items:center;gap:4px;background:var(--surface2);
             border:1px solid var(--border);border-radius:20px;padding:3px 10px;
             font-size:11px;font-weight:700;font-family:var(--font-mono);cursor:pointer;
-            color:var(--text);white-space:nowrap;letter-spacing:.3px;">
-          ${escHtml(cur.leagueName)}
+            color:var(--text);max-width:90px;letter-spacing:.3px;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            ${escHtml(cur.leagueName)}
+          </span>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
         </button>
       `;
       area.querySelector('#league-switch-btn').addEventListener('click', () => {

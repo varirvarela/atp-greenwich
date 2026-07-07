@@ -160,6 +160,10 @@ button, input, textarea, select {
   flex: 1;
   overflow-y: auto;
   padding: 16px 16px calc(var(--nav-h) + var(--safe-b) + 16px);
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ─── Buttons ───────────────────────────────────────────────────────────────── */
