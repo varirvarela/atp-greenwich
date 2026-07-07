@@ -10,6 +10,21 @@
 
 export const CHANGELOG = [
   {
+    version: '1.4.2',
+    date:    '2026-07-06',
+    changes: [
+      'Admin: "Back to Player App" arrow moved to top-right corner of mobile topbar',
+      'Admin: owner can now permanently delete players from the Players section',
+      'Admin: bracket qualified count now correctly uses the closed group stage flag',
+      'Player app: league pill shows all leagues in the active tournament (can browse freely)',
+      'Player app: league switcher removed from individual sections — use the top-bar pill',
+      'Feed: membership check — feed only shows if you are in at least one league',
+      'Feed: gear icon opens settings sheet to choose which leagues to include',
+      'Standings: ELO tier labels removed; missed matches shown inline; tap row for details',
+      'Version footer added below content in all sections',
+    ],
+  },
+  {
     version: '1.4.1',
     date:    '2026-07-06',
     changes: [

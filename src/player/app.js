@@ -88,29 +88,21 @@ export function showApp(container, player, creds, onSignOut) {
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;min-height:100dvh;">
 
-        <!-- Top bar -->
+        <!-- Top bar: tournament + league pills only -->
         <div class="top-bar">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div class="top-bar-logo">ATP</div>
-            ${import.meta.env.DEV ? `
-              <div style="font-family:var(--font-mono);font-size:9px;font-weight:700;
-                background:#f4a923;color:#fff;padding:2px 7px;border-radius:4px;
-                letter-spacing:.8px;text-transform:uppercase;line-height:1.6;">
-                DEV
-              </div>` : ''}
-            <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);
-              letter-spacing:.3px;">v${APP_VERSION}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;">
-            <div id="tournament-switcher-area" style="display:none;flex-shrink:0;"></div>
-            <div id="league-switcher-area" style="display:none;flex-shrink:0;"></div>
-            <div class="top-bar-right" id="topbar-right"
-              style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Greenwich</div>
-          </div>
+          <div id="tournament-switcher-area"></div>
+          <div id="league-switcher-area"></div>
         </div>
 
         <!-- Tab content -->
         <div class="page" id="tab-content" style="flex:1;"></div>
+
+        <!-- Version footer -->
+        <div style="text-align:center;padding:4px 0;font-family:var(--font-mono);
+          font-size:9px;color:var(--text3);letter-spacing:.5px;
+          border-top:1px solid var(--border);background:var(--bg);">
+          ATP Greenwich · v${APP_VERSION}
+        </div>
 
         <!-- Bottom navigation -->
         <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
@@ -155,36 +147,16 @@ export function showApp(container, player, creds, onSignOut) {
   }
 
   function renderTabContent(tabId) {
-    // Detach any real-time listeners from the previous tab
     if (_tabCleanup) { _tabCleanup(); _tabCleanup = null; }
-
-    const content  = container.querySelector('#tab-content');
-    const topRight = container.querySelector('#topbar-right');
+    const content = container.querySelector('#tab-content');
     if (!content) return;
-
     switch (tabId) {
-      case 'feed':
-        topRight.textContent = 'Greenwich';
-        _tabCleanup = renderFeedTab(content, _player, _creds) || null;
-        break;
-      case 'matches':
-        topRight.textContent = 'Matches';
-        _tabCleanup = renderMatchesTab(content, _player, _creds) || null;
-        break;
-      case 'standings':
-        topRight.textContent = 'Standings';
-        _tabCleanup = renderStandingsTab(content, _player, _creds) || null;
-        break;
-      case 'bracket':
-        topRight.textContent = 'Bracket';
-        _tabCleanup = renderBracketTab(content, _player, _creds) || null;
-        break;
-      case 'profile':
-        topRight.textContent = 'Profile';
-        renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged);
-        break;
-      default:
-        content.innerHTML = '';
+      case 'feed':      _tabCleanup = renderFeedTab(content, _player, _creds) || null; break;
+      case 'matches':   _tabCleanup = renderMatchesTab(content, _player, _creds) || null; break;
+      case 'standings': _tabCleanup = renderStandingsTab(content, _player, _creds) || null; break;
+      case 'bracket':   _tabCleanup = renderBracketTab(content, _player, _creds) || null; break;
+      case 'profile':   renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged); break;
+      default: content.innerHTML = '';
     }
   }
 
@@ -193,13 +165,15 @@ export function showApp(container, player, creds, onSignOut) {
   _setupPushNotifications(creds.uid);
   _checkWhatsNew();
 
-  // Tournament switcher — async; shows in top bar only when player is in 2+ seasons
+  // Top-bar switchers: unified tournament + league init
   (async () => {
     const allSeasons = await dbGet(dbRef('seasons'));
     if (!allSeasons) return;
     const seasonOrder = Object.keys(allSeasons).sort((a, b) =>
       (allSeasons[b].createdAt || 0) - (allSeasons[a].createdAt || 0)
     );
+
+    // Seasons the player has at least one league membership in
     const playerSeasons = [];
     for (const sid of seasonOrder) {
       const leagues = allSeasons[sid]?.leagues;
@@ -212,20 +186,73 @@ export function showApp(container, player, creds, onSignOut) {
         }
       }
     }
-    if (playerSeasons.length < 2) return;
+    if (playerSeasons.length === 0) return;
 
     const storedSid = localStorage.getItem('atp_active_season');
     if (!storedSid || !playerSeasons.find(s => s.sid === storedSid)) {
       localStorage.setItem('atp_active_season', playerSeasons[0].sid);
     }
 
+    // League pill — shows ALL leagues in the active tournament
+    async function _initLeaguePill() {
+      const sid    = localStorage.getItem('atp_active_season') || playerSeasons[0].sid;
+      const lArea  = container.querySelector('#league-switcher-area');
+      if (!lArea) return;
+      const allLeagues = Object.entries(allSeasons[sid]?.leagues || {})
+        .map(([lid, l]) => ({ sid, lid, leagueName: l.name || lid }));
+      if (allLeagues.length === 0) { lArea.innerHTML = ''; return; }
+
+      // Default to player's own league if atp_active_lid not set or invalid
+      const storedLid = localStorage.getItem('atp_active_lid');
+      if (!storedLid || !allLeagues.find(l => l.lid === storedLid)) {
+        let def = null;
+        for (const { lid } of allLeagues) {
+          const m = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
+          if (m !== null) { def = lid; break; }
+        }
+        localStorage.setItem('atp_active_lid', def || allLeagues[0].lid);
+      }
+
+      function _drawLeaguePill() {
+        const curLid = localStorage.getItem('atp_active_lid') || allLeagues[0].lid;
+        const cur    = allLeagues.find(l => l.lid === curLid) || allLeagues[0];
+        lArea.innerHTML = `
+          <button id="league-switch-btn"
+            style="display:flex;align-items:center;gap:4px;background:var(--surface2);
+              border:1px solid var(--border);border-radius:20px;padding:3px 10px;
+              font-size:11px;font-weight:700;font-family:var(--font-mono);cursor:pointer;
+              color:var(--text);max-width:90px;letter-spacing:.3px;">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              ${escHtml(cur.leagueName)}
+            </span>
+            ${allLeagues.length > 1 ? `
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>` : ''}
+          </button>
+        `;
+        if (allLeagues.length > 1) {
+          lArea.querySelector('#league-switch-btn').addEventListener('click', () => {
+            _showLeaguePicker(allLeagues, container, () => {
+              _drawLeaguePill();
+              renderTabContent(activeTab);
+            });
+          });
+        }
+      }
+      _drawLeaguePill();
+    }
+
+    await _initLeaguePill();
+
+    // Tournament pill
     const tArea = container.querySelector('#tournament-switcher-area');
     if (!tArea) return;
 
-    function _renderTournamentSwitcher() {
+    function _drawTournamentPill() {
       const curSid = localStorage.getItem('atp_active_season') || playerSeasons[0].sid;
-      const cur = playerSeasons.find(s => s.sid === curSid) || playerSeasons[0];
-      tArea.style.display = '';
+      const cur    = playerSeasons.find(s => s.sid === curSid) || playerSeasons[0];
       tArea.innerHTML = `
         <button id="tournament-switch-btn"
           style="display:flex;align-items:center;gap:4px;background:rgba(184,64,8,.1);
@@ -235,72 +262,25 @@ export function showApp(container, player, creds, onSignOut) {
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
             ${escHtml(cur.name)}
           </span>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
+          ${playerSeasons.length > 1 ? `
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>` : ''}
         </button>
       `;
-      tArea.querySelector('#tournament-switch-btn').addEventListener('click', () => {
-        _showTournamentPicker(playerSeasons, container, () => {
-          _renderTournamentSwitcher();
-          renderTabContent(activeTab);
+      if (playerSeasons.length > 1) {
+        tArea.querySelector('#tournament-switch-btn').addEventListener('click', () => {
+          _showTournamentPicker(playerSeasons, container, async () => {
+            localStorage.removeItem('atp_active_lid');
+            _drawTournamentPill();
+            await _initLeaguePill();
+            renderTabContent(activeTab);
+          });
         });
-      });
+      }
     }
-
-    _renderTournamentSwitcher();
-  })().catch(() => {});
-
-  // League switcher — async; shows in top bar only when player is in 2+ leagues
-  (async () => {
-    const allLeagues = await _loadAllLeagues(creds.uid);
-    if (allLeagues.length < 2) return;
-
-    // Validate stored preference
-    const stored = localStorage.getItem('atp_active_lid');
-    if (stored && !allLeagues.find(l => l.lid === stored)) {
-      localStorage.removeItem('atp_active_lid');
-    }
-
-    const area = container.querySelector('#league-switcher-area');
-    if (!area) return;
-
-    function _currentLeague() {
-      const lid = localStorage.getItem('atp_active_lid');
-      return allLeagues.find(l => l.lid === lid) || allLeagues[0];
-    }
-
-    function _renderSwitcher() {
-      const cur = _currentLeague();
-      area.style.display = '';
-      // Hide the tab name when a league switcher is showing — not enough space for both
-      const topRight = container.querySelector('#topbar-right');
-      if (topRight) topRight.style.display = 'none';
-      area.innerHTML = `
-        <button id="league-switch-btn"
-          style="display:flex;align-items:center;gap:4px;background:var(--surface2);
-            border:1px solid var(--border);border-radius:20px;padding:3px 10px;
-            font-size:11px;font-weight:700;font-family:var(--font-mono);cursor:pointer;
-            color:var(--text);max-width:90px;letter-spacing:.3px;">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            ${escHtml(cur.leagueName)}
-          </span>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </button>
-      `;
-      area.querySelector('#league-switch-btn').addEventListener('click', () => {
-        _showLeaguePicker(allLeagues, container, () => {
-          _renderSwitcher();
-          renderTabContent(activeTab);
-        });
-      });
-    }
-
-    _renderSwitcher();
+    _drawTournamentPill();
   })().catch(() => {});
 }
 

@@ -14,6 +14,9 @@ import { showPlayerModal } from '@player/player-modal.js';
 const ADMIN_CREDS_KEY  = 'atp_admin_creds';
 const ADMIN_SEASON_KEY = 'atp_admin_season';
 const DEFAULT_PASSWORD = 'atpgreenwich2026';
+const OWNER_EMAIL      = 'pablorvarela@gmail.com';
+
+let _adminEmail = '';
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -26,7 +29,7 @@ async function boot() {
     if (pc?.uid && pc?.pwdHash && pc.pwdHash !== 'dev') {
       const pd = await dbGet(pRef(pc.uid));
       if (pd?.isAdmin === true && pd?.passwordHash === pc.pwdHash) {
-        showAdminShell(app);
+        showAdminShell(app, pd);
         return;
       }
     }
@@ -132,7 +135,8 @@ const NAV_ITEMS = [
   { id: 'settings', label: 'Settings',     icon: gearIcon() },
 ];
 
-function showAdminShell(app) {
+function showAdminShell(app, adminCreds) {
+  _adminEmail = adminCreds?.email || '';
   app.innerHTML = `
     <div class="admin-shell" id="admin-shell">
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -166,7 +170,10 @@ function showAdminShell(app) {
             <span></span><span></span><span></span>
           </button>
           <div style="font-family:var(--font-serif);font-weight:700;color:var(--ace);font-size:18px;">ATP</div>
-          <div style="width:40px;"></div>
+          <a href="${import.meta.env.BASE_URL.replace('/admin/', '/')}"
+            style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;
+              color:var(--text3);text-decoration:none;font-size:20px;line-height:1;"
+            title="Back to Player App">←</a>
         </div>
         <div class="admin-content" id="admin-content">
           <div class="admin-loading"><div class="spinner"></div></div>
@@ -179,14 +186,6 @@ function showAdminShell(app) {
             <span>${escHtml(it.label)}</span>
           </button>
         `).join('')}
-        <a href="${import.meta.env.BASE_URL}" class="admin-bottom-nav-item admin-bottom-nav-back">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <polyline points="9 22 9 12 15 12 15 22"/>
-          </svg>
-          <span>Player App</span>
-        </a>
       </nav>
     </div>
   `;
@@ -346,6 +345,18 @@ async function renderPlayers(el) {
     });
   });
 
+  // Delete player (permanent)
+  el.querySelectorAll('[data-action="delete-player"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { uid, name } = btn.dataset;
+      if (!confirm(`Permanently delete player "${name}"? This cannot be undone.`)) return;
+      btn.disabled = true;
+      await dbMultiUpdate({ [`players/${uid}`]: null });
+      toast(`Player "${name}" deleted`, 'success');
+      renderPlayers(el);
+    });
+  });
+
   // Toggle admin
   el.querySelectorAll('[data-action="toggle-admin"]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -405,6 +416,11 @@ function _playerCard(p) {
         ` : ''}
         <button class="btn-admin btn-ghost" data-action="view-player"
           data-uid="${p.uid}" style="font-size:11px;">Profile</button>
+        ${p.email !== OWNER_EMAIL ? `
+          <button class="btn-admin btn-danger" data-action="delete-player"
+            data-uid="${p.uid}" data-name="${displayName}"
+            style="font-size:11px;opacity:.7;" title="Permanently delete player">🗑</button>
+        ` : ''}
       </div>
     </div>
   `;
@@ -1755,7 +1771,10 @@ async function renderBracketAdmin(el) {
     const gsConfig    = league.groupStageConfig || {};
     const pointsCfg   = league.pointsConfig     || {};
     const table       = buildLeagueTable(allMatches, memberUids);
-    const qualified   = getQualifiedPlayers(table, cfg);
+    // When group stage is closed, use the qualified flag set during close (not minMatches/minWins)
+    const qualified   = gsConfig.status === 'closed'
+      ? table.filter(row => membersObj?.[row.uid]?.qualified === true)
+      : getQualifiedPlayers(table, cfg);
 
     // Attach group points to table rows
     for (const row of table) {

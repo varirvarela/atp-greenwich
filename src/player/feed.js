@@ -3,7 +3,6 @@
 
 import { dbGet, dbRef, dbListen, dbSet, dbRemove, pRef, sRef } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
-import { eloTierLabel } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -19,8 +18,7 @@ export function renderFeedTab(el, player, creds) {
   </div>`;
 
   const unsubs = [];
-  let cancelled  = false;
-  let activeLeague = 'all'; // local filter state
+  let cancelled = false;
 
   (async () => {
     const [allSeasons, allPlayers] = await Promise.all([
@@ -35,22 +33,39 @@ export function renderFeedTab(el, player, creds) {
     );
     if (!seasonOrder.length) { _renderNoLeague(el); return; }
 
-    const storedSid  = localStorage.getItem('atp_active_season');
-    const sid        = (storedSid && allSeasons[storedSid]) ? storedSid : seasonOrder[0];
+    const storedSid = localStorage.getItem('atp_active_season');
+    const sid       = (storedSid && allSeasons[storedSid]) ? storedSid : seasonOrder[0];
     if (!storedSid || storedSid !== sid) localStorage.setItem('atp_active_season', sid);
     const leaguesMap = allSeasons[sid]?.leagues || {};
-    const leagueList = Object.entries(leaguesMap).map(([lid, l]) => ({
-      lid, name: l.name || lid,
-    }));
-    if (!leagueList.length) { _renderNoLeague(el); return; }
+
+    // Only include leagues the player is a member of
+    const myLeagues = [];
+    for (const [lid, l] of Object.entries(leaguesMap)) {
+      const m = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
+      if (cancelled) return;
+      if (m !== null) myLeagues.push({ lid, name: l.name || lid });
+    }
+    if (myLeagues.length === 0) { _renderNoLeague(el); return; }
+
+    // Feed league prefs: JSON array of included lids, or absent = all player leagues
+    function _getIncludedLids() {
+      const stored = localStorage.getItem('atp_feed_leagues');
+      if (!stored) return myLeagues.map(l => l.lid);
+      try {
+        const parsed = JSON.parse(stored);
+        const valid  = parsed.filter(lid => myLeagues.find(l => l.lid === lid));
+        return valid.length ? valid : myLeagues.map(l => l.lid);
+      } catch { return myLeagues.map(l => l.lid); }
+    }
 
     const matchesByLeague = {};
 
     function renderAll() {
       if (cancelled) return;
+      const included    = _getIncludedLids();
       const allConfirmed = [];
       for (const [lid, matchesObj] of Object.entries(matchesByLeague)) {
-        if (activeLeague !== 'all' && activeLeague !== lid) continue;
+        if (!included.includes(lid)) continue;
         for (const [mid, m] of Object.entries(matchesObj)) {
           if (m.status === 'confirmed' && m.result) {
             allConfirmed.push({ mid, lid, ...m });
@@ -58,11 +73,12 @@ export function renderFeedTab(el, player, creds) {
         }
       }
       allConfirmed.sort((a, b) => (b.confirmedAt || 0) - (a.confirmedAt || 0));
-      _renderFeed(el, allConfirmed, creds.uid, allPlayers || {}, leagueList, sid,
-        activeLeague, (newLeague) => { activeLeague = newLeague; renderAll(); });
+      _renderFeed(el, allConfirmed, creds.uid, allPlayers || {}, myLeagues, sid, () => {
+        _showFeedSettings(myLeagues, renderAll);
+      });
     }
 
-    for (const { lid } of leagueList) {
+    for (const { lid } of myLeagues) {
       unsubs.push(dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
         matchesByLeague[lid] = matchesObj || {};
         renderAll();
@@ -75,44 +91,38 @@ export function renderFeedTab(el, player, creds) {
 
 // ─── Feed renderer ────────────────────────────────────────────────────────────
 
-function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLeague, onFilterChange) {
+function _renderFeed(el, confirmed, myUid, allPlayers, myLeagues, sid, onGear) {
   confirmed = confirmed.slice(0, 50);
-  const showLeagueFilter = leagueList.length > 1;
 
-  const activeName = activeLeague === 'all'
-    ? 'All leagues'
-    : (leagueList.find(l => l.lid === activeLeague)?.name || activeLeague);
-
-  const filterHtml = showLeagueFilter ? `
-    <div style="margin-bottom:8px;">
-      <button id="feed-filter-toggle"
-        style="display:flex;align-items:center;gap:6px;background:var(--surface2);
-          border:1px solid var(--border);border-radius:20px;padding:4px 12px;
-          font-size:11px;font-weight:700;cursor:pointer;color:var(--text2);">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/>
-          <line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+  const headerHtml = `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;">
+      <span class="t-label t-muted">
+        ${confirmed.length > 0 ? `${confirmed.length} result${confirmed.length !== 1 ? 's' : ''}` : ''}
+      </span>
+      <button id="feed-gear-btn" title="Feed settings"
+        style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text3);
+          display:flex;align-items:center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06
+            a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09
+            A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83
+            l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+            A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83
+            l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09
+            a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83
+            l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
+            a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
-        <span id="feed-filter-cur">${escHtml(activeName)}</span>
-        <span id="feed-filter-arrow" style="font-size:9px;color:var(--text3);">▾</span>
       </button>
-      <div id="feed-filter-panel"
-        style="display:none;margin-top:6px;display:none;gap:6px;flex-wrap:wrap;padding:2px 0;">
-        <button class="btn btn-sm ${activeLeague === 'all' ? 'btn-primary' : 'btn-surface'}"
-          data-feed-league="all" style="white-space:nowrap;">All Leagues</button>
-        ${leagueList.map(l => `
-          <button class="btn btn-sm ${activeLeague === l.lid ? 'btn-primary' : 'btn-surface'}"
-            data-feed-league="${escHtml(l.lid)}"
-            style="white-space:nowrap;">${escHtml(l.name)}</button>
-        `).join('')}
-      </div>
     </div>
-  ` : '';
+  `;
 
   if (confirmed.length === 0) {
     el.innerHTML = `
       <div>
-        ${filterHtml}
+        ${headerHtml}
         <div style="text-align:center;padding:40px 16px 24px;">
           <img src="${BASE}images/atp-empty-matches.png"
             style="width:160px;height:auto;opacity:.85;margin:0 auto 16px;">
@@ -123,21 +133,18 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
         </div>
       </div>
     `;
-    _wireFeedFilter(el, showLeagueFilter, onFilterChange);
+    el.querySelector('#feed-gear-btn')?.addEventListener('click', onGear);
     return;
   }
 
   el.innerHTML = `
     <div style="padding-bottom:24px;">
-      ${filterHtml}
-      <div style="display:flex;justify-content:flex-end;padding:4px 0 8px;">
-        <span class="t-label t-muted">${confirmed.length} result${confirmed.length !== 1 ? 's' : ''}</span>
-      </div>
-      ${confirmed.map(m => _feedItem(m, myUid, allPlayers, leagueList)).join('')}
+      ${headerHtml}
+      ${confirmed.map(m => _feedItem(m, myUid, allPlayers, myLeagues)).join('')}
     </div>
   `;
 
-  _wireFeedFilter(el, showLeagueFilter, onFilterChange);
+  el.querySelector('#feed-gear-btn')?.addEventListener('click', onGear);
 
   // Reactions
   confirmed.forEach(m => _wireReactions(el, m.mid, myUid, sid, m.lid));
@@ -156,28 +163,65 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
   });
 }
 
-// ─── Filter toggle ───────────────────────────────────────────────────────────
+// ─── Feed settings modal ─────────────────────────────────────────────────────
 
-function _wireFeedFilter(el, showLeagueFilter, onFilterChange) {
-  if (!showLeagueFilter) return;
-  const toggle  = el.querySelector('#feed-filter-toggle');
-  const panel   = el.querySelector('#feed-filter-panel');
-  const arrow   = el.querySelector('#feed-filter-arrow');
-  const curLbl  = el.querySelector('#feed-filter-cur');
-  if (!toggle || !panel) return;
+function _showFeedSettings(myLeagues, onClose) {
+  const included = (() => {
+    const stored = localStorage.getItem('atp_feed_leagues');
+    if (!stored) return myLeagues.map(l => l.lid);
+    try {
+      const parsed = JSON.parse(stored);
+      const valid  = parsed.filter(lid => myLeagues.find(l => l.lid === lid));
+      return valid.length ? valid : myLeagues.map(l => l.lid);
+    } catch { return myLeagues.map(l => l.lid); }
+  })();
 
-  toggle.addEventListener('click', () => {
-    const open = panel.style.display === 'flex';
-    panel.style.display = open ? 'none' : 'flex';
-    if (arrow) arrow.textContent = open ? '▾' : '▴';
-  });
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet" style="max-height:80dvh;overflow-y:auto;">
+      <div class="modal-handle"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;
+        padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:16px;">
+        <span style="font-size:15px;font-weight:700;">Feed settings</span>
+        <button id="feed-settings-close" style="background:none;border:none;cursor:pointer;
+          padding:4px;color:var(--text3);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+      </div>
+      <p class="t-small t-muted" style="margin:0 0 12px;">Choose which leagues to show in your feed.</p>
+      <div id="feed-league-checks" style="display:flex;flex-direction:column;gap:8px;">
+        ${myLeagues.map(l => `
+          <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;
+            background:var(--surface2);border-radius:8px;cursor:pointer;">
+            <input type="checkbox" data-lid="${escHtml(l.lid)}"
+              ${included.includes(l.lid) ? 'checked' : ''}
+              style="width:16px;height:16px;accent-color:var(--ace);cursor:pointer;">
+            <span style="font-size:13px;">${escHtml(l.name)}</span>
+          </label>
+        `).join('')}
+      </div>
+      <button id="feed-settings-save" class="btn btn-primary"
+        style="width:100%;margin-top:20px;">Save</button>
+      <div style="padding-bottom:8px;"></div>
+    </div>
+  `;
 
-  el.querySelectorAll('[data-feed-league]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      panel.style.display = 'none';
-      if (arrow) arrow.textContent = '▾';
-      onFilterChange(btn.dataset.feedLeague);
-    });
+  document.body.appendChild(overlay);
+
+  const close = () => { overlay.remove(); onClose(); };
+
+  overlay.querySelector('#feed-settings-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('#feed-settings-save').addEventListener('click', () => {
+    const checked = [...overlay.querySelectorAll('[data-lid]:checked')].map(c => c.dataset.lid);
+    const save    = checked.length ? checked : myLeagues.map(l => l.lid);
+    localStorage.setItem('atp_feed_leagues', JSON.stringify(save));
+    close();
   });
 }
 

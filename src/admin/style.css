@@ -648,11 +648,6 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .admin-bottom-nav-item.active svg { opacity: 1; }
 .admin-bottom-nav-item:hover { color: rgba(255,255,255,0.85); }
 
-.admin-bottom-nav-back {
-  text-decoration: none;
-  border-left: 1px solid rgba(255,255,255,0.1);
-}
-
 @media (max-width: 900px) {
   .admin-bottom-nav { display: flex; }
   .admin-mobile-topbar { display: none; }
