@@ -650,6 +650,5 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 
 @media (max-width: 900px) {
   .admin-bottom-nav { display: flex; }
-  .admin-mobile-topbar { display: none; }
   .admin-content { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0)); }
 }

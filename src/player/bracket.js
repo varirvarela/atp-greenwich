@@ -109,9 +109,7 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
     });
     el.innerHTML = `
       <div style="padding-bottom:80px;">
-        <div style="display:flex;align-items:center;gap:8px;padding:16px 0 12px;">
-          <div class="badge badge-teal">${escHtml(league.name || 'League')}</div>
-        </div>
+        <div style="padding:8px 0 4px;"></div>
         <div class="card" style="text-align:center;margin-bottom:16px;border-left:3px solid var(--ace4);background:var(--ace4-bg);">
           <p class="t-small" style="color:var(--ace4);">
             No players have reached the qualifying threshold yet
@@ -168,8 +166,7 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
 
   el.innerHTML = `
     <div style="padding-bottom:80px;">
-      <div style="display:flex;align-items:center;gap:8px;padding:16px 0 12px;">
-        <div class="badge badge-teal">${escHtml(league.name || 'League')}</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0 12px;">
         ${statusBadge}
       </div>
 
@@ -247,8 +244,7 @@ function _renderBracket(el, bracket, allPlayers, myUid, league) {
   el.innerHTML = `
     <div style="padding-bottom:80px;">
       <div style="display:flex;align-items:center;justify-content:space-between;
-        padding:16px 0 12px;">
-        <div class="badge badge-teal">${escHtml(league.name || 'League')}</div>
+        padding:8px 0 12px;">
         <div class="badge badge-ace">Knockout Stage</div>
       </div>
 

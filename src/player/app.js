@@ -551,12 +551,34 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
           <span>How ELO works</span>
           <span style="color:var(--text3);font-size:10px;">tap to expand</span>
         </summary>
-        <div style="background:var(--surface2);padding:10px 14px 14px;
+        <div style="background:var(--surface2);padding:10px 14px 16px;
           border-top:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.65;">
-          <p style="margin:0 0 8px;">Your <strong style="color:var(--text);">ELO rating</strong> measures your skill relative to other players. It goes up when you win and down when you lose.</p>
-          <p style="margin:0 0 8px;"><strong style="color:var(--text);">Expected outcome:</strong> Before each match, the system calculates how likely you are to win based on both players' ratings. Beating a stronger opponent earns you more points; losing to a weaker one costs you more.</p>
-          <p style="margin:0 0 8px;"><strong style="color:var(--text);">K-factor:</strong> Each match can shift your rating by up to <strong style="color:var(--ace);">±32 points</strong>. The exact change = K × (actual result − expected probability).</p>
-          <p style="margin:0;">Everyone starts at <strong style="color:var(--text);">1000</strong>. Typical range is 800–1600+.</p>
+          <p style="margin:0 0 8px;">Your ELO measures skill relative to other players. It updates after every confirmed match using this formula:</p>
+          <div style="background:var(--surface);border-radius:6px;padding:8px 12px;
+            font-family:var(--font-mono);font-size:11px;margin-bottom:10px;
+            border:1px solid var(--border);color:var(--text);">
+            New ELO = Old ELO + 32 × (W − Eₐ)<br>
+            <span style="color:var(--text3);font-size:10px;">
+              W = 1 if you won, 0 if you lost<br>
+              Eₐ = 1 / (1 + 10^((opponent − yours) / 400))
+            </span>
+          </div>
+          <p style="margin:0 0 6px;font-weight:700;color:var(--text);">Examples</p>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+            <div style="background:var(--surface);border-radius:6px;padding:8px 12px;
+              border-left:3px solid var(--ace2);font-size:11px;">
+              <strong>You (1000) beat a stronger player (1200):</strong><br>
+              Eₐ = 1 / (1 + 10^((1200−1000)/400)) ≈ 0.24<br>
+              Change = 32 × (1 − 0.24) = <strong style="color:var(--ace2);">+24 pts</strong>
+            </div>
+            <div style="background:var(--surface);border-radius:6px;padding:8px 12px;
+              border-left:3px solid var(--ace3);font-size:11px;">
+              <strong>You (1000) lose to a weaker player (800):</strong><br>
+              Eₐ = 1 / (1 + 10^((800−1000)/400)) ≈ 0.76<br>
+              Change = 32 × (0 − 0.76) = <strong style="color:var(--ace3);">−24 pts</strong>
+            </div>
+          </div>
+          <p style="margin:0;color:var(--text3);">Everyone starts at 1000. The bigger the upset, the larger the swing.</p>
         </div>
       </details>
 

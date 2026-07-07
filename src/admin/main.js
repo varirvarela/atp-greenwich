@@ -434,13 +434,6 @@ async function _showPlayerProfileModal(player, onDone) {
     if (currentSid) break;
   }
 
-  // Build league options for the dropdown (from most recent tournament)
-  const mostRecentSid = seasonOrder[0] || null;
-  const mostRecentLeagues = (mostRecentSid && seasons[mostRecentSid]?.leagues) || {};
-  const leagueOptions = Object.entries(mostRecentLeagues).map(([lid, l]) => ({
-    sid: mostRecentSid, lid, name: l.name || lid,
-  }));
-
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
@@ -466,28 +459,11 @@ async function _showPlayerProfileModal(player, onDone) {
           <td>${escHtml(player.status || '—')}</td></tr>
         <tr><td style="color:var(--text3);padding:4px 0;">ELO Rating</td>
           <td style="font-family:var(--font-mono);font-weight:700;">${player.eloRating || 1000}</td></tr>
-        <tr><td style="color:var(--text3);padding:4px 0;">Current League</td>
+        <tr><td style="color:var(--text3);padding:4px 0;">League</td>
           <td>${currentLeagueName ? escHtml(currentLeagueName) : '<span style="color:var(--text3);">None</span>'}</td></tr>
       </table>
 
-      ${leagueOptions.length ? `
-        <div class="admin-input-group">
-          <label class="admin-input-label">Change League</label>
-          <select id="player-league-select" class="admin-input">
-            <option value="">— no change —</option>
-            ${leagueOptions.map(opt =>
-              `<option value="${escHtml(opt.lid)}"
-                ${currentSid === opt.sid && currentLid === opt.lid ? 'disabled' : ''}>
-                ${escHtml(opt.name)}${currentSid === opt.sid && currentLid === opt.lid ? ' (current)' : ''}
-              </option>`
-            ).join('')}
-          </select>
-        </div>
-        <button id="btn-save-league" class="btn-admin btn-primary"
-          style="width:100%;margin-top:4px;">Save League Change</button>
-      ` : '<p style="font-size:13px;color:var(--text3);">No leagues available.</p>'}
-
-      <div class="admin-input-group" style="margin-top:16px;">
+      <div class="admin-input-group">
         <label class="admin-input-label">Set ELO Rating</label>
         <div style="display:flex;gap:8px;">
           <input id="player-elo-input" type="number" class="admin-input"
@@ -513,30 +489,6 @@ async function _showPlayerProfileModal(player, onDone) {
 
   overlay.querySelector('#btn-close-profile').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-
-  const saveLeagueBtn = overlay.querySelector('#btn-save-league');
-  if (saveLeagueBtn) {
-    saveLeagueBtn.addEventListener('click', async () => {
-      const select = overlay.querySelector('#player-league-select');
-      const toLid  = select && select.value;
-      if (!toLid) return;
-
-      saveLeagueBtn.disabled = true; saveLeagueBtn.textContent = '…';
-
-      const updates = {};
-      if (currentSid && currentLid) {
-        updates[`seasons/${currentSid}/leagues/${currentLid}/members/${player.uid}`] = null;
-      }
-      updates[`seasons/${mostRecentSid}/leagues/${toLid}/members/${player.uid}`] = {
-        joinedAt:     Date.now(),
-        transferredAt: Date.now(),
-      };
-      await dbMultiUpdate(updates);
-      overlay.remove();
-      toast(`${player.alias || player.name} moved to ${leagueOptions.find(o => o.lid === toLid)?.name || toLid}`, 'success');
-      onDone();
-    });
-  }
 
   overlay.querySelector('#btn-set-elo').addEventListener('click', async () => {
     const input = overlay.querySelector('#player-elo-input');

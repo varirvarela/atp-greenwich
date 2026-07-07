@@ -10,21 +10,22 @@
 
 export const CHANGELOG = [
   {
-    version: '1.4.3',
+    version: '1.4.4',
     date:    '2026-07-07',
     changes: [
       'Feed: now shows matches from ALL leagues in the active tournament (not just your own league)',
       'Feed: gear settings list all tournament leagues so you can filter by any of them',
-      'Standings: league badge removed from table header (already visible in top-nav pill)',
-      'Standings: inline badge now counts missed + forfeited together',
-      'Standings: player detail modal shows Played, Won, Lost, Missed, Forfeit, Opp.Forfeit stats',
-      'Standings: each match row in player detail modal shows ELO delta',
-      'Profile: "How ELO works" explanation accordion added below ELO rating',
-      'Version footer fixed — now always visible above the bottom navigation bar',
-      'Admin: "Back to Player App" arrow is now clearly visible (styled button)',
+      'Standings: league badge removed from table header (already in top-nav pill)',
+      'Standings: inline missed-match badge also counts forfeited matches',
+      'Standings: player detail modal shows Played, Won, Lost, Missed, Forfeit, Opp.Forfeit stats plus ELO delta per match',
+      'Standings: standings freeze when group stage is closed (bracket results no longer affect group stage rankings)',
+      'Matches: league badge removed from header (already in top-nav pill)',
+      'Bracket: league badge removed from header (already in top-nav pill)',
+      'Profile: "How ELO works" accordion shows formula + two worked examples',
+      'Version footer fixed — always visible above the bottom navigation bar',
+      'Admin: "Back to Player App" now shows as a visible styled button on mobile',
       'Admin Players: clicking the player card opens the profile (no separate Profile button)',
-      'Admin Players: Edit ELO moved into the player profile modal',
-      'Admin Players: Reset player password now available in the player profile modal',
+      'Admin Players: Edit ELO and Reset Password available in the player profile modal; Change League removed',
     ],
   },
   {

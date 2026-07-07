@@ -15,8 +15,9 @@ export function renderStandingsTab(el, player, creds) {
     <p class="t-small t-muted">Loading standings…</p>
   </div>`;
 
-  let unsub    = null;
-  let cancelled = false;
+  let unsub       = null;
+  let cancelled   = false;
+  const membersCache = {};
 
   (async () => {
     const [allSeasons, allPlayers] = await Promise.all([
@@ -60,36 +61,46 @@ export function renderStandingsTab(el, player, creds) {
       const ctx = leagueList.find(l => l.lid === lid);
       if (!ctx) return;
 
+      const gsStatus = ctx.groupStageConfig.status;
+
+      function applyMatches(matchesObj) {
+        if (cancelled) return;
+        const allMatches = matchesObj || {};
+        const memberUids = Object.keys(membersCache[lid] || {});
+        const table      = buildLeagueTable(allMatches, memberUids);
+        if (gsStatus === 'active' || gsStatus === 'closed') {
+          for (const row of table) {
+            row.groupPoints = calculateGroupPoints(allMatches, row.uid, ctx.pointsConfig);
+          }
+          table.sort((a, b) => {
+            if (b.groupPoints !== a.groupPoints) return b.groupPoints - a.groupPoints;
+            return b.standing.gameDiff - a.standing.gameDiff;
+          });
+          let rank = 1;
+          for (let i = 0; i < table.length; i++) {
+            if (i > 0 && table[i].groupPoints !== table[i - 1].groupPoints) rank = i + 1;
+            table[i].rank = rank;
+          }
+        }
+        const mount = el.querySelector('#standings-mount');
+        if (!mount) return;
+        _renderLeagueTable(mount, table, allPlayers, allMatches, creds.uid, ctx.name, ctx.groupStageConfig, ctx.pointsConfig);
+        mount.querySelectorAll('[data-view-player]').forEach(row =>
+          row.addEventListener('click', () =>
+            _showStandingModal(row.dataset.viewPlayer, allPlayers, allMatches, creds.uid)
+          )
+        );
+      }
+
       dbGet(sRef(sid, lid, 'members')).then(membersObj => {
         if (cancelled) return;
-        const memberUids = Object.keys(membersObj || {});
-        unsub = dbListen(sRef(sid, lid, 'matches'), matchesObj => {
-          const allMatches = matchesObj || {};
-          const table      = buildLeagueTable(allMatches, memberUids);
-          const gsStatus   = ctx.groupStageConfig.status;
-          if (gsStatus === 'active' || gsStatus === 'closed') {
-            for (const row of table) {
-              row.groupPoints = calculateGroupPoints(allMatches, row.uid, ctx.pointsConfig);
-            }
-            table.sort((a, b) => {
-              if (b.groupPoints !== a.groupPoints) return b.groupPoints - a.groupPoints;
-              return b.standing.gameDiff - a.standing.gameDiff;
-            });
-            let rank = 1;
-            for (let i = 0; i < table.length; i++) {
-              if (i > 0 && table[i].groupPoints !== table[i - 1].groupPoints) rank = i + 1;
-              table[i].rank = rank;
-            }
-          }
-          const mount = el.querySelector('#standings-mount');
-          if (!mount) return;
-          _renderLeagueTable(mount, table, allPlayers, allMatches, creds.uid, ctx.name, ctx.groupStageConfig, ctx.pointsConfig);
-          mount.querySelectorAll('[data-view-player]').forEach(row =>
-            row.addEventListener('click', () =>
-              _showStandingModal(row.dataset.viewPlayer, allPlayers, allMatches, creds.uid)
-            )
-          );
-        });
+        membersCache[lid] = membersObj || {};
+        if (gsStatus === 'closed') {
+          // Group stage closed — load snapshot once, don't live-listen to avoid bracket matches affecting standings
+          dbGet(sRef(sid, lid, 'matches')).then(applyMatches);
+        } else {
+          unsub = dbListen(sRef(sid, lid, 'matches'), applyMatches);
+        }
       });
     }
 
