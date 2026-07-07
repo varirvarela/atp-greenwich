@@ -171,9 +171,11 @@ function showAdminShell(app, adminCreds) {
           </button>
           <div style="font-family:var(--font-serif);font-weight:700;color:var(--ace);font-size:18px;">ATP</div>
           <a href="${import.meta.env.BASE_URL.replace('/admin/', '/')}"
-            style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;
-              color:var(--text3);text-decoration:none;font-size:20px;line-height:1;"
-            title="Back to Player App">←</a>
+            style="display:flex;align-items:center;gap:4px;padding:4px 10px;
+              color:var(--text);text-decoration:none;font-size:12px;font-weight:600;
+              background:var(--surface2);border:1px solid var(--border);
+              border-radius:var(--radius);"
+            title="Back to Player App">← Player</a>
         </div>
         <div class="admin-content" id="admin-content">
           <div class="admin-loading"><div class="spinner"></div></div>
@@ -300,7 +302,8 @@ async function renderPlayers(el) {
 
   // Approve buttons
   el.querySelectorAll('[data-action="approve"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       btn.disabled = true; btn.textContent = '…';
       await dbUpdate(pRef(btn.dataset.uid), { status: 'onboarding' });
       toast('Player approved — they can now complete onboarding', 'success');
@@ -310,7 +313,8 @@ async function renderPlayers(el) {
 
   // Decline (remove) pending/onboarding player
   el.querySelectorAll('[data-action="decline"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const name = btn.dataset.name || btn.dataset.uid;
       if (!confirm(`Decline and remove ${name}? This will permanently delete their account.`)) return;
       btn.disabled = true;
@@ -320,26 +324,10 @@ async function renderPlayers(el) {
     });
   });
 
-  // Edit ELO
-  el.querySelectorAll('[data-action="edit-elo"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const uid  = btn.dataset.uid;
-      const name = btn.dataset.name;
-      const cur  = btn.dataset.elo;
-      const val  = window.prompt(`New ELO rating for ${name}:`, cur);
-      if (val === null) return;
-      const n = parseInt(val, 10);
-      if (isNaN(n) || n < 0 || n > 3000) { toast('Invalid ELO value', 'error'); return; }
-      await dbUpdate(pRef(uid), { eloRating: n });
-      toast('ELO updated', 'success');
-      renderPlayers(el);
-    });
-  });
-
-  // View profile / change league
-  el.querySelectorAll('[data-action="view-player"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const uid = btn.dataset.uid;
+  // View profile / change league (card itself is the trigger)
+  el.querySelectorAll('[data-action="view-player"]').forEach(card => {
+    card.addEventListener('click', () => {
+      const uid = card.dataset.uid;
       const player = players.find(p => p.uid === uid);
       if (player) _showPlayerProfileModal(player, () => renderPlayers(el));
     });
@@ -347,7 +335,8 @@ async function renderPlayers(el) {
 
   // Delete player (permanent)
   el.querySelectorAll('[data-action="delete-player"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const { uid, name } = btn.dataset;
       if (!confirm(`Permanently delete player "${name}"? This cannot be undone.`)) return;
       btn.disabled = true;
@@ -359,7 +348,8 @@ async function renderPlayers(el) {
 
   // Toggle admin
   el.querySelectorAll('[data-action="toggle-admin"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const { uid } = btn.dataset;
       const nowAdmin = btn.dataset.isAdmin === 'true';
       const newVal   = !nowAdmin;
@@ -378,7 +368,8 @@ function _playerCard(p) {
   const statusClass = { invited: 'badge-red', onboarding: 'badge-orange', active: 'badge-green' }[p.status] || 'badge-muted';
   const displayName = escHtml(p.alias || p.name || p.uid);
   return `
-    <div class="admin-card">
+    <div class="admin-card" data-action="view-player" data-uid="${p.uid}"
+      style="cursor:pointer;" title="View profile">
       ${avatarToSvg(p.avatarId || null, 36)}
       <div class="admin-card-body">
         <div class="admin-card-name">${escHtml(p.name || '(no name)')}</div>
@@ -400,9 +391,6 @@ function _playerCard(p) {
             data-uid="${p.uid}" data-name="${displayName}">Decline</button>
         ` : ''}
         ${p.status === 'active' ? `
-          <button class="btn-admin btn-secondary" data-action="edit-elo"
-            data-uid="${p.uid}" data-name="${displayName}"
-            data-elo="${p.eloRating || 1000}">Edit ELO</button>
           ${p.email === 'pablorvarela@gmail.com' ? `
             <span class="badge-admin badge-teal" style="cursor:default;" title="App owner — cannot be revoked">★ Owner</span>
           ` : `
@@ -414,8 +402,6 @@ function _playerCard(p) {
             </button>
           `}
         ` : ''}
-        <button class="btn-admin btn-ghost" data-action="view-player"
-          data-uid="${p.uid}" style="font-size:11px;">Profile</button>
         ${p.email !== OWNER_EMAIL ? `
           <button class="btn-admin btn-danger" data-action="delete-player"
             data-uid="${p.uid}" data-name="${displayName}"
@@ -497,15 +483,30 @@ async function _showPlayerProfileModal(player, onDone) {
             ).join('')}
           </select>
         </div>
+        <button id="btn-save-league" class="btn-admin btn-primary"
+          style="width:100%;margin-top:4px;">Save League Change</button>
       ` : '<p style="font-size:13px;color:var(--text3);">No leagues available.</p>'}
 
-      <div style="display:flex;gap:10px;margin-top:16px;">
-        ${leagueOptions.length ? `
-          <button id="btn-save-league" class="btn-admin btn-primary" style="flex:1;">Save</button>
-        ` : ''}
-        <button id="btn-close-profile" class="btn-admin btn-secondary"
-          style="${leagueOptions.length ? '' : 'flex:1;'}">Close</button>
+      <div class="admin-input-group" style="margin-top:16px;">
+        <label class="admin-input-label">Set ELO Rating</label>
+        <div style="display:flex;gap:8px;">
+          <input id="player-elo-input" type="number" class="admin-input"
+            value="${player.eloRating || 1000}" min="0" max="3000" style="flex:1;">
+          <button id="btn-set-elo" class="btn-admin btn-secondary">Set</button>
+        </div>
       </div>
+
+      <div class="admin-input-group" style="margin-top:12px;">
+        <label class="admin-input-label">Reset Player Password</label>
+        <div style="display:flex;gap:8px;">
+          <input id="player-new-pwd" type="password" class="admin-input"
+            placeholder="New password" style="flex:1;">
+          <button id="btn-reset-pwd" class="btn-admin btn-secondary">Set</button>
+        </div>
+      </div>
+
+      <button id="btn-close-profile" class="btn-admin btn-secondary"
+        style="width:100%;margin-top:16px;">Close</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -513,30 +514,47 @@ async function _showPlayerProfileModal(player, onDone) {
   overlay.querySelector('#btn-close-profile').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  const saveBtn = overlay.querySelector('#btn-save-league');
-  if (!saveBtn) return;
+  const saveLeagueBtn = overlay.querySelector('#btn-save-league');
+  if (saveLeagueBtn) {
+    saveLeagueBtn.addEventListener('click', async () => {
+      const select = overlay.querySelector('#player-league-select');
+      const toLid  = select && select.value;
+      if (!toLid) return;
 
-  saveBtn.addEventListener('click', async () => {
-    const select = overlay.querySelector('#player-league-select');
-    const toLid  = select && select.value;
-    if (!toLid) { overlay.remove(); return; }
+      saveLeagueBtn.disabled = true; saveLeagueBtn.textContent = '…';
 
-    saveBtn.disabled = true; saveBtn.textContent = '…';
+      const updates = {};
+      if (currentSid && currentLid) {
+        updates[`seasons/${currentSid}/leagues/${currentLid}/members/${player.uid}`] = null;
+      }
+      updates[`seasons/${mostRecentSid}/leagues/${toLid}/members/${player.uid}`] = {
+        joinedAt:     Date.now(),
+        transferredAt: Date.now(),
+      };
+      await dbMultiUpdate(updates);
+      overlay.remove();
+      toast(`${player.alias || player.name} moved to ${leagueOptions.find(o => o.lid === toLid)?.name || toLid}`, 'success');
+      onDone();
+    });
+  }
 
-    const updates = {};
-    // Remove from old league if applicable
-    if (currentSid && currentLid) {
-      updates[`seasons/${currentSid}/leagues/${currentLid}/members/${player.uid}`] = null;
-    }
-    // Add to new league in most recent tournament
-    updates[`seasons/${mostRecentSid}/leagues/${toLid}/members/${player.uid}`] = {
-      joinedAt:     Date.now(),
-      transferredAt: Date.now(),
-    };
-    await dbMultiUpdate(updates);
+  overlay.querySelector('#btn-set-elo').addEventListener('click', async () => {
+    const input = overlay.querySelector('#player-elo-input');
+    const n = parseInt(input.value, 10);
+    if (isNaN(n) || n < 0 || n > 3000) { toast('Invalid ELO value (0–3000)', 'error'); return; }
+    await dbUpdate(pRef(player.uid), { eloRating: n });
+    toast('ELO updated', 'success');
     overlay.remove();
-    toast(`${player.alias || player.name} moved to ${leagueOptions.find(o => o.lid === toLid)?.name || toLid}`, 'success');
     onDone();
+  });
+
+  overlay.querySelector('#btn-reset-pwd').addEventListener('click', async () => {
+    const input = overlay.querySelector('#player-new-pwd');
+    const pwd   = input.value.trim();
+    if (pwd.length < 4) { toast('Password must be at least 4 characters', 'error'); return; }
+    await dbUpdate(pRef(player.uid), { passwordHash: simpleHash(pwd) });
+    toast(`Password reset for ${player.alias || player.name}`, 'success');
+    input.value = '';
   });
 }
 

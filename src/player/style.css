@@ -159,11 +159,27 @@ button, input, textarea, select {
 .page {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 16px calc(var(--nav-h) + var(--safe-b) + 16px);
+  padding: 16px 16px calc(var(--nav-h) + var(--safe-b) + 32px);
   max-width: 640px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+}
+
+.app-version-footer {
+  position: fixed;
+  bottom: calc(var(--nav-h) + var(--safe-b));
+  left: 0;
+  right: 0;
+  z-index: 90;
+  text-align: center;
+  padding: 3px 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: .5px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
 }
 
 /* ─── Buttons ───────────────────────────────────────────────────────────────── */

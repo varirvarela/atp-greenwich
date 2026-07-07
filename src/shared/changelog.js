@@ -10,6 +10,24 @@
 
 export const CHANGELOG = [
   {
+    version: '1.4.3',
+    date:    '2026-07-07',
+    changes: [
+      'Feed: now shows matches from ALL leagues in the active tournament (not just your own league)',
+      'Feed: gear settings list all tournament leagues so you can filter by any of them',
+      'Standings: league badge removed from table header (already visible in top-nav pill)',
+      'Standings: inline badge now counts missed + forfeited together',
+      'Standings: player detail modal shows Played, Won, Lost, Missed, Forfeit, Opp.Forfeit stats',
+      'Standings: each match row in player detail modal shows ELO delta',
+      'Profile: "How ELO works" explanation accordion added below ELO rating',
+      'Version footer fixed — now always visible above the bottom navigation bar',
+      'Admin: "Back to Player App" arrow is now clearly visible (styled button)',
+      'Admin Players: clicking the player card opens the profile (no separate Profile button)',
+      'Admin Players: Edit ELO moved into the player profile modal',
+      'Admin Players: Reset player password now available in the player profile modal',
+    ],
+  },
+  {
     version: '1.4.2',
     date:    '2026-07-06',
     changes: [

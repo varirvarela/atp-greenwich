@@ -97,10 +97,8 @@ export function showApp(container, player, creds, onSignOut) {
         <!-- Tab content -->
         <div class="page" id="tab-content" style="flex:1;"></div>
 
-        <!-- Version footer -->
-        <div class="app-version-footer" style="text-align:center;padding:4px 0;
-          font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:.5px;
-          border-top:1px solid var(--border);background:var(--bg);">
+        <!-- Version footer (fixed above bottom nav via .app-version-footer CSS) -->
+        <div class="app-version-footer">
           ATP Greenwich · v${APP_VERSION}${import.meta.env.DEV ? ' · <span style="color:#b84008;font-weight:700;">DEV</span>' : ''}
         </div>
 
@@ -543,6 +541,24 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         <div class="elo-display">${elo}</div>
         <div class="badge badge-ace" style="margin-top:8px;font-size:12px;">${escHtml(tier)}</div>
       </div>
+
+      <!-- ELO explanation accordion -->
+      <details style="margin-bottom:16px;border-radius:var(--radius);overflow:hidden;
+        border:1px solid var(--border);">
+        <summary style="background:var(--surface2);padding:10px 12px;font-size:12px;
+          font-weight:700;cursor:pointer;list-style:none;display:flex;
+          justify-content:space-between;align-items:center;">
+          <span>How ELO works</span>
+          <span style="color:var(--text3);font-size:10px;">tap to expand</span>
+        </summary>
+        <div style="background:var(--surface2);padding:10px 14px 14px;
+          border-top:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.65;">
+          <p style="margin:0 0 8px;">Your <strong style="color:var(--text);">ELO rating</strong> measures your skill relative to other players. It goes up when you win and down when you lose.</p>
+          <p style="margin:0 0 8px;"><strong style="color:var(--text);">Expected outcome:</strong> Before each match, the system calculates how likely you are to win based on both players' ratings. Beating a stronger opponent earns you more points; losing to a weaker one costs you more.</p>
+          <p style="margin:0 0 8px;"><strong style="color:var(--text);">K-factor:</strong> Each match can shift your rating by up to <strong style="color:var(--ace);">±32 points</strong>. The exact change = K × (actual result − expected probability).</p>
+          <p style="margin:0;">Everyone starts at <strong style="color:var(--text);">1000</strong>. Typical range is 800–1600+.</p>
+        </div>
+      </details>
 
       ${(player.isAdmin || player.email === 'pablorvarela@gmail.com') ? `
       <!-- Admin / Owner access -->

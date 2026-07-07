@@ -38,24 +38,29 @@ export function renderFeedTab(el, player, creds) {
     if (!storedSid || storedSid !== sid) localStorage.setItem('atp_active_season', sid);
     const leaguesMap = allSeasons[sid]?.leagues || {};
 
-    // Only include leagues the player is a member of
+    // All leagues in this tournament (for feed content)
+    const allTournamentLeagues = Object.entries(leaguesMap).map(([lid, l]) => ({
+      lid, name: l.name || lid,
+    }));
+
+    // Player's own leagues (membership check — must be in at least one)
     const myLeagues = [];
-    for (const [lid, l] of Object.entries(leaguesMap)) {
+    for (const { lid, name } of allTournamentLeagues) {
       const m = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
       if (cancelled) return;
-      if (m !== null) myLeagues.push({ lid, name: l.name || lid });
+      if (m !== null) myLeagues.push({ lid, name });
     }
     if (myLeagues.length === 0) { _renderNoLeague(el); return; }
 
-    // Feed league prefs: JSON array of included lids, or absent = all player leagues
+    // Feed league prefs: JSON array of included lids, or absent = all tournament leagues
     function _getIncludedLids() {
       const stored = localStorage.getItem('atp_feed_leagues');
-      if (!stored) return myLeagues.map(l => l.lid);
+      if (!stored) return allTournamentLeagues.map(l => l.lid);
       try {
         const parsed = JSON.parse(stored);
-        const valid  = parsed.filter(lid => myLeagues.find(l => l.lid === lid));
-        return valid.length ? valid : myLeagues.map(l => l.lid);
-      } catch { return myLeagues.map(l => l.lid); }
+        const valid  = parsed.filter(lid => allTournamentLeagues.find(l => l.lid === lid));
+        return valid.length ? valid : allTournamentLeagues.map(l => l.lid);
+      } catch { return allTournamentLeagues.map(l => l.lid); }
     }
 
     const matchesByLeague = {};
@@ -73,12 +78,12 @@ export function renderFeedTab(el, player, creds) {
         }
       }
       allConfirmed.sort((a, b) => (b.confirmedAt || 0) - (a.confirmedAt || 0));
-      _renderFeed(el, allConfirmed, creds.uid, allPlayers || {}, myLeagues, sid, () => {
-        _showFeedSettings(myLeagues, renderAll);
+      _renderFeed(el, allConfirmed, creds.uid, allPlayers || {}, allTournamentLeagues, sid, () => {
+        _showFeedSettings(allTournamentLeagues, renderAll);
       });
     }
 
-    for (const { lid } of myLeagues) {
+    for (const { lid } of allTournamentLeagues) {
       unsubs.push(dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
         matchesByLeague[lid] = matchesObj || {};
         renderAll();
@@ -165,15 +170,15 @@ function _renderFeed(el, confirmed, myUid, allPlayers, myLeagues, sid, onGear) {
 
 // ─── Feed settings modal ─────────────────────────────────────────────────────
 
-function _showFeedSettings(myLeagues, onClose) {
+function _showFeedSettings(allLeagues, onClose) {
   const included = (() => {
     const stored = localStorage.getItem('atp_feed_leagues');
-    if (!stored) return myLeagues.map(l => l.lid);
+    if (!stored) return allLeagues.map(l => l.lid);
     try {
       const parsed = JSON.parse(stored);
-      const valid  = parsed.filter(lid => myLeagues.find(l => l.lid === lid));
-      return valid.length ? valid : myLeagues.map(l => l.lid);
-    } catch { return myLeagues.map(l => l.lid); }
+      const valid  = parsed.filter(lid => allLeagues.find(l => l.lid === lid));
+      return valid.length ? valid : allLeagues.map(l => l.lid);
+    } catch { return allLeagues.map(l => l.lid); }
   })();
 
   const overlay = document.createElement('div');
@@ -194,7 +199,7 @@ function _showFeedSettings(myLeagues, onClose) {
       </div>
       <p class="t-small t-muted" style="margin:0 0 12px;">Choose which leagues to show in your feed.</p>
       <div id="feed-league-checks" style="display:flex;flex-direction:column;gap:8px;">
-        ${myLeagues.map(l => `
+        ${allLeagues.map(l => `
           <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;
             background:var(--surface2);border-radius:8px;cursor:pointer;">
             <input type="checkbox" data-lid="${escHtml(l.lid)}"
@@ -219,7 +224,7 @@ function _showFeedSettings(myLeagues, onClose) {
 
   overlay.querySelector('#feed-settings-save').addEventListener('click', () => {
     const checked = [...overlay.querySelectorAll('[data-lid]:checked')].map(c => c.dataset.lid);
-    const save    = checked.length ? checked : myLeagues.map(l => l.lid);
+    const save    = checked.length ? checked : allLeagues.map(l => l.lid);
     localStorage.setItem('atp_feed_leagues', JSON.stringify(save));
     close();
   });

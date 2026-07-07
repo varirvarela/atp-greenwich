@@ -137,7 +137,6 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
 
   el.innerHTML = `
     <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-      <span class="badge badge-teal" style="font-size:11px;">${escHtml(leagueName)}</span>
       ${gsStatus === 'active'  ? `<span class="badge" style="font-size:10px;background:rgba(0,160,80,.12);color:#007a3d;">Group Stage</span>` : ''}
       ${gsStatus === 'closed'  ? `<span class="badge badge-muted" style="font-size:10px;">Stage Closed</span>` : ''}
       ${deadlineStr && gsStatus === 'active' ? `<span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">Deadline ${deadlineStr}</span>` : ''}
@@ -170,9 +169,9 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
           </span>
           <span style="font-family:var(--font-mono);font-size:11px;font-weight:600;
             color:var(--text3);flex-shrink:0;">${wl}</span>
-          ${stats.missed > 0 ? `
+          ${(stats.missed + stats.forfeited) > 0 ? `
             <span style="font-family:var(--font-mono);font-size:10px;color:var(--ace3);
-              flex-shrink:0;" title="Missed matches">${stats.missed}M</span>
+              flex-shrink:0;" title="Missed + forfeited matches">${stats.missed + stats.forfeited}M</span>
           ` : ''}
           ${elo ? `
             <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;
@@ -236,7 +235,7 @@ function _rulesAccordion(pts, qualifyPts, deadlineStr) {
 // ─── Player stats modal ───────────────────────────────────────────────────────
 
 function _computePlayerStats(allMatches, uid) {
-  let missed = 0, forfeited = 0, opponentForfeited = 0;
+  let missed = 0, forfeited = 0, opponentForfeited = 0, won = 0, played = 0;
   for (const m of Object.values(allMatches || {})) {
     if (m.playerA !== uid && m.playerB !== uid) continue;
     if (m.forfeited) {
@@ -245,8 +244,12 @@ function _computePlayerStats(allMatches, uid) {
     } else if (m.deadlinePenaltyApplied) {
       missed++;
     }
+    if (m.status === 'confirmed') {
+      played++;
+      if (m.result?.winner === uid) won++;
+    }
   }
-  return { missed, forfeited, opponentForfeited };
+  return { missed, forfeited, opponentForfeited, won, played };
 }
 
 function _showStandingModal(uid, allPlayers, allMatches, myUid) {
@@ -282,34 +285,48 @@ function _showStandingModal(uid, allPlayers, allMatches, myUid) {
       </div>
 
       <!-- Stats row -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">
+        ${_statCell('Played', stats.played, 'var(--text2)')}
+        ${_statCell('Won', stats.won, stats.won > 0 ? 'var(--ace2)' : 'var(--text3)')}
+        ${_statCell('Lost', stats.played - stats.won, 'var(--text3)')}
+      </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">
         ${_statCell('Missed', stats.missed, stats.missed > 0 ? 'var(--ace3)' : 'var(--text3)')}
-        ${_statCell('Forfeited', stats.forfeited, stats.forfeited > 0 ? 'var(--ace3)' : 'var(--text3)')}
-        ${_statCell('Opp. Forfeit', stats.opponentForfeited, stats.opponentForfeited > 0 ? 'var(--ace2)' : 'var(--text3)')}
+        ${_statCell('Forfeit', stats.forfeited, stats.forfeited > 0 ? 'var(--ace3)' : 'var(--text3)')}
+        ${_statCell('Opp.Forf', stats.opponentForfeited, stats.opponentForfeited > 0 ? 'var(--ace2)' : 'var(--text3)')}
       </div>
 
       <!-- Recent confirmed matches -->
       ${matches.length === 0
         ? `<p class="t-small t-muted" style="text-align:center;padding:16px 0;">No confirmed matches yet.</p>`
         : matches.map(([, m]) => {
-            const opUid   = m.playerA === uid ? m.playerB : m.playerA;
-            const op      = allPlayers[opUid] || { name: 'Player', alias: opUid };
-            const won     = m.result?.winner === uid;
-            const score   = _formatSetsSimple(m.result);
-            const when    = _timeAgoSimple(m.confirmedAt);
+            const opUid    = m.playerA === uid ? m.playerB : m.playerA;
+            const op       = allPlayers[opUid] || { name: 'Player', alias: opUid };
+            const matchWon = m.result?.winner === uid;
+            const score    = _formatSetsSimple(m.result);
+            const when     = _timeAgoSimple(m.confirmedAt);
+            const eloDelta = m.eloDeltas?.[uid];
             return `
-              <div style="display:flex;align-items:center;gap:10px;padding:10px 0;
+              <div style="display:flex;align-items:center;gap:8px;padding:10px 0;
                 border-bottom:1px solid var(--border);">
-                <span class="badge ${won ? 'badge-teal' : 'badge-muted'}"
+                <span class="badge ${matchWon ? 'badge-teal' : 'badge-muted'}"
                   style="font-size:10px;min-width:32px;text-align:center;">
-                  ${won ? 'Win' : 'Loss'}
+                  ${matchWon ? 'Win' : 'Loss'}
                 </span>
-                <span style="flex:1;font-size:13px;">${escHtml(uid === myUid ? 'You' : name)}
-                  <span style="color:var(--text3);font-size:11px;"> vs </span>
+                <span style="flex:1;font-size:12px;min-width:0;overflow:hidden;
+                  text-overflow:ellipsis;white-space:nowrap;">
+                  ${escHtml(uid === myUid ? 'You' : name)}
+                  <span style="color:var(--text3);"> vs </span>
                   ${escHtml(opUid === myUid ? 'You' : (op.alias || op.name))}
                 </span>
                 <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">${score}</span>
-                <span style="font-size:10px;color:var(--text3);">${when}</span>
+                ${eloDelta !== undefined ? `
+                  <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;
+                    color:${eloDelta >= 0 ? 'var(--ace2)' : 'var(--ace3)'};">
+                    ${eloDelta >= 0 ? '+' : ''}${eloDelta}
+                  </span>
+                ` : ''}
+                <span style="font-size:10px;color:var(--text3);flex-shrink:0;">${when}</span>
               </div>
             `;
           }).join('')}
