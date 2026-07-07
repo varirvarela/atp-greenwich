@@ -87,18 +87,26 @@ export async function adminAppLogin(page) {
   }
 }
 
-// Click a nav item in the admin sidebar; opens hamburger first on mobile layout.
+// Click a nav item in the admin panel.
+// Mobile (≤900px): uses the bottom nav bar.
+// Desktop: sidebar nav items are directly visible.
 export async function adminNavTo(page, section) {
-  const hamburger = page.locator('#btn-hamburger');
-  const navItem   = page.locator(`.admin-nav-item[data-section="${section}"]`);
-  if (await hamburger.isVisible()) {
+  const bottomBtn  = page.locator(`.admin-bottom-nav-item[data-section="${section}"]`);
+  const hamburger  = page.locator('#btn-hamburger');
+  const sideItem   = page.locator(`.admin-nav-item[data-section="${section}"]`);
+
+  if (await bottomBtn.isVisible()) {
+    await bottomBtn.click();
+  } else if (await hamburger.isVisible()) {
     await hamburger.click();
-    await navItem.waitFor({ state: 'visible', timeout: 3000 });
+    await sideItem.waitFor({ state: 'visible', timeout: 3000 });
+    await sideItem.click();
+  } else {
+    await sideItem.click();
   }
-  await navItem.click();
 }
 
-// Open the admin sidebar hamburger (mobile) so sidebar items are visible.
+// Open the admin sidebar on mobile (hamburger layout only).
 export async function openAdminSidebar(page) {
   const hamburger = page.locator('#btn-hamburger');
   if (await hamburger.isVisible()) {
