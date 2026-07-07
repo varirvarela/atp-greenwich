@@ -35,14 +35,14 @@ test.describe('Flow 12 — League Switch', () => {
     await expect(page.locator('#league-switch-btn')).toBeVisible();
   });
 
-  test('F12-01 league switch pill hidden when player is in only 1 league', async ({ page }) => {
+  test('F12-01 league switch pill visible when player is in only 1 league', async ({ page }) => {
     // Remove the second league membership and force a reload
     await adminWrite(page, 'seasons/season_2026/leagues/league_b/members/dev_test_uid', null);
     await goTo(page);
     await jumpToApp(page);
-    // Give it a moment to resolve — if still in 1 league, btn should not appear
+    // Pill now always shows all leagues in the active tournament (browse mode)
     await page.waitForTimeout(2000);
-    await expect(page.locator('#league-switch-btn')).not.toBeVisible();
+    await expect(page.locator('#league-switch-btn')).toBeVisible();
   });
 
   test('F12-02 clicking pill opens Switch League sheet with both leagues', async ({ page }) => {

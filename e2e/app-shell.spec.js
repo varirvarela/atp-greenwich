@@ -8,8 +8,8 @@ test.describe('Flow 4 — App Shell & Profile Tab', () => {
     await jumpToApp(page);
   });
 
-  test('F4-01 DEV badge visible in top bar', async ({ page }) => {
-    await expect(page.getByText('DEV')).toBeVisible();
+  test('F4-01 DEV badge visible in version footer', async ({ page }) => {
+    await expect(page.locator('.app-version-footer').getByText('DEV')).toBeVisible();
   });
 
   test('F4-02 Feed tab: loads without a Coming-in-Phase placeholder', async ({ page }) => {

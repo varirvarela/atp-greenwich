@@ -98,10 +98,10 @@ export function showApp(container, player, creds, onSignOut) {
         <div class="page" id="tab-content" style="flex:1;"></div>
 
         <!-- Version footer -->
-        <div style="text-align:center;padding:4px 0;font-family:var(--font-mono);
-          font-size:9px;color:var(--text3);letter-spacing:.5px;
+        <div class="app-version-footer" style="text-align:center;padding:4px 0;
+          font-family:var(--font-mono);font-size:9px;color:var(--text3);letter-spacing:.5px;
           border-top:1px solid var(--border);background:var(--bg);">
-          ATP Greenwich · v${APP_VERSION}
+          ATP Greenwich · v${APP_VERSION}${import.meta.env.DEV ? ' · <span style="color:#b84008;font-weight:700;">DEV</span>' : ''}
         </div>
 
         <!-- Bottom navigation -->

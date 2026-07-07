@@ -11,10 +11,10 @@ test.describe('Flow 13 — App Version & What\'s New', () => {
 
   // ─── Version display ─────────────────────────────────────────────────────────
 
-  test('F13-01 version label visible in player top bar', async ({ page }) => {
+  test('F13-01 version label visible in player version footer', async ({ page }) => {
     await jumpToApp(page);
-    // Top bar shows "v1.2.0" (or current APP_VERSION)
-    await expect(page.locator('.top-bar').getByText(/^v\d+\.\d+\.\d+$/)).toBeVisible();
+    // Version footer shows "ATP Greenwich · v1.x.x"
+    await expect(page.locator('.app-version-footer')).toContainText(/v\d+\.\d+\.\d+/);
   });
 
   test('F13-02 version label visible on login screen', async ({ page }) => {
