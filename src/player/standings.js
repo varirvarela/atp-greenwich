@@ -33,7 +33,9 @@ export function renderStandingsTab(el, player, creds) {
     );
     if (!seasonOrder.length) { _renderEmpty(el); return; }
 
-    const sid        = seasonOrder[0];
+    const storedSid  = localStorage.getItem('atp_active_season');
+    const sid        = (storedSid && allSeasons[storedSid]) ? storedSid : seasonOrder[0];
+    if (!storedSid || storedSid !== sid) localStorage.setItem('atp_active_season', sid);
     const leaguesMap = allSeasons[sid]?.leagues || {};
     const leagueList = Object.entries(leaguesMap).map(([lid, l]) => ({
       lid, name: l.name || lid,
@@ -49,11 +51,22 @@ export function renderStandingsTab(el, player, creds) {
       if (cancelled) return;
       if (m !== null) { myLid = lid; break; }
     }
-    // Default to the globally selected league (top-right switcher), falling back to home league
-    const prefLid = localStorage.getItem('atp_active_lid');
-    let activeLid = (prefLid && leagueList.find(l => l.lid === prefLid))
-      ? prefLid
-      : (myLid || leagueList[0].lid);
+    // Default to stored league preference, then home league.
+    // If neither applies, the player isn't in any league yet — show empty state.
+    const prefLid   = localStorage.getItem('atp_active_lid');
+    const validPref = prefLid && leagueList.find(l => l.lid === prefLid);
+    if (!myLid && !validPref) {
+      el.innerHTML = `
+        <div class="empty-state" style="padding-top:40px;">
+          <div class="empty-state-title">Not in a league yet</div>
+          <p class="t-small t-muted" style="max-width:220px;margin:0 auto;">
+            The admin will assign you to a league soon. Check back later.
+          </p>
+        </div>
+      `;
+      return;
+    }
+    let activeLid = validPref ? prefLid : myLid;
 
     function listenForLeague(lid) {
       if (unsub) { unsub(); unsub = null; }

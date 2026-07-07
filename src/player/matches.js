@@ -65,7 +65,16 @@ export function renderMatchesTab(el, player, creds) {
 // ─── League context loader ────────────────────────────────────────────────────
 
 async function _loadLeagueContext(uid) {
-  const sid = await dbGet(dbRef('config/defaultSeason'));
+  let sid = localStorage.getItem('atp_active_season');
+  if (!sid) {
+    const allSeasons = await dbGet(dbRef('seasons'));
+    if (!allSeasons) return null;
+    const order = Object.keys(allSeasons).sort((a, b) =>
+      (allSeasons[b].createdAt || 0) - (allSeasons[a].createdAt || 0)
+    );
+    sid = order[0];
+    if (sid) localStorage.setItem('atp_active_season', sid);
+  }
   if (!sid) return null;
   const leagues = await dbGet(sRef(sid, null, 'leagues'));
   if (!leagues) return null;

@@ -101,7 +101,8 @@ export function showApp(container, player, creds, onSignOut) {
             <span style="font-family:var(--font-mono);font-size:9px;color:var(--text3);
               letter-spacing:.3px;">v${APP_VERSION}</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div id="tournament-switcher-area" style="display:none;"></div>
             <div id="league-switcher-area" style="display:none;"></div>
             <div class="top-bar-right" id="topbar-right">Greenwich</div>
           </div>
@@ -191,6 +192,61 @@ export function showApp(container, player, creds, onSignOut) {
   _setupPushNotifications(creds.uid);
   _checkWhatsNew();
 
+  // Tournament switcher — async; shows in top bar only when player is in 2+ seasons
+  (async () => {
+    const allSeasons = await dbGet(dbRef('seasons'));
+    if (!allSeasons) return;
+    const seasonOrder = Object.keys(allSeasons).sort((a, b) =>
+      (allSeasons[b].createdAt || 0) - (allSeasons[a].createdAt || 0)
+    );
+    const playerSeasons = [];
+    for (const sid of seasonOrder) {
+      const leagues = allSeasons[sid]?.leagues;
+      if (!leagues) continue;
+      for (const lid of Object.keys(leagues)) {
+        const member = await dbGet(sRef(sid, lid, 'members/' + creds.uid));
+        if (member !== null) {
+          playerSeasons.push({ sid, name: allSeasons[sid].name || sid });
+          break;
+        }
+      }
+    }
+    if (playerSeasons.length < 2) return;
+
+    const storedSid = localStorage.getItem('atp_active_season');
+    if (!storedSid || !playerSeasons.find(s => s.sid === storedSid)) {
+      localStorage.setItem('atp_active_season', playerSeasons[0].sid);
+    }
+
+    const tArea = container.querySelector('#tournament-switcher-area');
+    if (!tArea) return;
+
+    function _renderTournamentSwitcher() {
+      const curSid = localStorage.getItem('atp_active_season') || playerSeasons[0].sid;
+      const cur = playerSeasons.find(s => s.sid === curSid) || playerSeasons[0];
+      tArea.style.display = '';
+      tArea.innerHTML = `
+        <button id="tournament-switch-btn"
+          style="display:flex;align-items:center;gap:4px;background:rgba(184,64,8,.1);
+            border:1px solid var(--ace);border-radius:20px;padding:3px 10px;
+            font-size:11px;font-weight:700;font-family:var(--font-mono);cursor:pointer;
+            color:var(--ace);white-space:nowrap;letter-spacing:.3px;">
+          ${escHtml(cur.name)}
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      `;
+      tArea.querySelector('#tournament-switch-btn').addEventListener('click', () => {
+        _showTournamentPicker(playerSeasons, container, () => {
+          _renderTournamentSwitcher();
+          renderTabContent(activeTab);
+        });
+      });
+    }
+
+    _renderTournamentSwitcher();
+  })().catch(() => {});
+
   // League switcher — async; shows in top bar only when player is in 2+ leagues
   (async () => {
     const allLeagues = await _loadAllLeagues(creds.uid);
@@ -238,17 +294,55 @@ export function showApp(container, player, creds, onSignOut) {
 
 async function _loadAllLeagues(uid) {
   try {
-    const sid = await dbGet(dbRef('config/defaultSeason'));
-    if (!sid) return [];
-    const leagues = await dbGet(sRef(sid, null, 'leagues'));
-    if (!leagues) return [];
+    const allSeasons = await dbGet(dbRef('seasons'));
+    if (!allSeasons) return [];
+    const seasonOrder = Object.keys(allSeasons).sort((a, b) =>
+      (allSeasons[b].createdAt || 0) - (allSeasons[a].createdAt || 0)
+    );
     const result = [];
-    for (const [lid, league] of Object.entries(leagues)) {
-      const member = await dbGet(sRef(sid, lid, 'members/' + uid));
-      if (member !== null) result.push({ sid, lid, leagueName: league.name || 'League' });
+    for (const sid of seasonOrder) {
+      const leagues = allSeasons[sid]?.leagues;
+      if (!leagues) continue;
+      for (const [lid, league] of Object.entries(leagues)) {
+        const member = await dbGet(sRef(sid, lid, 'members/' + uid));
+        if (member !== null) result.push({ sid, lid, leagueName: league.name || 'League' });
+      }
     }
     return result;
   } catch { return []; }
+}
+
+function _showTournamentPicker(seasons, container, onSwitch) {
+  const currentSid = localStorage.getItem('atp_active_season') || seasons[0]?.sid;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="font-size:16px;font-weight:700;padding:0 0 16px;">Switch Tournament</div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding-bottom:8px;">
+        ${seasons.map(s => `
+          <div class="tap-card${s.sid === currentSid ? ' selected' : ''}"
+            data-sid="${escHtml(s.sid)}"
+            style="padding:14px 16px;">
+            <div style="font-weight:700;font-size:14px;">${escHtml(s.name)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelectorAll('[data-sid]').forEach(card => {
+    card.addEventListener('click', () => {
+      const sid = card.dataset.sid;
+      localStorage.setItem('atp_active_season', sid);
+      localStorage.removeItem('atp_active_lid');
+      overlay.remove();
+      onSwitch();
+    });
+  });
 }
 
 function _showLeaguePicker(allLeagues, container, onSwitch) {

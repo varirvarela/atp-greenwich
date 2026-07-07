@@ -35,7 +35,9 @@ export function renderFeedTab(el, player, creds) {
     );
     if (!seasonOrder.length) { _renderNoLeague(el); return; }
 
-    const sid        = seasonOrder[0];
+    const storedSid  = localStorage.getItem('atp_active_season');
+    const sid        = (storedSid && allSeasons[storedSid]) ? storedSid : seasonOrder[0];
+    if (!storedSid || storedSid !== sid) localStorage.setItem('atp_active_season', sid);
     const leaguesMap = allSeasons[sid]?.leagues || {};
     const leagueList = Object.entries(leaguesMap).map(([lid, l]) => ({
       lid, name: l.name || lid,
@@ -87,7 +89,7 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
             ${leagueList.map(l => `
               <button class="btn btn-sm ${activeLeague === l.lid ? 'btn-primary' : 'btn-surface'}"
                 data-feed-league="${escHtml(l.lid)}"
-                style="white-space:nowrap;flex-shrink:0;">${escHtml(l.name)}</button>
+                style="white-space:nowrap;">${escHtml(l.name)}</button>
             `).join('')}
           </div>
         ` : ''}
@@ -113,13 +115,13 @@ function _renderFeed(el, confirmed, myUid, allPlayers, leagueList, sid, activeLe
   el.innerHTML = `
     <div style="padding-bottom:24px;">
       ${showLeagueFilter ? `
-        <div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 4px;margin-bottom:4px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 0 4px;margin-bottom:4px;">
           <button class="btn btn-sm ${activeLeague === 'all' ? 'btn-primary' : 'btn-surface'}"
             data-feed-league="all" style="white-space:nowrap;flex-shrink:0;">All Leagues</button>
           ${leagueList.map(l => `
             <button class="btn btn-sm ${activeLeague === l.lid ? 'btn-primary' : 'btn-surface'}"
               data-feed-league="${escHtml(l.lid)}"
-              style="white-space:nowrap;flex-shrink:0;">${escHtml(l.name)}</button>
+              style="white-space:nowrap;">${escHtml(l.name)}</button>
           `).join('')}
         </div>
       ` : ''}

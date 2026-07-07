@@ -26,7 +26,9 @@ export function renderBracketTab(el, player, creds) {
     );
     if (!seasonOrder.length) { _noSeason(el); return; }
 
-    const sid     = seasonOrder[0];
+    const storedSid = localStorage.getItem('atp_active_season');
+    const sid       = (storedSid && allSeasons[storedSid]) ? storedSid : seasonOrder[0];
+    if (!storedSid || storedSid !== sid) localStorage.setItem('atp_active_season', sid);
     const leagues = allSeasons[sid]?.leagues;
     if (!leagues) { _noSeason(el); return; }
 

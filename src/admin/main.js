@@ -12,6 +12,7 @@ import { avatarToSvg } from '@player/avatars.js';
 import { showPlayerModal } from '@player/player-modal.js';
 
 const ADMIN_CREDS_KEY  = 'atp_admin_creds';
+const ADMIN_SEASON_KEY = 'atp_admin_season';
 const DEFAULT_PASSWORD = 'atpgreenwich2026';
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
@@ -171,6 +172,14 @@ function showAdminShell(app) {
           <div class="admin-loading"><div class="spinner"></div></div>
         </div>
       </main>
+      <nav class="admin-bottom-nav" id="admin-bottom-nav">
+        ${NAV_ITEMS.map(it => `
+          <button class="admin-bottom-nav-item" data-section="${it.id}">
+            ${it.icon}
+            <span>${escHtml(it.label)}</span>
+          </button>
+        `).join('')}
+      </nav>
     </div>
   `;
 
@@ -193,6 +202,10 @@ function showAdminShell(app) {
     });
   });
 
+  app.querySelectorAll('.admin-bottom-nav-item').forEach(btn => {
+    btn.addEventListener('click', () => _navTo(btn.dataset.section));
+  });
+
   app.querySelector('#btn-admin-signout').addEventListener('click', () => {
     localStorage.removeItem(ADMIN_CREDS_KEY);
     window.location.reload();
@@ -202,7 +215,7 @@ function showAdminShell(app) {
 }
 
 function _navTo(sectionId) {
-  document.querySelectorAll('.admin-nav-item').forEach(b => {
+  document.querySelectorAll('.admin-nav-item, .admin-bottom-nav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.section === sectionId);
   });
   const content = document.getElementById('admin-content');
@@ -288,16 +301,6 @@ async function renderPlayers(el) {
     });
   });
 
-  // Set active directly
-  el.querySelectorAll('[data-action="activate"]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = '…';
-      await dbUpdate(pRef(btn.dataset.uid), { status: 'active' });
-      toast('Player set to active', 'success');
-      renderPlayers(el);
-    });
-  });
-
   // Decline (remove) pending/onboarding player
   el.querySelectorAll('[data-action="decline"]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -374,7 +377,6 @@ function _playerCard(p) {
             data-uid="${p.uid}" data-name="${displayName}">Decline</button>
         ` : ''}
         ${p.status === 'onboarding' ? `
-          <button class="btn-admin btn-teal" data-action="activate" data-uid="${p.uid}">Set Active</button>
           <button class="btn-admin btn-danger" data-action="decline"
             data-uid="${p.uid}" data-name="${displayName}">Decline</button>
         ` : ''}
@@ -514,6 +516,16 @@ async function _showPlayerProfileModal(player, onDone) {
   });
 }
 
+// ─── Season helper ────────────────────────────────────────────────────────────
+
+function _getAdminSid(sortedSeasons) {
+  const stored = localStorage.getItem(ADMIN_SEASON_KEY);
+  if (stored && sortedSeasons.find(([sid]) => sid === stored)) return stored;
+  const sid = sortedSeasons[0]?.[0] || '';
+  if (sid) localStorage.setItem(ADMIN_SEASON_KEY, sid);
+  return sid;
+}
+
 // ─── Leagues ──────────────────────────────────────────────────────────────────
 
 async function renderLeagues(el) {
@@ -526,7 +538,7 @@ async function renderLeagues(el) {
   const sortedSeasons = Object.entries(seasons)
     .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
 
-  const viewSid = (sortedSeasons[0] && sortedSeasons[0][0]) || '';
+  const viewSid = _getAdminSid(sortedSeasons);
 
   el.innerHTML = `
     <div class="section-header">
@@ -594,6 +606,7 @@ async function renderLeagues(el) {
   const leagueSeasonSel = el.querySelector('#league-season-select');
   if (leagueSeasonSel) {
     leagueSeasonSel.addEventListener('change', e => {
+      localStorage.setItem(ADMIN_SEASON_KEY, e.target.value);
       el.querySelectorAll('[data-season-panel]').forEach(p => {
         p.style.display = p.dataset.seasonPanel === e.target.value ? '' : 'none';
       });
@@ -1265,7 +1278,7 @@ async function renderMatches(el) {
   }
 
   // Filter state
-  let activeSid    = sortedSeasons[0][0];
+  let activeSid    = _getAdminSid(sortedSeasons);
   let activeLid    = 'all';
   let activeStatus = 'all';
   let searchPlayer = '';
@@ -1414,6 +1427,7 @@ async function renderMatches(el) {
   // Wire filter controls
   el.querySelector('#filter-season').addEventListener('change', async e => {
     activeSid = e.target.value;
+    localStorage.setItem(ADMIN_SEASON_KEY, activeSid);
     activeLid = 'all';
     el.querySelector('#match-list').innerHTML = '<div class="admin-loading"><div class="spinner"></div></div>';
     await loadMatches();
@@ -1691,7 +1705,7 @@ async function renderBracketAdmin(el) {
 
   if (!sortedSeasons.length) { el.innerHTML = '<div class="admin-empty">No tournaments.</div>'; return; }
 
-  let activeSid = sortedSeasons[0][0];
+  let activeSid = _getAdminSid(sortedSeasons);
   let activeLid = null; // null = all leagues
 
   async function loadAndRender() {

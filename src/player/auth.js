@@ -955,27 +955,13 @@ const LEVEL_OPTIONS = [
 async function showSelfAssessment(container, uid, onAuthenticated) {
   _detachListener();
 
-  let step = 1;
   let selectedLevel = null;
-  let selectedLeague = null;
-  let leagues = [];
-
-  // Try to load available leagues for Q2
-  try {
-    const defaultSeason = await dbGet(dbRef('config/defaultSeason'));
-    if (defaultSeason) {
-      const leaguesObj = await dbGet(dbRef('seasons/' + defaultSeason + '/leagues'));
-      if (leaguesObj) {
-        leagues = Object.entries(leaguesObj).map(([lid, l]) => ({ lid, name: l.name || lid, tier: l.tier || '' }));
-      }
-    }
-  } catch { /* leagues unavailable — skip Q2 */ }
 
   function renderStep1() {
     container.innerHTML = `
       <div class="screen" style="gap:0;">
         <div style="padding-top:24px;margin-bottom:4px;">
-          <div class="step-indicator">Step 1 of ${leagues.length ? 2 : 1}</div>
+          <div class="step-indicator">Step 1 of 1</div>
         </div>
         <div style="margin-bottom:24px;">
           <h1 class="t-h2" style="margin-bottom:8px;">How would you rate<br>your tennis level?</h1>
@@ -993,7 +979,7 @@ async function showSelfAssessment(container, uid, onAuthenticated) {
         </div>
         <div style="padding:20px 0 16px;">
           <button class="btn btn-primary" id="btn-next" ${!selectedLevel ? 'disabled' : ''}>
-            ${leagues.length ? 'Next' : 'Continue'}
+            Continue
           </button>
         </div>
       </div>
@@ -1012,58 +998,6 @@ async function showSelfAssessment(container, uid, onAuthenticated) {
 
     container.querySelector('#btn-next').addEventListener('click', () => {
       if (!selectedLevel) return;
-      if (leagues.length) {
-        step = 2;
-        renderStep2();
-      } else {
-        submitAssessment();
-      }
-    });
-  }
-
-  function renderStep2() {
-    container.innerHTML = `
-      <div class="screen" style="gap:0;">
-        <div style="padding-top:24px;margin-bottom:4px;">
-          <div class="step-indicator">Step 2 of 2</div>
-        </div>
-        <div style="margin-bottom:24px;">
-          <h1 class="t-h2" style="margin-bottom:8px;">Which league feels right for you?</h1>
-          <div class="badge badge-muted" style="font-size:11px;">Suggestion only — admin assigns</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;flex:1;">
-          ${leagues.map(lg => `
-            <div class="tap-card${selectedLeague === lg.lid ? ' selected' : ''}" data-lid="${escHtml(lg.lid)}">
-              <div class="tap-card-body">
-                <div class="tap-card-title">${escHtml(lg.name)}</div>
-                ${lg.tier ? `<div class="tap-card-sub">${escHtml(lg.tier)}</div>` : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-        <div style="padding:20px 0 16px;display:flex;flex-direction:column;gap:10px;">
-          <button class="btn btn-primary" id="btn-submit" ${!selectedLeague ? 'disabled' : ''}>Continue</button>
-          <button class="btn btn-ghost" id="btn-skip">Skip this question</button>
-        </div>
-      </div>
-    `;
-
-    container.querySelectorAll('.tap-card').forEach(card => {
-      card.addEventListener('click', () => {
-        selectedLeague = card.dataset.lid;
-        container.querySelectorAll('.tap-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        container.querySelector('#btn-submit').disabled = false;
-      });
-    });
-
-    container.querySelector('#btn-submit').addEventListener('click', () => {
-      if (!selectedLeague) return;
-      submitAssessment();
-    });
-
-    container.querySelector('#btn-skip').addEventListener('click', () => {
-      selectedLeague = null;
       submitAssessment();
     });
   }
@@ -1078,7 +1012,6 @@ async function showSelfAssessment(container, uid, onAuthenticated) {
         ['players/' + uid + '/eloHistory']: [{ delta: 0, match: 'onboarding', ts: now }],
         ['players/' + uid + '/selfAssessment']: {
           level: selectedLevel,
-          suggestedLeague: selectedLeague || null,
           completedAt: now,
         },
       });
