@@ -1,274 +1,190 @@
 
-> atp-greenwich@1.4.2 test:e2e
+> atp-greenwich@1.4.5 test:e2e
 > playwright test
 
 
 Running 152 tests using 1 worker
 
-  ✓    1 e2e/admin.spec.js:22:3 › Flow A1 — Admin Login › A1-01 shows password form with no saved creds (264ms)
-  ✓    2 e2e/admin.spec.js:28:3 › Flow A1 — Admin Login › A1-02 wrong password shows inline error (528ms)
-  ✓    3 e2e/admin.spec.js:36:3 › Flow A1 — Admin Login › A1-03 correct password enters the admin shell (264ms)
-  ✓    4 e2e/admin.spec.js:44:3 › Flow A1 — Admin Login › A1-04 Enter key submits the login form (223ms)
-  ✓    5 e2e/admin.spec.js:67:3 › Flow A2 — Admin Shell › A2-01 sidebar has all six nav sections (278ms)
-  ✓    6 e2e/admin.spec.js:74:3 › Flow A2 — Admin Shell › A2-02 sidebar has "← Player App" back link (254ms)
-  ✓    7 e2e/admin.spec.js:79:3 › Flow A2 — Admin Shell › A2-03 sidebar shows a version label (247ms)
-  ✓    8 e2e/admin.spec.js:85:3 › Flow A2 — Admin Shell › A2-04 sign-out button visible in sidebar (250ms)
-  ✓    9 e2e/admin.spec.js:90:3 › Flow A2 — Admin Shell › A2-05 Players section loads by default (234ms)
-  ✓   10 e2e/admin.spec.js:110:3 › Flow A3 — Matches Section › A3-01 filter bar has season, league, status, and player inputs (352ms)
-  ✓   11 e2e/admin.spec.js:117:3 › Flow A3 — Matches Section › A3-02 seeded match cards are visible (302ms)
-  ✓   12 e2e/admin.spec.js:121:3 › Flow A3 — Matches Section › A3-03 status select has Confirmed option (297ms)
-  ✓   13 e2e/admin.spec.js:127:3 › Flow A3 — Matches Section › A3-04 filtering by "Open" hides confirmed cards (308ms)
-  ✓   14 e2e/admin.spec.js:136:3 › Flow A3 — Matches Section › A3-05 clicking a match card opens the edit modal (323ms)
+  ✓    1 e2e/admin.spec.js:22:3 › Flow A1 — Admin Login › A1-01 shows password form with no saved creds (247ms)
+  ✓    2 e2e/admin.spec.js:28:3 › Flow A1 — Admin Login › A1-02 wrong password shows inline error (518ms)
+  ✓    3 e2e/admin.spec.js:36:3 › Flow A1 — Admin Login › A1-03 correct password enters the admin shell (253ms)
+  ✓    4 e2e/admin.spec.js:44:3 › Flow A1 — Admin Login › A1-04 Enter key submits the login form (197ms)
+  ✓    5 e2e/admin.spec.js:67:3 › Flow A2 — Admin Shell › A2-01 sidebar has all six nav sections (295ms)
+  ✓    6 e2e/admin.spec.js:74:3 › Flow A2 — Admin Shell › A2-02 sidebar has "← Player App" back link (247ms)
+  ✓    7 e2e/admin.spec.js:79:3 › Flow A2 — Admin Shell › A2-03 sidebar shows a version label (242ms)
+  ✓    8 e2e/admin.spec.js:85:3 › Flow A2 — Admin Shell › A2-04 sign-out button visible in sidebar (241ms)
+  ✓    9 e2e/admin.spec.js:90:3 › Flow A2 — Admin Shell › A2-05 Players section loads by default (237ms)
+  ✓   10 e2e/admin.spec.js:110:3 › Flow A3 — Matches Section › A3-01 filter bar has season, league, status, and player inputs (396ms)
+  ✓   11 e2e/admin.spec.js:117:3 › Flow A3 — Matches Section › A3-02 seeded match cards are visible (315ms)
+  ✓   12 e2e/admin.spec.js:121:3 › Flow A3 — Matches Section › A3-03 status select has Confirmed option (287ms)
+  ✓   13 e2e/admin.spec.js:127:3 › Flow A3 — Matches Section › A3-04 filtering by "Open" hides confirmed cards (342ms)
+  ✓   14 e2e/admin.spec.js:136:3 › Flow A3 — Matches Section › A3-05 clicking a match card opens the edit modal (339ms)
   ✓   15 e2e/admin.spec.js:143:3 › Flow A3 — Matches Section › A3-06 edit modal contains set rows, winner select, and add-set button (342ms)
-  ✓   16 e2e/admin.spec.js:152:3 › Flow A3 — Matches Section › A3-07 cancel button closes the edit modal (378ms)
-  ✓   17 e2e/admin.spec.js:160:3 › Flow A3 — Matches Section › A3-08 "+ Add Set" adds a new set row to the modal (370ms)
-  ✓   18 e2e/admin.spec.js:186:3 › Flow A4 — Leagues Section › A4-01 leagues section shows the seeded league name (336ms)
-  ✓   19 e2e/admin.spec.js:190:3 › Flow A4 — Leagues Section › A4-02 Release Fixtures button visible when group stage is pending (324ms)
-  ✓   20 e2e/admin.spec.js:196:3 › Flow A4 — Leagues Section › A4-03 clicking Release Fixtures opens a modal — not a native confirm (342ms)
-  ✓   21 e2e/admin.spec.js:205:3 › Flow A4 — Leagues Section › A4-04 modal shows "recommended" label next to qualify points (360ms)
-  ✓   22 e2e/admin.spec.js:212:3 › Flow A4 — Leagues Section › A4-05 fixture-count preview updates when matches-per-player changes (389ms)
-  ✓   23 e2e/admin.spec.js:223:3 › Flow A4 — Leagues Section › A4-06 Cancel closes the Release Fixtures modal (372ms)
+  ✓   16 e2e/admin.spec.js:152:3 › Flow A3 — Matches Section › A3-07 cancel button closes the edit modal (381ms)
+  ✓   17 e2e/admin.spec.js:160:3 › Flow A3 — Matches Section › A3-08 "+ Add Set" adds a new set row to the modal (354ms)
+  ✓   18 e2e/admin.spec.js:186:3 › Flow A4 — Leagues Section › A4-01 leagues section shows the seeded league name (308ms)
+  ✓   19 e2e/admin.spec.js:190:3 › Flow A4 — Leagues Section › A4-02 Release Fixtures button visible when group stage is pending (287ms)
+  ✓   20 e2e/admin.spec.js:196:3 › Flow A4 — Leagues Section › A4-03 clicking Release Fixtures opens a modal — not a native confirm (326ms)
+  ✓   21 e2e/admin.spec.js:205:3 › Flow A4 — Leagues Section › A4-04 modal shows "recommended" label next to qualify points (398ms)
+  ✓   22 e2e/admin.spec.js:212:3 › Flow A4 — Leagues Section › A4-05 fixture-count preview updates when matches-per-player changes (372ms)
+  ✓   23 e2e/admin.spec.js:223:3 › Flow A4 — Leagues Section › A4-06 Cancel closes the Release Fixtures modal (370ms)
   ✓   24 e2e/admin.spec.js:247:3 › Flow A5 — Bracket Section › A5-01 bracket section loads with league tab buttons (315ms)
-  ✓   25 e2e/admin.spec.js:252:3 › Flow A5 — Bracket Section › A5-02 qualified-players table has W, P, GD columns (320ms)
-  ✓   26 e2e/admin.spec.js:260:3 › Flow A5 — Bracket Section › A5-03 Pts column appears when group stage is active (621ms)
-  ✓   27 e2e/admin.spec.js:281:3 › Flow A5 — Bracket Section › A5-04 clicking a player row opens the player profile modal (397ms)
-  ✓   28 e2e/admin.spec.js:298:3 › Flow A6 — Settings Version › A6-01 Settings does not show the old hardcoded v0.06 (301ms)
-  ✓   29 e2e/admin.spec.js:302:3 › Flow A6 — Settings Version › A6-02 Settings shows the current semver (v1.x.x) (259ms)
-  ✘   30 e2e/app-shell.spec.js:11:3 › Flow 4 — App Shell & Profile Tab › F4-01 DEV badge visible in top bar (7.2s)
-  ✓   31 e2e/app-shell.spec.js:15:3 › Flow 4 — App Shell & Profile Tab › F4-02 Feed tab: loads without a Coming-in-Phase placeholder (409ms)
-  ✓   32 e2e/app-shell.spec.js:20:3 › Flow 4 — App Shell & Profile Tab › F4-02 Matches tab: loads without a Coming-in-Phase placeholder (312ms)
-  ✓   33 e2e/app-shell.spec.js:25:3 › Flow 4 — App Shell & Profile Tab › F4-02 Standings tab: loads without a Coming-in-Phase placeholder (316ms)
-  ✓   34 e2e/app-shell.spec.js:30:3 › Flow 4 — App Shell & Profile Tab › F4-02 Bracket tab: Phase 6 live — no Coming-in-Phase placeholder (297ms)
-  ✓   35 e2e/app-shell.spec.js:35:3 › Flow 4 — App Shell & Profile Tab › F4-03 Profile tab: name, alias, ELO, and buttons present (314ms)
-  ✓   36 e2e/app-shell.spec.js:44:3 › Flow 4 — App Shell & Profile Tab › F4-03 Profile tab: stats card present, Phase 4 placeholder gone (303ms)
-  ✓   37 e2e/avatar.spec.js:30:3 › Flow 5 — Change Avatar › F5-01 modal opens with all picker controls (358ms)
-  ✓   38 e2e/avatar.spec.js:37:3 › Flow 5 — Change Avatar › F5-01 all three style tabs are present (333ms)
-  ✓   39 e2e/avatar.spec.js:45:3 › Flow 5 — Change Avatar › F5-02 Adventurer renders as img with explicit px dimensions — no top-left clipping (866ms)
-  ✓   40 e2e/avatar.spec.js:52:3 › Flow 5 — Change Avatar › F5-03 Big Smile renders as img with explicit px dimensions (869ms)
-  ✓   41 e2e/avatar.spec.js:58:3 › Flow 5 — Change Avatar › F5-03 Pixel Art renders as img with explicit px dimensions (853ms)
+  ✓   25 e2e/admin.spec.js:252:3 › Flow A5 — Bracket Section › A5-02 qualified-players table has W, P, GD columns (310ms)
+  ✓   26 e2e/admin.spec.js:260:3 › Flow A5 — Bracket Section › A5-03 Pts column appears when group stage is active (637ms)
+  ✓   27 e2e/admin.spec.js:281:3 › Flow A5 — Bracket Section › A5-04 clicking a player row opens the player profile modal (415ms)
+  ✓   28 e2e/admin.spec.js:298:3 › Flow A6 — Settings Version › A6-01 Settings does not show the old hardcoded v0.06 (290ms)
+  ✓   29 e2e/admin.spec.js:302:3 › Flow A6 — Settings Version › A6-02 Settings shows the current semver (v1.x.x) (290ms)
+  ✓   30 e2e/app-shell.spec.js:11:3 › Flow 4 — App Shell & Profile Tab › F4-01 DEV badge visible in version footer (243ms)
+  ✓   31 e2e/app-shell.spec.js:15:3 › Flow 4 — App Shell & Profile Tab › F4-02 Feed tab: loads without a Coming-in-Phase placeholder (295ms)
+  ✓   32 e2e/app-shell.spec.js:20:3 › Flow 4 — App Shell & Profile Tab › F4-02 Matches tab: loads without a Coming-in-Phase placeholder (287ms)
+  ✓   33 e2e/app-shell.spec.js:25:3 › Flow 4 — App Shell & Profile Tab › F4-02 Standings tab: loads without a Coming-in-Phase placeholder (340ms)
+  ✓   34 e2e/app-shell.spec.js:30:3 › Flow 4 — App Shell & Profile Tab › F4-02 Bracket tab: Phase 6 live — no Coming-in-Phase placeholder (288ms)
+  ✓   35 e2e/app-shell.spec.js:35:3 › Flow 4 — App Shell & Profile Tab › F4-03 Profile tab: name, alias, ELO, and buttons present (307ms)
+  ✓   36 e2e/app-shell.spec.js:44:3 › Flow 4 — App Shell & Profile Tab › F4-03 Profile tab: stats card present, Phase 4 placeholder gone (366ms)
+  ✓   37 e2e/avatar.spec.js:30:3 › Flow 5 — Change Avatar › F5-01 modal opens with all picker controls (335ms)
+  ✓   38 e2e/avatar.spec.js:37:3 › Flow 5 — Change Avatar › F5-01 all three style tabs are present (331ms)
+  ✓   39 e2e/avatar.spec.js:45:3 › Flow 5 — Change Avatar › F5-02 Adventurer renders as img with explicit px dimensions — no top-left clipping (881ms)
+  ✓   40 e2e/avatar.spec.js:52:3 › Flow 5 — Change Avatar › F5-03 Big Smile renders as img with explicit px dimensions (836ms)
+  ✓   41 e2e/avatar.spec.js:58:3 › Flow 5 — Change Avatar › F5-03 Pixel Art renders as img with explicit px dimensions (856ms)
   ✓   42 e2e/avatar.spec.js:64:3 › Flow 5 — Change Avatar › F5-01 Shuffle changes the preview content (935ms)
-  ✓   43 e2e/avatar.spec.js:72:3 › Flow 5 — Change Avatar › F5-08 clicking outside overlay closes modal (369ms)
-  ✓   44 e2e/avatar.spec.js:78:3 › Flow 5 — Change Avatar › F5-09 clicking X button closes modal (706ms)
-  ✓   45 e2e/avatar.spec.js:83:3 › Flow 5 — Change Avatar › F5-04 confirming avatar closes modal (769ms)
-  ✓   46 e2e/avatar.spec.js:90:3 › Flow 5 — Change Avatar › F5-10 hair and skin color swatches are visible (349ms)
-  ✓   47 e2e/avatar.spec.js:98:3 › Flow 5 — Change Avatar › F5-11 selecting a hair color swatch updates the preview (944ms)
-  ✓   48 e2e/avatar.spec.js:107:3 › Flow 5 — Change Avatar › F5-12 style switch resets color swatches to Auto (894ms)
-  ✓   49 e2e/bracket.spec.js:27:3 › Flow 10 — Bracket Tab (Phase 6) › P6-01 tab loads without Coming-in-Phase placeholder (289ms)
+  ✓   43 e2e/avatar.spec.js:72:3 › Flow 5 — Change Avatar › F5-08 clicking outside overlay closes modal (353ms)
+  ✓   44 e2e/avatar.spec.js:78:3 › Flow 5 — Change Avatar › F5-09 clicking X button closes modal (705ms)
+  ✓   45 e2e/avatar.spec.js:83:3 › Flow 5 — Change Avatar › F5-04 confirming avatar closes modal (768ms)
+  ✓   46 e2e/avatar.spec.js:90:3 › Flow 5 — Change Avatar › F5-10 hair and skin color swatches are visible (341ms)
+  ✓   47 e2e/avatar.spec.js:98:3 › Flow 5 — Change Avatar › F5-11 selecting a hair color swatch updates the preview (992ms)
+  ✓   48 e2e/avatar.spec.js:107:3 › Flow 5 — Change Avatar › F5-12 style switch resets color swatches to Auto (913ms)
+  ✓   49 e2e/bracket.spec.js:27:3 › Flow 10 — Bracket Tab (Phase 6) › P6-01 tab loads without Coming-in-Phase placeholder (287ms)
   ✓   50 e2e/bracket.spec.js:31:3 › Flow 10 — Bracket Tab (Phase 6) › P6-01 shows Group Stage Coming Soon when no fixtures released (318ms)
-  ✓   51 e2e/bracket.spec.js:36:3 › Flow 10 — Bracket Tab (Phase 6) › P6-01 shows league badge (290ms)
-  ✓   52 e2e/bracket.spec.js:40:3 › Flow 10 — Bracket Tab (Phase 6) › P6-02 shows group points tracker when groupStageConfig is active (449ms)
-  ✓   53 e2e/bracket.spec.js:62:3 › Flow 10 — Bracket Tab (Phase 6) › P6-02 current player shows "You" label and group pts (446ms)
-  ✓   54 e2e/bracket.spec.js:80:3 › Flow 10 — Bracket Tab (Phase 6) › P6-08 no crash when switching away and back to bracket tab (393ms)
-  ✓   55 e2e/change-alias.spec.js:27:3 › Flow 14 — Change Alias › CA-01 profile tab shows edit alias button (293ms)
-  ✓   56 e2e/change-alias.spec.js:31:3 › Flow 14 — Change Alias › CA-02 clicking edit alias opens modal with text input (315ms)
-  ✓   57 e2e/change-alias.spec.js:37:3 › Flow 14 — Change Alias › CA-03 modal input is pre-filled with current alias and available alias enables Save (954ms)
-  ✓   58 e2e/change-alias.spec.js:50:3 › Flow 14 — Change Alias › CA-04 taken alias shows error hint and keeps Save disabled (948ms)
+  ✓   51 e2e/bracket.spec.js:36:3 › Flow 10 — Bracket Tab (Phase 6) › P6-01 shows league badge (277ms)
+  ✓   52 e2e/bracket.spec.js:40:3 › Flow 10 — Bracket Tab (Phase 6) › P6-02 shows group points tracker when groupStageConfig is active (438ms)
+  ✓   53 e2e/bracket.spec.js:62:3 › Flow 10 — Bracket Tab (Phase 6) › P6-02 current player shows "You" label and group pts (411ms)
+  ✓   54 e2e/bracket.spec.js:80:3 › Flow 10 — Bracket Tab (Phase 6) › P6-08 no crash when switching away and back to bracket tab (375ms)
+  ✓   55 e2e/change-alias.spec.js:27:3 › Flow 14 — Change Alias › CA-01 profile tab shows edit alias button (299ms)
+  ✓   56 e2e/change-alias.spec.js:31:3 › Flow 14 — Change Alias › CA-02 clicking edit alias opens modal with text input (328ms)
+  ✓   57 e2e/change-alias.spec.js:37:3 › Flow 14 — Change Alias › CA-03 modal input is pre-filled with current alias and available alias enables Save (956ms)
+  ✓   58 e2e/change-alias.spec.js:50:3 › Flow 14 — Change Alias › CA-04 taken alias shows error hint and keeps Save disabled (950ms)
   ✓   59 e2e/change-alias.spec.js:62:3 › Flow 14 — Change Alias › CA-05 saving a new alias updates the @ display in profile (1.0s)
-  ✓   60 e2e/feed.spec.js:28:3 › Flow 9 — Feed Tab › P5-01 shows league badge and result count (272ms)
-  ✓   61 e2e/feed.spec.js:33:3 › Flow 9 — Feed Tab › P5-02 seeded confirmed matches appear in the feed (289ms)
-  ✓   62 e2e/feed.spec.js:42:3 › Flow 9 — Feed Tab › P5-02 ELO deltas from seeded matches are shown (276ms)
-  ✓   63 e2e/feed.spec.js:51:3 › Flow 9 — Feed Tab › P5-03 match involving current player has an accent left border (284ms)
-  ✓   64 e2e/feed.spec.js:59:3 › Flow 9 — Feed Tab › P5-05 empty state shown when no league is found (414ms)
-  ✓   65 e2e/forgot-password.spec.js:14:3 › Flow 12 — Forgot Password › FP-01 login screen has Forgot password? button (247ms)
-  ✓   66 e2e/forgot-password.spec.js:18:3 › Flow 12 — Forgot Password › FP-02 forgot password screen shows email input and Send Reset Link button (284ms)
-  ✓   67 e2e/forgot-password.spec.js:24:3 › Flow 12 — Forgot Password › FP-03 entering non-existent email shows confirmation regardless (331ms)
-  ✓   68 e2e/forgot-password.spec.js:31:3 › Flow 12 — Forgot Password › FP-04 sending reset for real email creates a password_resets entry (344ms)
-  ✓   69 e2e/forgot-password.spec.js:44:3 › Flow 12 — Forgot Password › FP-05 valid reset token shows Set new password heading (331ms)
-  ✓   70 e2e/forgot-password.spec.js:58:3 › Flow 12 — Forgot Password › FP-06 expired reset token shows Link expired heading (328ms)
-  ✓   71 e2e/group-stage.spec.js:20:3 › Flow 14 — Group Match Features › F14-01 Group badge visible on group match card (376ms)
-  ✓   72 e2e/group-stage.spec.js:26:3 › Flow 14 — Group Match Features › F14-02 Play-by deadline badge visible on group match (366ms)
-  ✓   73 e2e/group-stage.spec.js:31:3 › Flow 14 — Group Match Features › F14-03 Forfeit button visible on unfinished group match (373ms)
-  ✓   74 e2e/group-stage.spec.js:36:3 › Flow 14 — Group Match Features › F14-04 Clicking forfeit opens modal with correct header (383ms)
-  ✓   75 e2e/group-stage.spec.js:43:3 › Flow 14 — Group Match Features › F14-05 Forfeit modal explains opponent and penalty (389ms)
-  ✓   76 e2e/group-stage.spec.js:51:3 › Flow 14 — Group Match Features › F14-06 Closing forfeit modal dismisses it without writing (766ms)
-  ✓   77 e2e/group-stage.spec.js:57:3 › Flow 14 — Group Match Features › F14-07 Confirming forfeit writes forfeited field to Firebase (814ms)
-  ✓   78 e2e/group-stage.spec.js:107:3 › Flow 15 — Group Stage Standings › F15-01 Group Stage badge visible when status is active (334ms)
-  ✓   79 e2e/group-stage.spec.js:111:3 › Flow 15 — Group Stage Standings › F15-02 "How scoring works" accordion visible (319ms)
-  ✓   80 e2e/group-stage.spec.js:115:3 › Flow 15 — Group Stage Standings › F15-03 Group points shown as "X pts" in standings rows (331ms)
-  ✓   81 e2e/group-stage.spec.js:122:3 › Flow 15 — Group Stage Standings › F15-04 Qualifying threshold mentioned in accordion (359ms)
-  ✓   82 e2e/group-stage.spec.js:130:3 › Flow 15 — Group Stage Standings › F15-05 Two players show 3 pts (devplayer + sofia qualify at qualifyPoints=3) (322ms)
-  ✓   83 e2e/group-stage.spec.js:138:3 › Flow 15 — Group Stage Standings › F15-06 Current player row shows "You" label in standings (308ms)
-  ✓   84 e2e/group-stage.spec.js:144:3 › Flow 15 — Group Stage Standings › F15-07 Rules accordion expands to show point values (351ms)
-  ✓   85 e2e/invite.spec.js:21:3 › Flow 2 — Invite Code Registration › F2-01/02 USED-9999 shows already-used error (239ms)
-  ✓   86 e2e/invite.spec.js:29:3 › Flow 2 — Invite Code Registration › F2-03/04 FAKE-0000 shows not-found error (243ms)
-  ✓   87 e2e/invite.spec.js:37:3 › Flow 2 — Invite Code Registration › F2-05/06 TEST-1234 validates successfully (258ms)
-  ✓   88 e2e/invite.spec.js:45:3 › Flow 2 — Invite Code Registration › F2-08 alias taken shows error and disables submit (883ms)
-  ✓   89 e2e/invite.spec.js:60:3 › Flow 2 — Invite Code Registration › F2-09 unique alias shows available (905ms)
-  ✓   90 e2e/invite.spec.js:70:3 › Flow 2 — Invite Code Registration › F2-10 email can be left blank (904ms)
-  ✓   91 e2e/invite.spec.js:84:3 › Flow 2 — Invite Code Registration › F2-13 mismatching passwords shows error (298ms)
+  ✓   60 e2e/feed.spec.js:28:3 › Flow 9 — Feed Tab › P5-01 shows league badge and result count (283ms)
+  ✓   61 e2e/feed.spec.js:33:3 › Flow 9 — Feed Tab › P5-02 seeded confirmed matches appear in the feed (275ms)
+  ✓   62 e2e/feed.spec.js:42:3 › Flow 9 — Feed Tab › P5-02 ELO deltas from seeded matches are shown (291ms)
+  ✓   63 e2e/feed.spec.js:51:3 › Flow 9 — Feed Tab › P5-03 match involving current player has an accent left border (285ms)
+  ✓   64 e2e/feed.spec.js:59:3 › Flow 9 — Feed Tab › P5-05 empty state shown when no league is found (399ms)
+  ✓   65 e2e/forgot-password.spec.js:14:3 › Flow 12 — Forgot Password › FP-01 login screen has Forgot password? button (235ms)
+  ✓   66 e2e/forgot-password.spec.js:18:3 › Flow 12 — Forgot Password › FP-02 forgot password screen shows email input and Send Reset Link button (273ms)
+  ✓   67 e2e/forgot-password.spec.js:24:3 › Flow 12 — Forgot Password › FP-03 entering non-existent email shows confirmation regardless (327ms)
+  ✓   68 e2e/forgot-password.spec.js:31:3 › Flow 12 — Forgot Password › FP-04 sending reset for real email creates a password_resets entry (376ms)
+  ✓   69 e2e/forgot-password.spec.js:44:3 › Flow 12 — Forgot Password › FP-05 valid reset token shows Set new password heading (335ms)
+  ✓   70 e2e/forgot-password.spec.js:58:3 › Flow 12 — Forgot Password › FP-06 expired reset token shows Link expired heading (329ms)
+  ✓   71 e2e/group-stage.spec.js:20:3 › Flow 14 — Group Match Features › F14-01 Group badge visible on group match card (365ms)
+  ✓   72 e2e/group-stage.spec.js:26:3 › Flow 14 — Group Match Features › F14-02 Play-by deadline badge visible on group match (369ms)
+  ✓   73 e2e/group-stage.spec.js:31:3 › Flow 14 — Group Match Features › F14-03 Forfeit button visible on unfinished group match (370ms)
+  ✓   74 e2e/group-stage.spec.js:36:3 › Flow 14 — Group Match Features › F14-04 Clicking forfeit opens modal with correct header (416ms)
+  ✓   75 e2e/group-stage.spec.js:43:3 › Flow 14 — Group Match Features › F14-05 Forfeit modal explains opponent and penalty (394ms)
+  ✓   76 e2e/group-stage.spec.js:51:3 › Flow 14 — Group Match Features › F14-06 Closing forfeit modal dismisses it without writing (765ms)
+  ✓   77 e2e/group-stage.spec.js:57:3 › Flow 14 — Group Match Features › F14-07 Confirming forfeit writes forfeited field to Firebase (827ms)
+  ✓   78 e2e/group-stage.spec.js:107:3 › Flow 15 — Group Stage Standings › F15-01 Group Stage badge visible when status is active (331ms)
+  ✓   79 e2e/group-stage.spec.js:111:3 › Flow 15 — Group Stage Standings › F15-02 "How scoring works" accordion visible (339ms)
+  ✓   80 e2e/group-stage.spec.js:115:3 › Flow 15 — Group Stage Standings › F15-03 Group points shown as "X pts" in standings rows (341ms)
+  ✓   81 e2e/group-stage.spec.js:122:3 › Flow 15 — Group Stage Standings › F15-04 Qualifying threshold mentioned in accordion (333ms)
+  ✓   82 e2e/group-stage.spec.js:130:3 › Flow 15 — Group Stage Standings › F15-05 Two players show 3 pts (devplayer + sofia qualify at qualifyPoints=3) (325ms)
+  ✓   83 e2e/group-stage.spec.js:138:3 › Flow 15 — Group Stage Standings › F15-06 Current player row shows "You" label in standings (325ms)
+  ✓   84 e2e/group-stage.spec.js:144:3 › Flow 15 — Group Stage Standings › F15-07 Rules accordion expands to show point values (350ms)
+  ✓   85 e2e/invite.spec.js:21:3 › Flow 2 — Invite Code Registration › F2-01/02 USED-9999 shows already-used error (240ms)
+  ✓   86 e2e/invite.spec.js:29:3 › Flow 2 — Invite Code Registration › F2-03/04 FAKE-0000 shows not-found error (263ms)
+  ✓   87 e2e/invite.spec.js:37:3 › Flow 2 — Invite Code Registration › F2-05/06 TEST-1234 validates successfully (254ms)
+  ✓   88 e2e/invite.spec.js:45:3 › Flow 2 — Invite Code Registration › F2-08 alias taken shows error and disables submit (885ms)
+  ✓   89 e2e/invite.spec.js:60:3 › Flow 2 — Invite Code Registration › F2-09 unique alias shows available (890ms)
+  ✓   90 e2e/invite.spec.js:70:3 › Flow 2 — Invite Code Registration › F2-10 email can be left blank (902ms)
+  ✓   91 e2e/invite.spec.js:84:3 › Flow 2 — Invite Code Registration › F2-13 mismatching passwords shows error (297ms)
   ✓   92 e2e/invite.spec.js:94:3 › Flow 2 — Invite Code Registration › F2-15/16/17 full registration with invite code marks code used and creates player (1.0s)
-  ✓   93 e2e/league-switch.spec.js:34:3 › Flow 12 — League Switch › F12-01 league switch pill visible when player is in 2+ leagues (287ms)
-  ✘   94 e2e/league-switch.spec.js:38:3 › Flow 12 — League Switch › F12-01 league switch pill hidden when player is in only 1 league (9.4s)
-  ✓   95 e2e/league-switch.spec.js:48:3 › Flow 12 — League Switch › F12-02 clicking pill opens Switch League sheet with both leagues (339ms)
-  ✓   96 e2e/league-switch.spec.js:56:3 › Flow 12 — League Switch › F12-03 currently active league shown as selected in picker (325ms)
-  ✓   97 e2e/league-switch.spec.js:64:3 › Flow 12 — League Switch › F12-04 clicking a league in picker closes sheet and updates pill (663ms)
-  ✓   98 e2e/league-switch.spec.js:74:3 › Flow 12 — League Switch › F12-04 switching league persists atp_active_lid in localStorage (710ms)
+  ✓   93 e2e/league-switch.spec.js:34:3 › Flow 12 — League Switch › F12-01 league switch pill visible when player is in 2+ leagues (278ms)
+  ✓   94 e2e/league-switch.spec.js:38:3 › Flow 12 — League Switch › F12-01 league switch pill visible when player is in only 1 league (2.4s)
+  ✓   95 e2e/league-switch.spec.js:48:3 › Flow 12 — League Switch › F12-02 clicking pill opens Switch League sheet with both leagues (302ms)
+  ✓   96 e2e/league-switch.spec.js:56:3 › Flow 12 — League Switch › F12-03 currently active league shown as selected in picker (302ms)
+  ✓   97 e2e/league-switch.spec.js:64:3 › Flow 12 — League Switch › F12-04 clicking a league in picker closes sheet and updates pill (689ms)
+  ✓   98 e2e/league-switch.spec.js:74:3 › Flow 12 — League Switch › F12-04 switching league persists atp_active_lid in localStorage (668ms)
   ✓   99 e2e/league-switch.spec.js:82:3 › Flow 12 — League Switch › F12-05 tabs reload after league switch — shows new league badge (707ms)
-  ✓  100 e2e/league-switch.spec.js:91:3 › Flow 12 — League Switch › F12-06 clicking outside picker sheet closes it without switching (334ms)
-  ✓  101 e2e/login.spec.js:36:3 › Flow 3 — Login › F3-02 login screen shows email and password fields (313ms)
-  ✓  102 e2e/login.spec.js:42:3 › Flow 3 — Login › F3-03 correct email + correct password → app shell loads (378ms)
-  ✓  103 e2e/login.spec.js:50:3 › Flow 3 — Login › F3-04 correct email + wrong password → error shown (367ms)
-  ✓  104 e2e/login.spec.js:58:3 › Flow 3 — Login › F3-05 unknown email → error shown (372ms)
-  ✓  105 e2e/login.spec.js:66:3 › Flow 3 — Login › F3-06 login with alias (not email) + correct password → app shell loads (371ms)
-  ✓  106 e2e/login.spec.js:73:3 › Flow 3 — Login › F3-07 pressing Enter in password field submits the form (352ms)
-  ✓  107 e2e/matches.spec.js:13:3 › Flow 7 — Matches Tab › P3-01 league badge and all three sections visible (376ms)
-  ✓  108 e2e/matches.spec.js:20:3 › Flow 7 — Matches Tab › P3-01 Needs your action has 2 cards (378ms)
-  ✓  109 e2e/matches.spec.js:27:3 › Flow 7 — Matches Tab › P3-03 Confirm Result modal opens with agree + dispute buttons (375ms)
+  ✓  100 e2e/league-switch.spec.js:91:3 › Flow 12 — League Switch › F12-06 clicking outside picker sheet closes it without switching (335ms)
+  ✓  101 e2e/login.spec.js:36:3 › Flow 3 — Login › F3-02 login screen shows email and password fields (299ms)
+  ✓  102 e2e/login.spec.js:42:3 › Flow 3 — Login › F3-03 correct email + correct password → app shell loads (376ms)
+  ✓  103 e2e/login.spec.js:50:3 › Flow 3 — Login › F3-04 correct email + wrong password → error shown (375ms)
+  ✓  104 e2e/login.spec.js:58:3 › Flow 3 — Login › F3-05 unknown email → error shown (357ms)
+  ✓  105 e2e/login.spec.js:66:3 › Flow 3 — Login › F3-06 login with alias (not email) + correct password → app shell loads (374ms)
+  ✓  106 e2e/login.spec.js:73:3 › Flow 3 — Login › F3-07 pressing Enter in password field submits the form (361ms)
+  ✓  107 e2e/matches.spec.js:13:3 › Flow 7 — Matches Tab › P3-01 league badge and all three sections visible (371ms)
+  ✓  108 e2e/matches.spec.js:20:3 › Flow 7 — Matches Tab › P3-01 Needs your action has 2 cards (350ms)
+  ✓  109 e2e/matches.spec.js:27:3 › Flow 7 — Matches Tab › P3-03 Confirm Result modal opens with agree + dispute buttons (393ms)
   ✓  110 e2e/matches.spec.js:35:3 › Flow 7 — Matches Tab › P3-04 Disputing a result resets match to Scheduled (1.1s)
-  ✓  111 e2e/matches.spec.js:49:3 › Flow 7 — Matches Tab › P3-05 Enter Result modal has set inputs and submit disabled (359ms)
-  ✓  112 e2e/matches.spec.js:59:3 › Flow 7 — Matches Tab › P3-06 Submit Result requires scores + photo to enable button (397ms)
+  ✓  111 e2e/matches.spec.js:49:3 › Flow 7 — Matches Tab › P3-05 Enter Result modal has set inputs and submit disabled (364ms)
+  ✓  112 e2e/matches.spec.js:59:3 › Flow 7 — Matches Tab › P3-06 Submit Result requires scores + photo to enable button (395ms)
   ✓  113 e2e/matches.spec.js:86:3 › Flow 7 — Matches Tab › P3-07 Upload Photo modal has skip button (381ms)
-  ✓  114 e2e/matches.spec.js:94:3 › Flow 7 — Matches Tab › P3-08 Skipping photo confirms the match (786ms)
-  ✓  115 e2e/matches.spec.js:104:3 › Flow 7 — Matches Tab › P3-09 Propose Match modal lists opponents (388ms)
-  ✓  116 e2e/matches.spec.js:111:3 › Flow 7 — Matches Tab › P3-10 opponent at 2/2 cap is not selectable (391ms)
-  ✓  117 e2e/matches.spec.js:126:3 › Flow 7 — Matches Tab › P3-11 proposing a new match adds it to In progress (828ms)
-  ✓  118 e2e/matches.spec.js:139:3 › Flow 7 — Matches Tab › P3-12 switching tabs and back re-renders without errors (400ms)
-  ✓  119 e2e/pro10.spec.js:27:3 › Flow 11 — Pro10 Match Format › P11-01 propose modal shows Vs Opponent and Open Challenge mode tabs (339ms)
-  ✓  120 e2e/pro10.spec.js:35:3 › Flow 11 — Pro10 Match Format › P11-02 switching to Open Challenge mode shows post challenge button (711ms)
-  ✓  121 e2e/pro10.spec.js:43:3 › Flow 11 — Pro10 Match Format › P11-03 enter result modal for pro10 match shows Score (0 – 10) and not Set scores (508ms)
-  ✓  122 e2e/pro10.spec.js:70:3 › Flow 11 — Pro10 Match Format › P11-04 enter result modal for BO3 match shows Set scores and not Score (0 – 10) (506ms)
-  ✓  123 e2e/reactions.spec.js:27:3 › Flow 13 — Feed Reactions › R-01 feed cards have 👏 reaction buttons (277ms)
-  ✓  124 e2e/reactions.spec.js:31:3 › Flow 13 — Feed Reactions › R-02 clicking 👏 sets count to 1 (470ms)
-  ✓  125 e2e/reactions.spec.js:43:3 › Flow 13 — Feed Reactions › R-03 clicking 👏 twice removes the reaction (count clears) (546ms)
-  ✓  126 e2e/reactions.spec.js:57:3 › Flow 13 — Feed Reactions › R-04 switching from 👏 to 🔥 moves the reaction (only one per user per match) (541ms)
-  ✓  127 e2e/registration.spec.js:30:3 › Flow 1 — Request Access Registration › F1-02 registration form renders with all fields (273ms)
-  ✓  128 e2e/registration.spec.js:39:3 › Flow 1 — Request Access Registration › F1-05/06/07 password strength bar reflects weak / medium / strong (301ms)
-  ✓  129 e2e/registration.spec.js:55:3 › Flow 1 — Request Access Registration › F1-08 mismatching passwords shows error immediately (255ms)
-  ✓  130 e2e/registration.spec.js:61:3 › Flow 1 — Request Access Registration › F1-09 matching passwords clears the error (264ms)
-  ✓  131 e2e/registration.spec.js:68:3 › Flow 1 — Request Access Registration › F1-10 alias taken shows error and keeps submit disabled (881ms)
-  ✓  132 e2e/registration.spec.js:86:3 › Flow 1 — Request Access Registration › F1-11 unique alias shows available (861ms)
-  ✓  133 e2e/registration.spec.js:92:3 › Flow 1 — Request Access Registration › F1-12 submitting creates waiting approval screen (941ms)
-  ✓  134 e2e/registration.spec.js:108:3 › Flow 1 — Request Access Registration › F1-13 admin status change to onboarding auto-advances waiting screen (947ms)
+  ✓  114 e2e/matches.spec.js:94:3 › Flow 7 — Matches Tab › P3-08 Skipping photo confirms the match (758ms)
+  ✓  115 e2e/matches.spec.js:104:3 › Flow 7 — Matches Tab › P3-09 Propose Match modal lists opponents (369ms)
+  ✓  116 e2e/matches.spec.js:111:3 › Flow 7 — Matches Tab › P3-10 opponent at 2/2 cap is not selectable (374ms)
+  ✓  117 e2e/matches.spec.js:126:3 › Flow 7 — Matches Tab › P3-11 proposing a new match adds it to In progress (815ms)
+  ✓  118 e2e/matches.spec.js:139:3 › Flow 7 — Matches Tab › P3-12 switching tabs and back re-renders without errors (382ms)
+  ✓  119 e2e/pro10.spec.js:27:3 › Flow 11 — Pro10 Match Format › P11-01 propose modal shows Vs Opponent and Open Challenge mode tabs (348ms)
+  ✓  120 e2e/pro10.spec.js:35:3 › Flow 11 — Pro10 Match Format › P11-02 switching to Open Challenge mode shows post challenge button (703ms)
+  ✓  121 e2e/pro10.spec.js:43:3 › Flow 11 — Pro10 Match Format › P11-03 enter result modal for pro10 match shows Score (0 – 10) and not Set scores (496ms)
+  ✓  122 e2e/pro10.spec.js:70:3 › Flow 11 — Pro10 Match Format › P11-04 enter result modal for BO3 match shows Set scores and not Score (0 – 10) (475ms)
+  ✓  123 e2e/reactions.spec.js:27:3 › Flow 13 — Feed Reactions › R-01 feed cards have 👏 reaction buttons (262ms)
+  ✓  124 e2e/reactions.spec.js:31:3 › Flow 13 — Feed Reactions › R-02 clicking 👏 sets count to 1 (474ms)
+  ✓  125 e2e/reactions.spec.js:43:3 › Flow 13 — Feed Reactions › R-03 clicking 👏 twice removes the reaction (count clears) (536ms)
+  ✓  126 e2e/reactions.spec.js:57:3 › Flow 13 — Feed Reactions › R-04 switching from 👏 to 🔥 moves the reaction (only one per user per match) (528ms)
+  ✓  127 e2e/registration.spec.js:30:3 › Flow 1 — Request Access Registration › F1-02 registration form renders with all fields (259ms)
+  ✓  128 e2e/registration.spec.js:39:3 › Flow 1 — Request Access Registration › F1-05/06/07 password strength bar reflects weak / medium / strong (268ms)
+  ✓  129 e2e/registration.spec.js:55:3 › Flow 1 — Request Access Registration › F1-08 mismatching passwords shows error immediately (279ms)
+  ✓  130 e2e/registration.spec.js:61:3 › Flow 1 — Request Access Registration › F1-09 matching passwords clears the error (256ms)
+  ✓  131 e2e/registration.spec.js:68:3 › Flow 1 — Request Access Registration › F1-10 alias taken shows error and keeps submit disabled (889ms)
+  ✓  132 e2e/registration.spec.js:86:3 › Flow 1 — Request Access Registration › F1-11 unique alias shows available (838ms)
+  ✓  133 e2e/registration.spec.js:92:3 › Flow 1 — Request Access Registration › F1-12 submitting creates waiting approval screen (948ms)
+  ✓  134 e2e/registration.spec.js:108:3 › Flow 1 — Request Access Registration › F1-13 admin status change to onboarding auto-advances waiting screen (949ms)
   ✓  135 e2e/registration.spec.js:130:3 › Flow 1 — Request Access Registration › F1-14/15 self assessment shows exactly 2 level cards (1.0s)
-  ✓  136 e2e/session.spec.js:22:3 › Flow 6 — Session Persistence & Sign Out › F6-01 app shell reloads without re-login when credentials are valid (341ms)
-  ✓  137 e2e/session.spec.js:34:3 › Flow 6 — Session Persistence & Sign Out › F6-02 tampered pwdHash redirects to landing screen (299ms)
-  ✓  138 e2e/session.spec.js:49:3 › Flow 6 — Session Persistence & Sign Out › F6-03 Sign Out button triggers a confirmation dialog (335ms)
-  ✓  139 e2e/session.spec.js:64:3 › Flow 6 — Session Persistence & Sign Out › F6-04 confirming sign out clears localStorage and shows landing screen (389ms)
-  ✘  140 e2e/standings.spec.js:27:3 › Flow 8 — Standings Tab › P4-01 standings renders league table with player rows (335ms)
-  ✓  141 e2e/standings.spec.js:32:3 › Flow 8 — Standings Tab › P4-02 league table shows A Division badge and inline stats (384ms)
-  ✓  142 e2e/standings.spec.js:39:3 › Flow 8 — Standings Tab › P4-02 league table has a row for all 4 seeded players (366ms)
-  ✓  143 e2e/standings.spec.js:48:3 › Flow 8 — Standings Tab › P4-03 ELO rankings sorted descending: sofia > devplayer > marco > brunoc (375ms)
-  ✓  144 e2e/standings.spec.js:56:3 › Flow 8 — Standings Tab › P4-03 current player row shows "You" label (330ms)
-  ✘  145 e2e/version.spec.js:14:3 › Flow 13 — App Version & What's New › F13-01 version label visible in player top bar (7.2s)
-  ✓  146 e2e/version.spec.js:20:3 › Flow 13 — App Version & What's New › F13-02 version label visible on login screen (295ms)
-  ✓  147 e2e/version.spec.js:27:3 › Flow 13 — App Version & What's New › F13-03 first install: no What's New modal, seen_version silently set (1.3s)
-  ✓  148 e2e/version.spec.js:39:3 › Flow 13 — App Version & What's New › F13-04 upgrading from older version shows What's New modal (1.1s)
-  ✓  149 e2e/version.spec.js:48:3 › Flow 13 — App Version & What's New › F13-04 What's New modal shows version badge (1.0s)
+  ✓  136 e2e/session.spec.js:22:3 › Flow 6 — Session Persistence & Sign Out › F6-01 app shell reloads without re-login when credentials are valid (322ms)
+  ✓  137 e2e/session.spec.js:34:3 › Flow 6 — Session Persistence & Sign Out › F6-02 tampered pwdHash redirects to landing screen (353ms)
+  ✓  138 e2e/session.spec.js:49:3 › Flow 6 — Session Persistence & Sign Out › F6-03 Sign Out button triggers a confirmation dialog (319ms)
+  ✓  139 e2e/session.spec.js:64:3 › Flow 6 — Session Persistence & Sign Out › F6-04 confirming sign out clears localStorage and shows landing screen (409ms)
+  ✓  140 e2e/standings.spec.js:27:3 › Flow 8 — Standings Tab › P4-01 standings renders league table with player rows (310ms)
+  ✓  141 e2e/standings.spec.js:33:3 › Flow 8 — Standings Tab › P4-02 league table shows inline stats and ELO values (301ms)
+  ✓  142 e2e/standings.spec.js:39:3 › Flow 8 — Standings Tab › P4-02 league table has a row for all 4 seeded players (304ms)
+  ✓  143 e2e/standings.spec.js:48:3 › Flow 8 — Standings Tab › P4-03 ELO rankings sorted descending: sofia > devplayer > marco > brunoc (333ms)
+  ✓  144 e2e/standings.spec.js:56:3 › Flow 8 — Standings Tab › P4-03 current player row shows "You" label (297ms)
+  ✓  145 e2e/version.spec.js:14:3 › Flow 13 — App Version & What's New › F13-01 version label visible in player version footer (222ms)
+  ✓  146 e2e/version.spec.js:20:3 › Flow 13 — App Version & What's New › F13-02 version label visible on login screen (202ms)
+  ✓  147 e2e/version.spec.js:27:3 › Flow 13 — App Version & What's New › F13-03 first install: no What's New modal, seen_version silently set (1.2s)
+  ✘  148 e2e/version.spec.js:39:3 › Flow 13 — App Version & What's New › F13-04 upgrading from older version shows What's New modal (1.0s)
+  ✓  149 e2e/version.spec.js:48:3 › Flow 13 — App Version & What's New › F13-04 What's New modal shows version badge (1.1s)
   ✓  150 e2e/version.spec.js:56:3 › Flow 13 — App Version & What's New › F13-05 Got it button closes modal and updates seen_version (1.1s)
   ✓  151 e2e/version.spec.js:68:3 › Flow 13 — App Version & What's New › F13-06 no modal when seen_version matches current version (2.3s)
   ✓  152 e2e/version.spec.js:85:3 › Flow 13 — App Version & What's New › F13-07 clicking outside What's New modal closes it (1.1s)
 
 
-  1) e2e/app-shell.spec.js:11:3 › Flow 4 — App Shell & Profile Tab › F4-01 DEV badge visible in top bar 
+  1) e2e/version.spec.js:39:3 › Flow 13 — App Version & What's New › F13-04 upgrading from older version shows What's New modal 
 
     Error: expect(locator).toBeVisible() failed
 
-    Locator: getByText('DEV')
+    Locator: locator('.modal-sheet').getByText('What\'s New')
     Expected: visible
-    Timeout: 7000ms
-    Error: element(s) not found
+    Error: strict mode violation: locator('.modal-sheet').getByText('What\'s New') resolved to 2 elements:
+        1) <div>What's New</div> aka getByText('What\'s New', { exact: true })
+        2) <li>What's New: admin-only updates no longer appear i…</li> aka getByText('What\'s New: admin-only')
 
     Call log:
       - Expect "toBeVisible" with timeout 7000ms
-      - waiting for getByText('DEV')
+      - waiting for locator('.modal-sheet').getByText('What\'s New')
 
 
-      10 |
-      11 |   test('F4-01 DEV badge visible in top bar', async ({ page }) => {
-    > 12 |     await expect(page.getByText('DEV')).toBeVisible();
-         |                                         ^
-      13 |   });
-      14 |
-      15 |   test('F4-02 Feed tab: loads without a Coming-in-Phase placeholder', async ({ page }) => {
-        at /home/runner/work/atp-greenwich/atp-greenwich/e2e/app-shell.spec.js:12:41
-
-    Error Context: test-results/app-shell-Flow-4-—-App-She-d7718-EV-badge-visible-in-top-bar/error-context.md
-
-  2) e2e/league-switch.spec.js:38:3 › Flow 12 — League Switch › F12-01 league switch pill hidden when player is in only 1 league 
-
-    Error: expect(locator).not.toBeVisible() failed
-
-    Locator:  locator('#league-switch-btn')
-    Expected: not visible
-    Received: visible
-    Timeout:  7000ms
-
-    Call log:
-      - Expect "not toBeVisible" with timeout 7000ms
-      - waiting for locator('#league-switch-btn')
-        18 × locator resolved to <button id="league-switch-btn">…</button>
-           - unexpected value "visible"
-
-
-      43 |     // Give it a moment to resolve — if still in 1 league, btn should not appear
-      44 |     await page.waitForTimeout(2000);
-    > 45 |     await expect(page.locator('#league-switch-btn')).not.toBeVisible();
-         |                                                          ^
+      43 |     // Modal fires after 600ms delay
+      44 |     await expect(page.locator('#btn-whats-new-close')).toBeVisible({ timeout: 3000 });
+    > 45 |     await expect(page.locator('.modal-sheet').getByText("What's New")).toBeVisible();
+         |                                                                        ^
       46 |   });
       47 |
-      48 |   test('F12-02 clicking pill opens Switch League sheet with both leagues', async ({ page }) => {
-        at /home/runner/work/atp-greenwich/atp-greenwich/e2e/league-switch.spec.js:45:58
+      48 |   test('F13-04 What\'s New modal shows version badge', async ({ page }) => {
+        at /home/runner/work/atp-greenwich/atp-greenwich/e2e/version.spec.js:45:72
 
-    Error Context: test-results/league-switch-Flow-12-—-Le-06582--player-is-in-only-1-league/error-context.md
+    Error Context: test-results/version-Flow-13-—-App-Vers-8b618-sion-shows-What-s-New-modal/error-context.md
 
-    Error Context: test-results/league-switch-Flow-12-—-Le-06582--player-is-in-only-1-league/error-context.md
-
-  3) e2e/standings.spec.js:27:3 › Flow 8 — Standings Tab › P4-01 standings renders league table with player rows 
-
-    Error: expect(locator).toBeVisible() failed
-
-    Locator: getByText('A Division')
-    Expected: visible
-    Error: strict mode violation: getByText('A Division') resolved to 2 elements:
-        1) <span>↵              A Division↵            </span> aka getByRole('button', { name: 'A Division' })
-        2) <span class="badge badge-teal">A Division</span> aka locator('#standings-mount').getByText('A Division')
-
-    Call log:
-      - Expect "toBeVisible" with timeout 7000ms
-      - waiting for getByText('A Division')
-
-
-      27 |   test('P4-01 standings renders league table with player rows', async ({ page }) => {
-      28 |     await expect(page.locator('#standings-mount')).toBeVisible({ timeout: 7000 });
-    > 29 |     await expect(page.getByText('A Division')).toBeVisible();
-         |                                                ^
-      30 |   });
-      31 |
-      32 |   test('P4-02 league table shows A Division badge and inline stats', async ({ page }) => {
-        at /home/runner/work/atp-greenwich/atp-greenwich/e2e/standings.spec.js:29:48
-
-    Error Context: test-results/standings-Flow-8-—-Standin-4e5c7-ague-table-with-player-rows/error-context.md
-
-    Error Context: test-results/standings-Flow-8-—-Standin-4e5c7-ague-table-with-player-rows/error-context.md
-
-  4) e2e/version.spec.js:14:3 › Flow 13 — App Version & What's New › F13-01 version label visible in player top bar 
-
-    Error: expect(locator).toBeVisible() failed
-
-    Locator: locator('.top-bar').getByText(/^v\d+\.\d+\.\d+$/)
-    Expected: visible
-    Timeout: 7000ms
-    Error: element(s) not found
-
-    Call log:
-      - Expect "toBeVisible" with timeout 7000ms
-      - waiting for locator('.top-bar').getByText(/^v\d+\.\d+\.\d+$/)
-
-
-      15 |     await jumpToApp(page);
-      16 |     // Top bar shows "v1.2.0" (or current APP_VERSION)
-    > 17 |     await expect(page.locator('.top-bar').getByText(/^v\d+\.\d+\.\d+$/)).toBeVisible();
-         |                                                                          ^
-      18 |   });
-      19 |
-      20 |   test('F13-02 version label visible on login screen', async ({ page }) => {
-        at /home/runner/work/atp-greenwich/atp-greenwich/e2e/version.spec.js:17:74
-
-    Error Context: test-results/version-Flow-13-—-App-Vers-7672a-l-visible-in-player-top-bar/error-context.md
-
-  4 failed
-    e2e/app-shell.spec.js:11:3 › Flow 4 — App Shell & Profile Tab › F4-01 DEV badge visible in top bar 
-    e2e/league-switch.spec.js:38:3 › Flow 12 — League Switch › F12-01 league switch pill hidden when player is in only 1 league 
-    e2e/standings.spec.js:27:3 › Flow 8 — Standings Tab › P4-01 standings renders league table with player rows 
-    e2e/version.spec.js:14:3 › Flow 13 — App Version & What's New › F13-01 version label visible in player top bar 
-  148 passed (1.9m)
+  1 failed
+    e2e/version.spec.js:39:3 › Flow 13 — App Version & What's New › F13-04 upgrading from older version shows What's New modal 
+  151 passed (1.5m)
