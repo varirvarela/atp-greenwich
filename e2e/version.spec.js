@@ -42,7 +42,7 @@ test.describe('Flow 13 — App Version & What\'s New', () => {
     await jumpToApp(page);
     // Modal fires after 600ms delay
     await expect(page.locator('#btn-whats-new-close')).toBeVisible({ timeout: 3000 });
-    await expect(page.locator('.modal-sheet').getByText("What's New")).toBeVisible();
+    await expect(page.locator('.modal-sheet').getByText("What's New", { exact: true })).toBeVisible();
   });
 
   test('F13-04 What\'s New modal shows version badge', async ({ page }) => {

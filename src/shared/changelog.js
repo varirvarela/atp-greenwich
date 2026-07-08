@@ -16,7 +16,7 @@ export const CHANGELOG = [
       'Top-nav pills enlarged — full league and tournament names now show without abbreviation',
       'Bracket: BYE matches auto-advance correctly to the next round',
       'Profile: "En honor a Pepe" tribute section added at the bottom',
-      'What\'s New: admin-only updates no longer appear in the player notification',
+      'Admin updates now have a separate changelog — player notifications stay relevant',
     ],
     adminChanges: [
       'Admin: hamburger menu removed from mobile top bar — use the bottom nav to switch sections',
