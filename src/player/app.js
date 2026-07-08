@@ -90,8 +90,8 @@ export function showApp(container, player, creds, onSignOut) {
 
         <!-- Top bar: tournament + league pills only -->
         <div class="top-bar">
-          <div id="tournament-switcher-area"></div>
-          <div id="league-switcher-area"></div>
+          <div id="tournament-switcher-area" style="flex:1;min-width:0;"></div>
+          <div id="league-switcher-area" style="flex:1;min-width:0;"></div>
         </div>
 
         <!-- Tab content -->
@@ -216,11 +216,11 @@ export function showApp(container, player, creds, onSignOut) {
         const cur    = allLeagues.find(l => l.lid === curLid) || allLeagues[0];
         lArea.innerHTML = `
           <button id="league-switch-btn"
-            style="display:flex;align-items:center;gap:4px;background:var(--surface2);
-              border:1px solid var(--border);border-radius:20px;padding:3px 10px;
-              font-size:11px;font-weight:700;font-family:var(--font-mono);cursor:pointer;
-              color:var(--text);max-width:90px;letter-spacing:.3px;">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            style="display:flex;align-items:center;gap:5px;background:var(--surface2);
+              border:1px solid var(--border);border-radius:20px;padding:5px 12px;
+              font-size:13px;font-weight:700;cursor:pointer;
+              color:var(--text);width:100%;letter-spacing:.2px;">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left;">
               ${escHtml(cur.leagueName)}
             </span>
             ${allLeagues.length > 1 ? `
@@ -253,11 +253,11 @@ export function showApp(container, player, creds, onSignOut) {
       const cur    = playerSeasons.find(s => s.sid === curSid) || playerSeasons[0];
       tArea.innerHTML = `
         <button id="tournament-switch-btn"
-          style="display:flex;align-items:center;gap:4px;background:rgba(184,64,8,.1);
-            border:1px solid var(--ace);border-radius:20px;padding:3px 10px;
-            font-size:11px;font-weight:700;font-family:var(--font-mono);cursor:pointer;
-            color:var(--ace);max-width:100px;letter-spacing:.3px;">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          style="display:flex;align-items:center;gap:5px;background:rgba(184,64,8,.1);
+            border:1px solid var(--ace);border-radius:20px;padding:5px 12px;
+            font-size:13px;font-weight:700;cursor:pointer;
+            color:var(--ace);width:100%;letter-spacing:.2px;">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left;">
             ${escHtml(cur.name)}
           </span>
           ${playerSeasons.length > 1 ? `
@@ -654,6 +654,29 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
           Change Password
         </button>
       </div>
+
+      <!-- En honor a Pepe -->
+      <details style="margin-bottom:24px;border-radius:var(--radius);overflow:hidden;
+        border:1px solid var(--border);">
+        <summary style="background:var(--surface2);padding:10px 14px;font-size:13px;
+          font-weight:700;cursor:pointer;list-style:none;display:flex;align-items:center;
+          gap:8px;color:var(--text);">
+          <span>🎾</span>
+          <span>En honor a Pepe</span>
+        </summary>
+        <div style="background:var(--surface2);padding:14px;border-top:1px solid var(--border);
+          font-size:13px;color:var(--text2);line-height:1.7;">
+          <div id="pepe-img" style="width:100%;border-radius:8px;background:var(--surface);
+            border:1px dashed var(--border);padding:32px 0;text-align:center;
+            margin-bottom:14px;color:var(--text3);font-size:11px;">
+            imagen próximamente
+          </div>
+          <p style="margin:0 0 8px;font-weight:700;color:var(--text);">ATP — Amigos en el Tenis gracias a Pepe.</p>
+          <p style="margin:0 0 8px;">Pepe fue quien nos reunió a todos para jugar al tenis. Con su energía y entusiasmo inagotable, creó una liga amateur a pulmón que nos entretuvo por varias temporadas y forjó amistades duraderas.</p>
+          <p style="margin:0 0 8px;">No somos tenistas. Somos los <em>Salieris de Pepe</em>: convocados por su pasión, unidos por la cancha, y eternamente agradecidos por haber sido parte de algo que empezó con una simple invitación suya.</p>
+          <p style="margin:0;font-size:11px;color:var(--text3);">Este es el legado de Pepe.</p>
+        </div>
+      </details>
 
       <!-- Sign out -->
       <button class="btn btn-surface" id="btn-signout"

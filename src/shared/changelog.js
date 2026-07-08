@@ -4,11 +4,25 @@
 //   1. Add a new entry at the TOP of CHANGELOG (newest first).
 //   2. Set `version` to the new semver string (e.g. "1.3.0").
 //   3. Set `date` to today (YYYY-MM-DD).
-//   4. List every user-visible change in `changes[]` — one sentence each.
+//   4. List player-visible changes in `changes[]`; admin-only changes in `adminChanges[]`.
 //   5. Bump the `"version"` field in package.json to match.
-//   6. Deploy. Players will see a "What's New" modal on their next open.
+//   6. Deploy. Players see only `changes`; admins see both.
 
 export const CHANGELOG = [
+  {
+    version: '1.4.5',
+    date:    '2026-07-07',
+    changes: [
+      'Top-nav pills enlarged — full league and tournament names now show without abbreviation',
+      'Bracket: BYE matches auto-advance correctly to the next round',
+      'Profile: "En honor a Pepe" tribute section added at the bottom',
+      'What\'s New: admin-only updates no longer appear in the player notification',
+    ],
+    adminChanges: [
+      'Admin: hamburger menu removed from mobile top bar — use the bottom nav to switch sections',
+      'Admin Bracket: "Advance BYE" button fixes existing brackets where a BYE was blocking the next round',
+    ],
+  },
   {
     version: '1.4.4',
     date:    '2026-07-07',
@@ -23,6 +37,8 @@ export const CHANGELOG = [
       'Bracket: league badge removed from header (already in top-nav pill)',
       'Profile: "How ELO works" accordion shows formula + two worked examples',
       'Version footer fixed — always visible above the bottom navigation bar',
+    ],
+    adminChanges: [
       'Admin: "Back to Player App" now shows as a visible styled button on mobile',
       'Admin Players: clicking the player card opens the profile (no separate Profile button)',
       'Admin Players: Edit ELO and Reset Password available in the player profile modal; Change League removed',
@@ -166,9 +182,17 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-// Returns all changelog entries strictly newer than `sinceVersion`.
+// Returns changelog entries strictly newer than `sinceVersion`.
+// Pass `includeAdmin: true` to also include adminChanges in each entry's changes list.
 // If `sinceVersion` is null/undefined, returns nothing (first install).
-export function changesSince(sinceVersion) {
+export function changesSince(sinceVersion, { includeAdmin = false } = {}) {
   if (!sinceVersion) return [];
-  return CHANGELOG.filter(e => compareVersions(e.version, sinceVersion) > 0);
+  return CHANGELOG
+    .filter(e => compareVersions(e.version, sinceVersion) > 0)
+    .map(e => ({
+      ...e,
+      changes: includeAdmin
+        ? [...(e.changes || []), ...(e.adminChanges || [])]
+        : (e.changes || []),
+    }));
 }

@@ -166,9 +166,6 @@ function showAdminShell(app, adminCreds) {
       </aside>
       <main class="admin-main">
         <div class="admin-mobile-topbar">
-          <button class="admin-hamburger" id="btn-hamburger" aria-label="Open menu">
-            <span></span><span></span><span></span>
-          </button>
           <div style="font-family:var(--font-serif);font-weight:700;color:var(--ace);font-size:18px;">ATP</div>
           <a href="${import.meta.env.BASE_URL.replace('/admin/', '/')}"
             style="display:flex;align-items:center;gap:4px;padding:4px 10px;
@@ -194,14 +191,10 @@ function showAdminShell(app, adminCreds) {
 
   const sidebar  = app.querySelector('#admin-sidebar');
   const overlay  = app.querySelector('#sidebar-overlay');
-  const hamburger = app.querySelector('#btn-hamburger');
 
   function openSidebar()  { sidebar.classList.add('open');  overlay.classList.add('open'); }
   function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
 
-  hamburger.addEventListener('click', () => {
-    sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
-  });
   overlay.addEventListener('click', closeSidebar);
 
   app.querySelectorAll('.admin-nav-item').forEach(btn => {
@@ -1808,6 +1801,32 @@ async function renderBracketAdmin(el) {
         _showBracketResultModal(s, l, rk, mk, bracketData, players, loadAndRender);
       });
     });
+    div.querySelectorAll('[data-action="bye-advance"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { sid: s, lid: l, rk, mk } = btn.dataset;
+        const bracket = await dbGet(sRef(s, l, 'bracket'));
+        if (!bracket) return;
+        const m = bracket.rounds[rk]?.matches[mk];
+        if (!m) return;
+        const winner = m.playerA || m.playerB;
+        if (!winner) return;
+        const ri     = parseInt(rk.replace('r', ''), 10);
+        const mi     = parseInt(mk.replace('m', ''), 10);
+        const nextRk = 'r' + (ri + 1);
+        const nextMk = 'm' + Math.floor(mi / 2);
+        const side   = mi % 2 === 0 ? 'playerA' : 'playerB';
+        const updates = {
+          [`seasons/${s}/leagues/${l}/bracket/rounds/${rk}/matches/${mk}/winner`]: winner,
+          [`seasons/${s}/leagues/${l}/bracket/rounds/${rk}/matches/${mk}/score`]:  'BYE',
+        };
+        if (bracket.rounds[nextRk]?.matches[nextMk] !== undefined) {
+          updates[`seasons/${s}/leagues/${l}/bracket/rounds/${nextRk}/matches/${nextMk}/${side}`] = winner;
+        }
+        await dbMultiUpdate(updates);
+        toast('BYE advanced', 'success');
+        loadAndRender();
+      });
+    });
   }
 
   el.innerHTML = `
@@ -1854,7 +1873,7 @@ function _generateBracket(qualified, allPlayers) {
       score:   '',
     };
   }
-  // Odd player gets a bye to next round (simplified — just include them once)
+  // Odd player gets a bye
   if (n % 2 === 1) {
     roundMatches['m' + Math.floor(n / 2)] = {
       playerA: players[Math.floor(n / 2)],
@@ -1878,6 +1897,32 @@ function _generateBracket(qualified, allPlayers) {
     const roundName = matchCount === 1 ? 'Final' : matchCount === 2 ? 'Semifinals' : 'Quarterfinals';
     rounds['r' + roundIdx] = { name: roundName, matches: emptyMatches };
     roundIdx++;
+  }
+
+  // Propagate BYE winners through all rounds; auto-BYE any match left with one player and no source
+  for (const rk of Object.keys(rounds).sort()) {
+    const ri     = parseInt(rk.replace('r', ''), 10);
+    const nextRk = 'r' + (ri + 1);
+    if (!rounds[nextRk]) continue;
+    for (const mk of Object.keys(rounds[rk].matches)) {
+      const m = rounds[rk].matches[mk];
+      if (!m.winner) continue;
+      const mi     = parseInt(mk.replace('m', ''), 10);
+      const nextMk = 'm' + Math.floor(mi / 2);
+      const side   = mi % 2 === 0 ? 'playerA' : 'playerB';
+      if (rounds[nextRk].matches[nextMk] && !rounds[nextRk].matches[nextMk][side]) {
+        rounds[nextRk].matches[nextMk][side] = m.winner;
+      }
+    }
+    for (const mk of Object.keys(rounds[nextRk].matches)) {
+      const nm  = rounds[nextRk].matches[mk];
+      if (nm.winner) continue;
+      const nmi = parseInt(mk.replace('m', ''), 10);
+      const hasSrcA = ('m' + (nmi * 2))     in rounds[rk].matches;
+      const hasSrcB = ('m' + (nmi * 2 + 1)) in rounds[rk].matches;
+      if (nm.playerA && !nm.playerB && !hasSrcB) { nm.winner = nm.playerA; nm.score = 'BYE'; }
+      else if (!nm.playerA && nm.playerB && !hasSrcA) { nm.winner = nm.playerB; nm.score = 'BYE'; }
+    }
   }
 
   return { status: 'active', bracketSize: n, createdAt: Date.now(), rounds };
@@ -1972,6 +2017,12 @@ function _renderBracketAdminView(bracket, allPlayers, sid, lid) {
                 <button class="btn-admin btn-secondary" data-action="set-bracket-result"
                   data-sid="${sid}" data-lid="${lid}" data-rk="${rk}" data-mk="${mk}">
                   Set Result
+                </button>
+              ` : ''}
+              ${(m.playerA || m.playerB) && !(m.playerA && m.playerB) && !m.winner ? `
+                <button class="btn-admin btn-secondary" data-action="bye-advance"
+                  data-sid="${sid}" data-lid="${lid}" data-rk="${rk}" data-mk="${mk}">
+                  Advance BYE
                 </button>
               ` : ''}
             </div>

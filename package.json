@@ -1,6 +1,6 @@
 {
   "name": "atp-greenwich",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "ATP Greenwich — Amateur Tennis and Parrilla league app",
   "type": "module",
   "scripts": {
