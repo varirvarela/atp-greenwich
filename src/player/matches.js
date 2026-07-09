@@ -30,6 +30,13 @@ function _needsTiebreak(me, op) {
   return (me === 7 && op === 6) || (me === 6 && op === 7);
 }
 
+function _isValidTiebreak(me, op) {
+  if (isNaN(me) || isNaN(op) || me < 0 || op < 0) return false;
+  const hi = Math.max(me, op);
+  const lo = Math.min(me, op);
+  return hi >= 7 && hi - lo >= 2;
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export function renderMatchesTab(el, player, creds) {
@@ -138,12 +145,15 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
   };
   const filteredMine = mine.filter(m => statusFilter(m) && searchFilter(m));
 
-  const actionNeeded = filteredMine.filter(m => _needsMyAction(m, myUid));
-  const inProgress   = filteredMine.filter(m => !_needsMyAction(m, myUid) && m.status !== 'confirmed');
+  const isCanceled   = m => !!(m.forfeited) || m.status === 'cancelled' || m.status === 'canceled';
+
+  const actionNeeded = filteredMine.filter(m => _needsMyAction(m, myUid) && !isCanceled(m));
+  const inProgress   = filteredMine.filter(m => !_needsMyAction(m, myUid) && m.status !== 'confirmed' && !isCanceled(m));
   const completed    = filteredMine
     .filter(m => m.status === 'confirmed')
     .sort((a, b) => (b.confirmedAt || 0) - (a.confirmedAt || 0))
     .slice(0, 20);
+  const canceled     = filteredMine.filter(m => isCanceled(m));
 
   const hasActiveMatches = actionNeeded.length || inProgress.length;
 
@@ -191,6 +201,11 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
       ${completed.length ? `
         <div class="t-label t-muted" style="margin:20px 0 8px;">Recent results</div>
         ${completed.map(m => _matchCard(m, myUid, allPlayers)).join('')}
+      ` : ''}
+
+      ${canceled.length ? `
+        <div class="t-label t-muted" style="margin:20px 0 8px;">Canceled</div>
+        ${canceled.map(m => _canceledCard(m, myUid, allPlayers)).join('')}
       ` : ''}
     </div>
 
@@ -374,6 +389,57 @@ function _matchCard(match, myUid, allPlayers) {
           data-mid="${escHtml(match.mid)}"
           style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Forfeit</button>` : ''}
         ${mgmtBtns}
+      </div>
+    </div>
+  `;
+}
+
+function _canceledCard(match, myUid, allPlayers) {
+  const opUid  = match.playerA === myUid ? match.playerB : match.playerA;
+  const op     = opUid ? (allPlayers[opUid] || { name: 'Unknown', alias: opUid })
+                       : { name: 'Open', alias: 'Any challenger' };
+  const meData = allPlayers[myUid];
+  const isMeA  = match.playerA === myUid;
+
+  const meAv = meData?.avatarId ? avatarToSvg(meData.avatarId, 36) : _defaultAv(36);
+  const opAv = opUid && op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36);
+
+  const score = _formatScore(match.result, isMeA);
+
+  let statusBadge;
+  if (match.forfeited) {
+    const forfeitedByMe = match.forfeited === myUid;
+    const forfeitedByName = forfeitedByMe ? 'You' : escHtml(op.alias || op.name);
+    statusBadge = `<span class="badge badge-muted">${forfeitedByName} forfeited</span>`;
+  } else {
+    statusBadge = `<span class="badge badge-muted">Canceled</span>`;
+  }
+
+  const opDisplay = opUid
+    ? `<span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;text-align:right;">${escHtml(op.alias || op.name)}</span>`
+    : `<span class="t-small t-muted" style="font-style:italic;">Any challenger</span>`;
+
+  return `
+    <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;opacity:.65;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
+          ${meAv}
+          <span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
+            text-overflow:ellipsis;">You</span>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);
+          flex-shrink:0;text-align:center;min-width:48px;">
+          ${score || 'vs'}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;
+          justify-content:flex-end;">
+          ${opDisplay}
+          ${opAv}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        ${statusBadge}
       </div>
     </div>
   `;
@@ -754,15 +820,15 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         <div style="display:flex;align-items:center;gap:10px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text2);">
             <input type="checkbox" id="chk-incomplete" style="width:16px;height:16px;cursor:pointer;">
-            Resultado incompleto (walkover / lesión / abandono)
+            Incomplete result (walkover / injury / retirement)
           </label>
         </div>
         <div id="incomplete-winner-row" style="display:none;margin-top:10px;">
-          <div class="t-label t-muted" style="margin-bottom:8px;">¿Quién gana el partido?</div>
+          <div class="t-label t-muted" style="margin-bottom:8px;">Who wins the match?</div>
           <div style="display:flex;gap:8px;">
             <div class="tap-card" data-incomplete-winner="me"
               style="flex:1;text-align:center;padding:10px 8px;">
-              <div style="font-weight:700;font-size:13px;">Yo</div>
+              <div style="font-weight:700;font-size:13px;">Me</div>
             </div>
             <div class="tap-card" data-incomplete-winner="op"
               style="flex:1;text-align:center;padding:10px 8px;">
@@ -986,7 +1052,7 @@ function _wireSetRowEvents(overlay, num) {
       hintEl.id = `hint-set-${num}`;
       hintEl.setAttribute('data-hint-set', String(num));
       hintEl.style.cssText = 'font-size:11px;color:var(--ace3);margin:2px 0 6px 58px;display:none;';
-      hintEl.textContent = 'Marcador inválido · sets válidos: 6-x, 7-5, 7-6';
+      hintEl.textContent = 'Invalid score · valid sets: 6-x, 7-5, 7-6';
       row.insertAdjacentElement('afterend', hintEl);
     }
 
@@ -1018,6 +1084,31 @@ function _wireSetRowEvents(overlay, num) {
       }
     };
     row.querySelectorAll('[data-score]').forEach(input => input.addEventListener('input', updateTb));
+
+    // Wire tiebreak hint
+    const tbRow = row.querySelector(`[data-tb-row="${num}"]`);
+    if (tbRow) {
+      let tbHintEl = overlay.querySelector(`[data-hint-tb="${num}"]`);
+      if (!tbHintEl) {
+        tbHintEl = document.createElement('div');
+        tbHintEl.setAttribute('data-hint-tb', String(num));
+        tbHintEl.style.cssText = 'font-size:11px;color:var(--ace3);margin:2px 0 6px 58px;display:none;';
+        tbHintEl.textContent = 'Invalid tiebreak · must reach 7, win by 2 (e.g. 7-5, 10-8)';
+        tbRow.insertAdjacentElement('afterend', tbHintEl);
+      }
+      const updateTbHint = () => {
+        const meVal = tbRow.querySelector('[data-tb="me"]')?.value ?? '';
+        const opVal = tbRow.querySelector('[data-tb="op"]')?.value ?? '';
+        const tbMe  = parseInt(meVal, 10);
+        const tbOp  = parseInt(opVal, 10);
+        if (meVal !== '' && opVal !== '' && !_isValidTiebreak(tbMe, tbOp)) {
+          tbHintEl.style.display = '';
+        } else {
+          tbHintEl.style.display = 'none';
+        }
+      };
+      tbRow.querySelectorAll('[data-tb]').forEach(input => input.addEventListener('input', updateTbHint));
+    }
   }
 
   // Remove set button (3rd set only)
@@ -1148,7 +1239,7 @@ function _checkResultReady(overlay, isPro10, isAdjust) {
       if (tbRow.style.display !== 'none') {
         const v1 = parseInt(tbRow.querySelector('[data-tb="me"]')?.value ?? '', 10);
         const v2 = parseInt(tbRow.querySelector('[data-tb="op"]')?.value ?? '', 10);
-        if (isNaN(v1) || isNaN(v2)) tbReady = false;
+        if (isNaN(v1) || isNaN(v2) || !_isValidTiebreak(v1, v2)) tbReady = false;
       }
     });
   }

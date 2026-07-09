@@ -93,12 +93,12 @@ export function showApp(container, player, creds, onSignOut) {
         <div class="top-bar">
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
             <span style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
-              color:var(--text3);padding-left:4px;">Temporada</span>
+              color:var(--text3);padding-left:4px;">Season</span>
             <div id="tournament-switcher-area"></div>
           </div>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
             <span style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
-              color:var(--text3);padding-left:4px;">Liga</span>
+              color:var(--text3);padding-left:4px;">League</span>
             <div id="league-switcher-area"></div>
           </div>
         </div>
@@ -177,7 +177,15 @@ export function showApp(container, player, creds, onSignOut) {
   _setupInstallPrompt(container);
   _setupPushNotifications(creds.uid);
   _checkWhatsNew();
-  _checkWalkthrough();
+  _checkWalkthrough((tabId) => {
+    activeTab = tabId;
+    container.querySelectorAll('.nav-item').forEach(b => {
+      const isActive = b.dataset.tab === tabId;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-current', isActive ? 'page' : 'false');
+    });
+    renderTabContent(tabId);
+  });
 
   // Top-bar switchers: unified tournament + league init
   (async () => {
@@ -609,30 +617,26 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         <summary style="background:var(--surface2);padding:10px 12px;font-size:12px;
           font-weight:700;cursor:pointer;list-style:none;display:flex;
           justify-content:space-between;align-items:center;">
-          <span>Cómo funciona la liga</span>
+          <span>How the League Works</span>
           <span style="color:var(--text3);font-size:10px;">tap to expand</span>
         </summary>
-        <div style="background:var(--surface2);padding:10px 14px 16px;
-          border-top:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.65;">
-
-          <p style="margin:0 0 10px;font-weight:700;color:var(--text);">Fase de grupos</p>
-          <p style="margin:0 0 8px;">La temporada arranca con una fase de grupos. El administrador libera <strong>partidos programados</strong> (fixtures) — emparejamientos fijos con fecha límite para jugarse. Ganar o jugar suma puntos de grupo.</p>
-          <p style="margin:0 0 10px;">Cuando alcanzas los puntos requeridos, te clasificas para la fase eliminatoria.</p>
-
-          <p style="margin:0 0 6px;font-weight:700;color:var(--text);">Partidos de fixtures vs. ad hoc</p>
-          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
-            <div style="background:var(--surface);border-radius:6px;padding:8px 12px;
-              border-left:3px solid var(--ace);font-size:11px;">
-              <strong style="color:var(--text);">Programados (fixtures)</strong> — los crea el admin. Aparecen con una fecha límite y cuentan doble en la tabla de puntos de grupo.
-            </div>
-            <div style="background:var(--surface);border-radius:6px;padding:8px 12px;
-              border-left:3px solid var(--border);font-size:11px;">
-              <strong style="color:var(--text);">Ad hoc</strong> — cualquier jugador puede retar a otro desde la pestaña Partidos. Se juegan libremente y también suman puntos de grupo mientras la fase esté activa.
-            </div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px;font-size:13px;line-height:1.6;color:var(--text2);">
+          <div>
+            <strong style="color:var(--text);display:block;margin-bottom:4px;">Group phase</strong>
+            You are assigned to a league for the season. Your ranking is based on group stage points earned from match results.
           </div>
-
-          <p style="margin:0 0 6px;font-weight:700;color:var(--text);">Fase eliminatoria (bracket)</p>
-          <p style="margin:0;font-size:11px;">Los clasificados pasan a un cuadro eliminatorio directo. Se juegan cuartos, semis y final. El bracket aparece en la pestaña <strong>Bracket</strong> una vez que el admin lo genera.</p>
+          <div>
+            <strong style="color:var(--text);display:block;margin-bottom:4px;">Scheduled matches</strong>
+            The admin releases a set of fixtures with a play-by deadline. All matches — scheduled or ad-hoc — use the same scoring rules. The difference: if a scheduled match is not played before the deadline, both players receive a points penalty.
+          </div>
+          <div>
+            <strong style="color:var(--text);display:block;margin-bottom:4px;">Ad-hoc matches</strong>
+            You can challenge any player in your league at any time. These count toward your ELO and stats — but if an ad-hoc match is not played, there is no penalty.
+          </div>
+          <div>
+            <strong style="color:var(--text);display:block;margin-bottom:4px;">Knockout bracket</strong>
+            Once the group stage closes, the top-ranked players qualify for the elimination bracket. From there it is straight knockout.
+          </div>
         </div>
       </details>
 
@@ -1276,56 +1280,60 @@ const WALKTHROUGH_KEY = 'atp_walkthrough_done';
 
 const WALKTHROUGH_STEPS = [
   {
+    tabId: null,
     icon: '🎾',
-    title: 'Bienvenido a ATP Greenwich',
-    body: 'Esta guía rápida te explica cómo funciona la app. Puedes saltarla en cualquier momento.',
+    title: 'Welcome to ATP Greenwich',
+    body: 'This quick guide walks you through the app. You can skip it at any time.',
   },
   {
+    tabId: null,
     icon: '📅',
-    title: 'Temporada y Liga',
-    body: 'Los dos selectores de la barra superior te permiten cambiar de temporada y de liga. Selecciona la liga en la que juegas.',
+    title: 'Season & League',
+    body: 'The two selectors in the top bar let you switch between seasons and leagues. Make sure your league is selected.',
   },
   {
+    tabId: 'feed',
     icon: '📰',
     title: 'Feed',
-    body: 'El Feed muestra los resultados de los partidos recientes y la actividad del grupo. Puedes reaccionar con emojis a cada resultado.',
+    body: 'The Feed shows recent match results and group activity. React with emojis on each result.',
   },
   {
+    tabId: 'matches',
     icon: '🎯',
-    title: 'Partidos',
-    body: 'Aquí puedes retar a otros jugadores, aceptar retos, introducir resultados y consultar el historial completo.',
+    title: 'Matches',
+    body: 'Challenge other players, accept challenges, enter results, and view your full match history here.',
   },
   {
+    tabId: 'standings',
     icon: '🏆',
-    title: 'Clasificación',
-    body: 'Sigue tu posición en la fase de grupos y tu ELO. Toca cualquier jugador para ver sus estadísticas detalladas.',
+    title: 'Standings',
+    body: 'Track your position in the group stage and your ELO rating. Tap any player to see their detailed stats.',
   },
   {
+    tabId: 'bracket',
     icon: '🌟',
-    title: 'Bracket y Perfil',
-    body: 'Cuando la fase de grupos termine, el cuadro eliminatorio aparecerá en el Bracket. En Perfil puedes cambiar tu avatar y contraseña.',
+    title: 'Bracket & Profile',
+    body: 'Once the group stage ends, the knockout bracket opens here. In Profile you can change your avatar and password.',
   },
 ];
 
-function _checkWalkthrough() {
+function _checkWalkthrough(navigateFn) {
   if (localStorage.getItem(WALKTHROUGH_KEY)) return;
-  // Delay past What's New modal (600ms) to avoid overlapping
   setTimeout(() => {
     if (document.querySelector('.modal-overlay')) {
-      // What's New is open — wait for it to close
       const check = setInterval(() => {
         if (!document.querySelector('.modal-overlay')) {
           clearInterval(check);
-          setTimeout(() => _showWalkthroughModal(), 400);
+          setTimeout(() => _showWalkthroughModal(navigateFn), 400);
         }
       }, 300);
     } else {
-      _showWalkthroughModal();
+      _showWalkthroughModal(navigateFn);
     }
   }, 900);
 }
 
-function _showWalkthroughModal() {
+function _showWalkthroughModal(navigateFn) {
   let step = 0;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -1337,6 +1345,7 @@ function _showWalkthroughModal() {
 
   function render() {
     const s = WALKTHROUGH_STEPS[step];
+    if (s.tabId && typeof navigateFn === 'function') navigateFn(s.tabId);
     const isLast = step === WALKTHROUGH_STEPS.length - 1;
     const dots = WALKTHROUGH_STEPS.map((_, i) =>
       `<span style="width:6px;height:6px;border-radius:50%;display:inline-block;
@@ -1352,7 +1361,7 @@ function _showWalkthroughModal() {
           <div style="display:flex;gap:5px;align-items:center;">${dots}</div>
           <button id="btn-tour-dismiss" style="background:none;border:none;cursor:pointer;
             font-size:12px;color:var(--text3);padding:4px 0;text-decoration:underline;">
-            No volver a mostrar
+            Don't show again
           </button>
         </div>
 
@@ -1363,7 +1372,7 @@ function _showWalkthroughModal() {
         </div>
 
         <button class="btn btn-primary" id="btn-tour-next">
-          ${isLast ? '¡Listo!' : 'Siguiente →'}
+          ${isLast ? 'Done' : 'Next →'}
         </button>
       </div>
     `;

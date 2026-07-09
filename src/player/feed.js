@@ -121,7 +121,7 @@ function _renderFeed(el, allItems, myUid, allPlayers, myLeagues, sid, onGear) {
   const headerHtml = `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;">
       <span class="t-label t-muted">
-        ${allItems.length > 0 ? `${allItems.length} actividad` : ''}
+        ${allItems.length > 0 ? `${allItems.length} result${allItems.length !== 1 ? 's' : ''}` : ''}
       </span>
       <button id="feed-gear-btn" title="Feed settings"
         style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text3);
@@ -393,31 +393,31 @@ function _activityCard(item, allPlayers, myLeagues) {
       const league = myLeagues?.find(l => l.lid === item.lid);
       icon = '⚔️';
       avatarUid = item.challengerId;
-      title = `${playerName(item.challengerId)} lanzó un reto`;
+      title = `${playerName(item.challengerId)} sent a challenge`;
       sub = item.opponentId
         ? `vs ${playerName(item.opponentId)}${league ? ' · ' + escHtml(league.name) : ''}`
-        : `Reto abierto${league ? ' · ' + escHtml(league.name) : ''}`;
+        : `Open challenge${league ? ' · ' + escHtml(league.name) : ''}`;
       break;
     }
     case 'bracket_advance': {
       icon = '🏆';
       avatarUid = item.playerId;
-      title = `${playerName(item.playerId)} avanzó en el bracket`;
-      sub = item.round ? `Ronda ${escHtml(item.round)}` : '';
+      title = `${playerName(item.playerId)} advanced in the bracket`;
+      sub = item.round ? `Round ${escHtml(item.round)}` : '';
       break;
     }
     case 'fixtures_released': {
       const league = myLeagues?.find(l => l.lid === item.lid);
       icon = '📅';
       avatarUid = null;
-      title = 'Nuevos fixtures publicados';
-      sub = [league ? escHtml(league.name) : '', item.fixtureCount ? `${item.fixtureCount} partidos` : ''].filter(Boolean).join(' · ');
+      title = 'New fixtures published';
+      sub = [league ? escHtml(league.name) : '', item.fixtureCount ? `${item.fixtureCount} matches` : ''].filter(Boolean).join(' · ');
       break;
     }
     case 'new_player': {
       icon = '👋';
       avatarUid = item.uid;
-      title = `${playerName(item.uid)} se unió al torneo`;
+      title = `${playerName(item.uid)} joined the tournament`;
       sub = '';
       break;
     }
@@ -425,7 +425,7 @@ function _activityCard(item, allPlayers, myLeagues) {
       icon = '✏️';
       avatarUid = item.uid;
       const what = item.what === 'alias' ? 'alias' : 'avatar';
-      title = `${playerName(item.uid)} actualizó su ${what}`;
+      title = `${playerName(item.uid)} updated their ${what}`;
       sub = item.what === 'alias' && item.newVal ? `→ "${escHtml(item.newVal)}"` : '';
       break;
     }

@@ -10,6 +10,18 @@
 
 export const CHANGELOG = [
   {
+    version: '1.6.1',
+    date:    '2026-07-09',
+    changes: [
+      'All app text is now in English (Season / League labels, walkthrough, match modals, feed cards)',
+      'Walkthrough tour now navigates to the relevant screen as you step through it',
+      'League explainer accordion updated: correct English description of scheduled vs ad-hoc match rules',
+      'Match results: tiebreak scores are now validated — must reach 7 and win by 2',
+      'Matches: forfeited and canceled matches moved out of In Progress into a dedicated Canceled section',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.6.0',
     date:    '2026-07-09',
     changes: [

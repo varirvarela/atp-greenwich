@@ -21,7 +21,10 @@ export async function clearData(page) {
 
 // Jump straight into the app shell as Dev Player (bypasses login).
 // Waits for the bottom nav to appear before returning.
+// Suppresses walkthrough and What's New by default so they don't interfere with tests.
+// Walkthrough-specific tests must clear 'atp_walkthrough_done' themselves after calling this.
 export async function jumpToApp(page) {
+  await page.evaluate(() => localStorage.setItem('atp_walkthrough_done', '1'));
   await page.evaluate(() => window._atpTest.app());
   await page.locator('button[data-tab]').first().waitFor({ timeout: 5000 });
 }
