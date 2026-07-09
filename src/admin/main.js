@@ -10,6 +10,7 @@ import { buildLeagueTable, isQualified, getQualifiedPlayers, calculateGroupPoint
 import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
 import { showPlayerModal } from '@player/player-modal.js';
+import { writeActivity } from '@shared/activity.js';
 
 const ADMIN_CREDS_KEY  = 'atp_admin_creds';
 const ADMIN_SEASON_KEY = 'atp_admin_season';
@@ -903,6 +904,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
     if (dl) updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/deadline`] = dl;
 
     await dbMultiUpdate(updates);
+    writeActivity('fixtures_released', { sid, lid, fixtureCount: pairs.length });
     overlay.remove();
     toast(`${pairs.length} fixtures released`, 'success');
     onDone();
@@ -2091,6 +2093,7 @@ function _showBracketResultModal(sid, lid, rk, mk, bracket, allPlayers, onDone) 
       updates[`seasons/${sid}/leagues/${lid}/bracket/status`]   = 'complete';
     }
     await dbMultiUpdate(updates);
+    writeActivity('bracket_advance', { sid, lid, playerId: winner?.uid || (typeof winner === 'string' ? winner : null), round: rk });
     overlay.remove();
     toast('Result saved', 'success');
     onDone();

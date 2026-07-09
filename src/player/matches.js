@@ -8,6 +8,7 @@ import { escHtml } from '@shared/utils.js';
 import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
 import { showPlayerModal } from '@player/player-modal.js';
+import { writeActivity } from '@shared/activity.js';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -606,11 +607,12 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
     try {
       const val = overlay.querySelector('#propose-date-direct')?.value;
       const scheduledAt = val ? new Date(val).getTime() : null;
-      await dbPush(sRef(sid, lid, 'matches'), {
+      const _newMatchRef = await dbPush(sRef(sid, lid, 'matches'), {
         playerA: myUid, playerB: selectedUid, proposedBy: myUid,
         proposedAt: Date.now(), scheduledAt, status: 'scheduled',
         result: null, photoUrl: null, eloDeltas: null, confirmedAt: null,
       });
+      writeActivity('match_proposed', { sid, lid, mid: _newMatchRef.key, challengerId: myUid, opponentId: selectedUid || null });
       overlay.remove();
     } catch (err) {
       console.error('Propose error:', err);
@@ -625,11 +627,12 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
     try {
       const val = overlay.querySelector('#propose-date-open')?.value;
       const scheduledAt = val ? new Date(val).getTime() : null;
-      await dbPush(sRef(sid, lid, 'matches'), {
+      const _newMatchRef = await dbPush(sRef(sid, lid, 'matches'), {
         playerA: myUid, playerB: null, proposedBy: myUid,
         proposedAt: Date.now(), scheduledAt, status: 'open_challenge',
         result: null, photoUrl: null, eloDeltas: null, confirmedAt: null,
       });
+      writeActivity('match_proposed', { sid, lid, mid: _newMatchRef.key, challengerId: myUid, opponentId: null });
       overlay.remove();
     } catch (err) {
       console.error('Open challenge error:', err);
@@ -1461,6 +1464,7 @@ async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, al
     [`players/${uidA}/eloHistory`]: newHistA,
     [`players/${uidB}/eloHistory`]: newHistB,
   });
+  writeActivity('match_confirmed', { sid, lid, mid: match.mid, playerA: uidA, playerB: uidB, winnerId: resultData.winner });
 }
 
 async function _confirmMatchWithElo(match, photoUrl, sid, lid, allPlayers) {

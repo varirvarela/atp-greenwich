@@ -64,21 +64,36 @@ export function renderFeedTab(el, player, creds) {
     }
 
     const matchesByLeague = {};
+    let activityObj = {};
 
     function renderAll() {
       if (cancelled) return;
-      const included    = _getIncludedLids();
-      const allConfirmed = [];
+      const included = _getIncludedLids();
+
+      // Confirmed match items from matches node
+      const matchItems = [];
       for (const [lid, matchesObj] of Object.entries(matchesByLeague)) {
         if (!included.includes(lid)) continue;
         for (const [mid, m] of Object.entries(matchesObj)) {
           if (m.status === 'confirmed' && m.result) {
-            allConfirmed.push({ mid, lid, ...m });
+            matchItems.push({ type: 'match_confirmed', ts: m.confirmedAt || 0, mid, lid, ...m });
           }
         }
       }
-      allConfirmed.sort((a, b) => (b.confirmedAt || 0) - (a.confirmedAt || 0));
-      _renderFeed(el, allConfirmed, creds.uid, allPlayers || {}, allTournamentLeagues, sid, () => {
+
+      // Activity items from global activity node (skip match_confirmed — already in matchItems)
+      const actItems = Object.entries(activityObj)
+        .filter(([, item]) =>
+          item.type !== 'match_confirmed' &&
+          (!item.sid || item.sid === sid)
+        )
+        .map(([aid, item]) => ({ ...item, aid }));
+
+      const allItems = [...matchItems, ...actItems]
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+        .slice(0, 50);
+
+      _renderFeed(el, allItems, creds.uid, allPlayers || {}, allTournamentLeagues, sid, () => {
         _showFeedSettings(allTournamentLeagues, renderAll);
       });
     }
@@ -89,6 +104,12 @@ export function renderFeedTab(el, player, creds) {
         renderAll();
       }));
     }
+
+    // Global activity listener
+    unsubs.push(dbListen(dbRef('activity'), (obj) => {
+      activityObj = obj || {};
+      renderAll();
+    }));
   })().catch(() => _renderError(el));
 
   return () => { cancelled = true; unsubs.forEach(u => u()); };
@@ -96,13 +117,11 @@ export function renderFeedTab(el, player, creds) {
 
 // ─── Feed renderer ────────────────────────────────────────────────────────────
 
-function _renderFeed(el, confirmed, myUid, allPlayers, myLeagues, sid, onGear) {
-  confirmed = confirmed.slice(0, 50);
-
+function _renderFeed(el, allItems, myUid, allPlayers, myLeagues, sid, onGear) {
   const headerHtml = `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;">
       <span class="t-label t-muted">
-        ${confirmed.length > 0 ? `${confirmed.length} result${confirmed.length !== 1 ? 's' : ''}` : ''}
+        ${allItems.length > 0 ? `${allItems.length} actividad` : ''}
       </span>
       <button id="feed-gear-btn" title="Feed settings"
         style="background:none;border:none;cursor:pointer;padding:4px;color:var(--text3);
@@ -124,7 +143,7 @@ function _renderFeed(el, confirmed, myUid, allPlayers, myLeagues, sid, onGear) {
     </div>
   `;
 
-  if (confirmed.length === 0) {
+  if (allItems.length === 0) {
     el.innerHTML = `
       <div>
         ${headerHtml}
@@ -142,27 +161,33 @@ function _renderFeed(el, confirmed, myUid, allPlayers, myLeagues, sid, onGear) {
     return;
   }
 
+  const matchItems = allItems.filter(i => i.type === 'match_confirmed');
+
   el.innerHTML = `
     <div style="padding-bottom:24px;">
       ${headerHtml}
-      ${confirmed.map(m => _feedItem(m, myUid, allPlayers, myLeagues)).join('')}
+      ${allItems.map(item =>
+        item.type === 'match_confirmed'
+          ? _feedItem(item, myUid, allPlayers, myLeagues)
+          : _activityCard(item, allPlayers, myLeagues)
+      ).join('')}
     </div>
   `;
 
   el.querySelector('#feed-gear-btn')?.addEventListener('click', onGear);
 
-  // Reactions
-  confirmed.forEach(m => _wireReactions(el, m.mid, myUid, sid, m.lid));
+  // Reactions (match items only)
+  matchItems.forEach(m => _wireReactions(el, m.mid, myUid, sid, m.lid));
 
   // Player clicks
   el.querySelectorAll('[data-player-click]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      _showPlayerHistory(btn.dataset.playerClick, allPlayers, myUid, confirmed);
+      _showPlayerHistory(btn.dataset.playerClick, allPlayers, myUid, matchItems);
     });
   });
 
-  // Photo zoom
+  // Photo zoom (match items only)
   el.querySelectorAll('[data-photo-click]').forEach(img => {
     img.addEventListener('click', () => _showPhotoModal(img.dataset.photoClick));
   });
@@ -342,6 +367,91 @@ function _feedItem(match, myUid, allPlayers, leagueList) {
           </button>
         `).join('')}
       </div>
+    </div>
+  `;
+}
+
+// ─── Activity card (non-match events) ────────────────────────────────────────
+
+function _activityCard(item, allPlayers, myLeagues) {
+  function playerName(uid) {
+    if (!uid) return 'Unknown';
+    const p = allPlayers[uid] || {};
+    return escHtml(p.alias || p.username || uid);
+  }
+  function playerAv(uid, sz = 28) {
+    if (!uid) return _defaultAv(sz);
+    const p = allPlayers[uid] || {};
+    return p.avatarId ? avatarToSvg(p.avatarId, sz) : _defaultAv(sz);
+  }
+  const time = _timeAgo(item.ts);
+
+  let icon, title, sub, avatarUid;
+
+  switch (item.type) {
+    case 'match_proposed': {
+      const league = myLeagues?.find(l => l.lid === item.lid);
+      icon = '⚔️';
+      avatarUid = item.challengerId;
+      title = `${playerName(item.challengerId)} lanzó un reto`;
+      sub = item.opponentId
+        ? `vs ${playerName(item.opponentId)}${league ? ' · ' + escHtml(league.name) : ''}`
+        : `Reto abierto${league ? ' · ' + escHtml(league.name) : ''}`;
+      break;
+    }
+    case 'bracket_advance': {
+      icon = '🏆';
+      avatarUid = item.playerId;
+      title = `${playerName(item.playerId)} avanzó en el bracket`;
+      sub = item.round ? `Ronda ${escHtml(item.round)}` : '';
+      break;
+    }
+    case 'fixtures_released': {
+      const league = myLeagues?.find(l => l.lid === item.lid);
+      icon = '📅';
+      avatarUid = null;
+      title = 'Nuevos fixtures publicados';
+      sub = [league ? escHtml(league.name) : '', item.fixtureCount ? `${item.fixtureCount} partidos` : ''].filter(Boolean).join(' · ');
+      break;
+    }
+    case 'new_player': {
+      icon = '👋';
+      avatarUid = item.uid;
+      title = `${playerName(item.uid)} se unió al torneo`;
+      sub = '';
+      break;
+    }
+    case 'profile_change': {
+      icon = '✏️';
+      avatarUid = item.uid;
+      const what = item.what === 'alias' ? 'alias' : 'avatar';
+      title = `${playerName(item.uid)} actualizó su ${what}`;
+      sub = item.what === 'alias' && item.newVal ? `→ "${escHtml(item.newVal)}"` : '';
+      break;
+    }
+    default:
+      return '';
+  }
+
+  const avHtml = avatarUid
+    ? `<button data-player-click="${escHtml(avatarUid)}"
+        style="background:none;border:none;padding:0;cursor:pointer;flex-shrink:0;display:inline-flex;">
+        ${playerAv(avatarUid, 30)}
+      </button>`
+    : `<span style="font-size:22px;flex-shrink:0;">${icon}</span>`;
+
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--border);
+      border-radius:var(--radius);padding:11px 14px;margin-bottom:10px;
+      display:flex;align-items:center;gap:11px;">
+      ${avHtml}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:500;color:var(--text);line-height:1.4;">${title}</div>
+        ${sub ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${sub}</div>` : ''}
+        <div style="font-size:10px;color:var(--text3);margin-top:3px;
+          font-family:var(--font-mono);">${escHtml(time)}</div>
+      </div>
+      <div style="font-size:18px;flex-shrink:0;">${icon}</div>
     </div>
   `;
 }

@@ -10,6 +10,19 @@
 
 export const CHANGELOG = [
   {
+    version: '1.6.0',
+    date:    '2026-07-09',
+    changes: [
+      'Feed: profile changes (avatar or alias updates) now appear as activity cards',
+      'Feed: match challenges, bracket advancements, and new player arrivals appear in the feed',
+      'Feed: fixture releases announced in the feed when the admin publishes group stage matches',
+      'Feed: activity cards are mixed into the feed alongside confirmed match results',
+      'Bottom nav: red badge on Feed shows unread activity count since you last opened it',
+      'Bottom nav: red badge on Matches shows received challenges waiting for your response',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.5.0',
     date:    '2026-07-09',
     changes: [

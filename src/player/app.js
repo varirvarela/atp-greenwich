@@ -1,7 +1,8 @@
 // src/player/app.js — Main app shell: top bar, bottom nav, tab routing
 // Each tab renders a placeholder; real content arrives in later phases.
 
-import { dbGet, dbRef, dbMultiUpdate, pRef, sRef } from '@shared/firebase.js';
+import { dbGet, dbRef, dbListen, dbMultiUpdate, pRef, sRef } from '@shared/firebase.js';
+import { writeActivity } from '@shared/activity.js';
 import { escHtml, simpleHash } from '@shared/utils.js';
 import { eloTierLabel } from '@shared/elo.js';
 import { logTabView, logInstallPrompted, logInstallCompleted } from '@shared/analytics.js';
@@ -138,6 +139,12 @@ export function showApp(container, player, creds, onSignOut) {
         activeTab = newTab;
         tabEnterTime = Date.now();
 
+        // Clear feed badge when opening Feed tab
+        if (newTab === 'feed') {
+          localStorage.setItem(FEED_LAST_OPEN_KEY, String(Date.now()));
+          _updateNavBadge(container, 'feed', 0);
+        }
+
         // Update active state without full re-render
         container.querySelectorAll('.nav-item').forEach(b => {
           const isActive = b.dataset.tab === newTab;
@@ -252,6 +259,11 @@ export function showApp(container, player, creds, onSignOut) {
     }
 
     await _initLeaguePill();
+
+    // Start badge listeners now that we have the active season + all its leagues
+    const badgeSid     = localStorage.getItem('atp_active_season') || playerSeasons[0].sid;
+    const badgeLeagues = Object.keys(allSeasons[badgeSid]?.leagues || {});
+    _startBadgeListeners(container, creds.uid, badgeSid, badgeLeagues);
 
     // Tournament pill
     const tArea = container.querySelector('#tournament-switcher-area');
@@ -859,6 +871,7 @@ function showChangeAvatarModal(player, creds, onAvatarChanged) {
   renderAvatarPicker(mount, [], async (avatarId) => {
     try {
       await dbMultiUpdate({ [`players/${creds.uid}/avatarId`]: avatarId });
+      writeActivity('profile_change', { uid: creds.uid, what: 'avatar', newVal: avatarId });
       try {
         const raw = localStorage.getItem('atp_player_creds');
         if (raw) {
@@ -981,6 +994,7 @@ function showEditAliasModal(player, creds, onAliasChanged) {
         [`players/${creds.uid}/alias`]:    newAlias,
         [`players/${creds.uid}/username`]: newAlias,
       });
+      writeActivity('profile_change', { uid: creds.uid, what: 'alias', newVal: newAlias });
       closeModal();
       onAliasChanged(newAlias);
     } catch (err) {
@@ -1132,6 +1146,51 @@ async function _appCheckNoDuplicate(avatarId, excludeUid) {
     return true;
   } catch {
     return true; // fail open — never block the user on a network error
+  }
+}
+
+// ─── Nav badges ──────────────────────────────────────────────────────────────
+
+const FEED_LAST_OPEN_KEY = 'atp_feed_last_open';
+
+function _updateNavBadge(cont, tabId, count) {
+  const btn = cont.querySelector(`.nav-item[data-tab="${tabId}"]`);
+  if (!btn) return;
+  // If this tab is currently active, keep badge clear and refresh the timestamp
+  if (btn.classList.contains('active') && tabId === 'feed') {
+    localStorage.setItem(FEED_LAST_OPEN_KEY, String(Date.now()));
+    count = 0;
+  }
+  let badge = btn.querySelector('.nav-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'nav-badge';
+    btn.appendChild(badge);
+  }
+  badge.textContent = count > 9 ? '9+' : String(count);
+  badge.style.display = count > 0 ? '' : 'none';
+}
+
+function _startBadgeListeners(cont, uid, sid, leagueIds) {
+  // Feed badge: count activity items newer than last feed open
+  dbListen(dbRef('activity'), (actObj) => {
+    if (!actObj) { _updateNavBadge(cont, 'feed', 0); return; }
+    const lastOpen = parseInt(localStorage.getItem(FEED_LAST_OPEN_KEY) || '0', 10);
+    const count = Object.values(actObj).filter(item => (item.ts || 0) > lastOpen).length;
+    _updateNavBadge(cont, 'feed', count);
+  });
+
+  // Matches badge: scheduled matches where I'm the challenged player
+  const pendingByLeague = {};
+  for (const lid of leagueIds) {
+    dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
+      pendingByLeague[lid] = !matchesObj ? 0 :
+        Object.values(matchesObj).filter(m =>
+          m.status === 'scheduled' && m.playerB === uid
+        ).length;
+      const total = Object.values(pendingByLeague).reduce((a, b) => a + b, 0);
+      _updateNavBadge(cont, 'matches', total);
+    });
   }
 }
 

@@ -515,6 +515,27 @@ button, input, textarea, select {
   background: transparent;
   padding: 8px 4px;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+.nav-badge {
+  position: absolute;
+  top: 6px;
+  left: calc(50% + 5px);
+  background: #e03131;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  pointer-events: none;
+  box-sizing: border-box;
+  line-height: 1;
 }
 
 .nav-item:active {
