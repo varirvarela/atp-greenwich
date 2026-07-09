@@ -1,7 +1,7 @@
 // Flow 7 — Matches Tab (Phase 3)
 // Each test resets Firebase state so mutations don't bleed into later tests.
 import { test, expect } from '@playwright/test';
-import { goTo, freshStart } from './helpers.js';
+import { goTo, freshStart, adminWrite, adminRead } from './helpers.js';
 
 test.describe('Flow 7 — Matches Tab', () => {
   test.beforeEach(async ({ page }) => {
@@ -145,5 +145,49 @@ test.describe('Flow 7 — Matches Tab', () => {
 
     await expect(page.getByText('A Division')).toBeVisible();
     expect(errors.filter(e => !e.includes('favicon'))).toHaveLength(0);
+  });
+
+  test('P3-13 receiving a challenge (playerB on a scheduled match) shows it in the matches list', async ({ page }) => {
+    // The app code puts a scheduled match where I am playerB into "In progress"
+    // (not "Needs your action"), with a "Decline" management button shown for
+    // the isTheirProposal case (proposedBy !== me).
+    const sid = await adminRead(page, 'config/defaultSeason');
+    await adminWrite(page, `seasons/${sid}/leagues/league_a/matches/p3_13_challenge`, {
+      playerA: 'test_player_002',
+      playerB: 'dev_test_uid',
+      status: 'scheduled',
+      proposedBy: 'test_player_002',
+      proposedAt: Date.now(),
+      scheduledAt: Date.now() + 86400000,
+    });
+
+    // The match card should now be visible in the "In progress" section.
+    await expect(page.getByText('In progress')).toBeVisible({ timeout: 5000 });
+    // The "Decline" button appears for the isTheirProposal case.
+    await expect(page.locator('button[data-action="decline-proposal"]')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('P3-14 declining the challenge removes the card from In progress', async ({ page }) => {
+    const sid = await adminRead(page, 'config/defaultSeason');
+    await adminWrite(page, `seasons/${sid}/leagues/league_a/matches/p3_14_challenge`, {
+      playerA: 'test_player_002',
+      playerB: 'dev_test_uid',
+      status: 'scheduled',
+      proposedBy: 'test_player_002',
+      proposedAt: Date.now(),
+      scheduledAt: Date.now() + 86400000,
+    });
+
+    await expect(page.locator('button[data-action="decline-proposal"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('button[data-action="decline-proposal"]').click();
+
+    // Confirmation modal appears.
+    const confirmBtn = page.locator('#btn-confirm-cancel');
+    await expect(confirmBtn).toBeVisible({ timeout: 3000 });
+    await confirmBtn.click();
+
+    // The modal closes and the card is gone.
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator('button[data-action="decline-proposal"]')).not.toBeVisible({ timeout: 5000 });
   });
 });

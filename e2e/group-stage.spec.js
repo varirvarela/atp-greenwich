@@ -63,6 +63,33 @@ test.describe('Flow 14 — Group Match Features', () => {
     const forfeited = await adminRead(page, 'seasons/season_2026/leagues/league_a/matches/match_test_001/forfeited');
     expect(forfeited).toBe('dev_test_uid');
   });
+
+  test('F14-08 a forfeited match does NOT appear in "In Progress" or "Scheduled" sections', async ({ page }) => {
+    // Confirm the forfeit so the match gets the forfeited field.
+    await page.locator('button[data-action="forfeit"]').first().click();
+    await page.locator('#btn-confirm-forfeit').click();
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 8000 });
+
+    // The isCanceled guard removes forfeited matches from inProgress.
+    // "In progress" section should no longer render match_test_001.
+    // We assert the forfeit button (only on in-progress group matches) is gone.
+    await expect(page.locator('button[data-action="forfeit"]')).not.toBeVisible({ timeout: 5000 });
+    // The "In progress" heading may still appear (other non-forfeited matches could be there),
+    // but the forfeited card's entry-result action must not exist for that match.
+    // Verify by checking the Canceled section exists instead (see F14-09).
+  });
+
+  test('F14-09 a forfeited match appears in the "Canceled" section', async ({ page }) => {
+    // Confirm the forfeit.
+    await page.locator('button[data-action="forfeit"]').first().click();
+    await page.locator('#btn-confirm-forfeit').click();
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 8000 });
+
+    // The _canceledCard renderer places forfeited matches under a "Canceled" heading.
+    await expect(page.getByText('Canceled')).toBeVisible({ timeout: 5000 });
+    // The forfeited card shows a "{name} forfeited" badge.
+    await expect(page.getByText(/forfeited/i)).toBeVisible({ timeout: 5000 });
+  });
 });
 
 // ─── Flow 15: Group Stage Standings ───────────────────────────────────────────

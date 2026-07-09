@@ -46,4 +46,32 @@ test.describe('Flow 4 — App Shell & Profile Tab', () => {
     await expect(page.getByText('Season Stats')).toBeVisible();
     await expect(page.getByText('Stats available in Phase 4')).not.toBeVisible();
   });
+
+  test('F4-04 "How ELO works" accordion is visible on the Profile tab', async ({ page }) => {
+    await page.locator('button[data-tab="profile"]').click();
+    // The <summary> element contains the accordion label.
+    await expect(page.locator('summary').filter({ hasText: 'How ELO works' })).toBeVisible();
+  });
+
+  test('F4-05 Clicking "How ELO works" expands it to show ELO formula content', async ({ page }) => {
+    await page.locator('button[data-tab="profile"]').click();
+    const summary = page.locator('summary').filter({ hasText: 'How ELO works' });
+    await summary.click();
+    // The expanded section shows the ELO formula text.
+    await expect(page.getByText('New ELO = Old ELO + 32')).toBeVisible({ timeout: 3000 });
+  });
+
+  test('F4-06 "How the League Works" accordion is visible on the Profile tab', async ({ page }) => {
+    await page.locator('button[data-tab="profile"]').click();
+    await expect(page.locator('summary').filter({ hasText: 'How the League Works' })).toBeVisible();
+  });
+
+  test('F4-07 Clicking "How the League Works" expands to show scheduled vs ad-hoc content', async ({ page }) => {
+    await page.locator('button[data-tab="profile"]').click();
+    const summary = page.locator('summary').filter({ hasText: 'How the League Works' });
+    await summary.click();
+    // The expanded section explains both match types.
+    await expect(page.getByText('Scheduled matches')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('Ad-hoc matches')).toBeVisible({ timeout: 3000 });
+  });
 });
