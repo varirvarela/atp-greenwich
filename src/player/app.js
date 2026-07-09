@@ -90,8 +90,16 @@ export function showApp(container, player, creds, onSignOut) {
 
         <!-- Top bar: tournament + league pills only -->
         <div class="top-bar">
-          <div id="tournament-switcher-area" style="flex:1;min-width:0;"></div>
-          <div id="league-switcher-area" style="flex:1;min-width:0;"></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+              color:var(--text3);padding-left:4px;">Temporada</span>
+            <div id="tournament-switcher-area"></div>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+              color:var(--text3);padding-left:4px;">Liga</span>
+            <div id="league-switcher-area"></div>
+          </div>
         </div>
 
         <!-- Tab content -->
@@ -162,6 +170,7 @@ export function showApp(container, player, creds, onSignOut) {
   _setupInstallPrompt(container);
   _setupPushNotifications(creds.uid);
   _checkWhatsNew();
+  _checkWalkthrough();
 
   // Top-bar switchers: unified tournament + league init
   (async () => {
@@ -582,6 +591,39 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         </div>
       </details>
 
+      <!-- League format explanation accordion -->
+      <details style="margin-bottom:16px;border-radius:var(--radius);overflow:hidden;
+        border:1px solid var(--border);">
+        <summary style="background:var(--surface2);padding:10px 12px;font-size:12px;
+          font-weight:700;cursor:pointer;list-style:none;display:flex;
+          justify-content:space-between;align-items:center;">
+          <span>Cómo funciona la liga</span>
+          <span style="color:var(--text3);font-size:10px;">tap to expand</span>
+        </summary>
+        <div style="background:var(--surface2);padding:10px 14px 16px;
+          border-top:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.65;">
+
+          <p style="margin:0 0 10px;font-weight:700;color:var(--text);">Fase de grupos</p>
+          <p style="margin:0 0 8px;">La temporada arranca con una fase de grupos. El administrador libera <strong>partidos programados</strong> (fixtures) — emparejamientos fijos con fecha límite para jugarse. Ganar o jugar suma puntos de grupo.</p>
+          <p style="margin:0 0 10px;">Cuando alcanzas los puntos requeridos, te clasificas para la fase eliminatoria.</p>
+
+          <p style="margin:0 0 6px;font-weight:700;color:var(--text);">Partidos de fixtures vs. ad hoc</p>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+            <div style="background:var(--surface);border-radius:6px;padding:8px 12px;
+              border-left:3px solid var(--ace);font-size:11px;">
+              <strong style="color:var(--text);">Programados (fixtures)</strong> — los crea el admin. Aparecen con una fecha límite y cuentan doble en la tabla de puntos de grupo.
+            </div>
+            <div style="background:var(--surface);border-radius:6px;padding:8px 12px;
+              border-left:3px solid var(--border);font-size:11px;">
+              <strong style="color:var(--text);">Ad hoc</strong> — cualquier jugador puede retar a otro desde la pestaña Partidos. Se juegan libremente y también suman puntos de grupo mientras la fase esté activa.
+            </div>
+          </div>
+
+          <p style="margin:0 0 6px;font-weight:700;color:var(--text);">Fase eliminatoria (bracket)</p>
+          <p style="margin:0;font-size:11px;">Los clasificados pasan a un cuadro eliminatorio directo. Se juegan cuartos, semis y final. El bracket aparece en la pestaña <strong>Bracket</strong> una vez que el admin lo genera.</p>
+        </div>
+      </details>
+
       ${(player.isAdmin || player.email === 'pablorvarela@gmail.com') ? `
       <!-- Admin / Owner access -->
       <div class="card" style="margin-bottom:16px;background:var(--ace-bg);border-color:var(--ace);">
@@ -666,11 +708,9 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         </summary>
         <div style="background:var(--surface2);padding:14px;border-top:1px solid var(--border);
           font-size:13px;color:var(--text2);line-height:1.7;">
-          <div id="pepe-img" style="width:100%;border-radius:8px;background:var(--surface);
-            border:1px dashed var(--border);padding:32px 0;text-align:center;
-            margin-bottom:14px;color:var(--text3);font-size:11px;">
-            imagen próximamente
-          </div>
+          <img src="${import.meta.env.BASE_URL}images/Pepe.jpeg"
+            alt="Pepe" style="width:100%;border-radius:8px;display:block;
+            margin-bottom:14px;object-fit:cover;max-height:320px;">
           <p style="margin:0 0 8px;font-weight:700;color:var(--text);">ATP — Amigos en el Tenis gracias a Pepe.</p>
           <p style="margin:0 0 8px;">Pepe fue quien nos reunió a todos para jugar al tenis. Con su energía y entusiasmo inagotable, creó una liga amateur a pulmón que nos entretuvo por varias temporadas y forjó amistades duraderas.</p>
           <p style="margin:0 0 8px;">No somos tenistas. Somos los <em>Salieris de Pepe</em>: convocados por su pasión, unidos por la cancha, y eternamente agradecidos por haber sido parte de algo que empezó con una simple invitación suya.</p>
@@ -1169,6 +1209,114 @@ function _showWhatsNewModal(entries) {
 
   overlay.querySelector('#btn-whats-new-close').addEventListener('click', close);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+
+// ─── Walkthrough tour ────────────────────────────────────────────────────────
+
+const WALKTHROUGH_KEY = 'atp_walkthrough_done';
+
+const WALKTHROUGH_STEPS = [
+  {
+    icon: '🎾',
+    title: 'Bienvenido a ATP Greenwich',
+    body: 'Esta guía rápida te explica cómo funciona la app. Puedes saltarla en cualquier momento.',
+  },
+  {
+    icon: '📅',
+    title: 'Temporada y Liga',
+    body: 'Los dos selectores de la barra superior te permiten cambiar de temporada y de liga. Selecciona la liga en la que juegas.',
+  },
+  {
+    icon: '📰',
+    title: 'Feed',
+    body: 'El Feed muestra los resultados de los partidos recientes y la actividad del grupo. Puedes reaccionar con emojis a cada resultado.',
+  },
+  {
+    icon: '🎯',
+    title: 'Partidos',
+    body: 'Aquí puedes retar a otros jugadores, aceptar retos, introducir resultados y consultar el historial completo.',
+  },
+  {
+    icon: '🏆',
+    title: 'Clasificación',
+    body: 'Sigue tu posición en la fase de grupos y tu ELO. Toca cualquier jugador para ver sus estadísticas detalladas.',
+  },
+  {
+    icon: '🌟',
+    title: 'Bracket y Perfil',
+    body: 'Cuando la fase de grupos termine, el cuadro eliminatorio aparecerá en el Bracket. En Perfil puedes cambiar tu avatar y contraseña.',
+  },
+];
+
+function _checkWalkthrough() {
+  if (localStorage.getItem(WALKTHROUGH_KEY)) return;
+  // Delay past What's New modal (600ms) to avoid overlapping
+  setTimeout(() => {
+    if (document.querySelector('.modal-overlay')) {
+      // What's New is open — wait for it to close
+      const check = setInterval(() => {
+        if (!document.querySelector('.modal-overlay')) {
+          clearInterval(check);
+          setTimeout(() => _showWalkthroughModal(), 400);
+        }
+      }, 300);
+    } else {
+      _showWalkthroughModal();
+    }
+  }, 900);
+}
+
+function _showWalkthroughModal() {
+  let step = 0;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  function dismiss() {
+    localStorage.setItem(WALKTHROUGH_KEY, '1');
+    overlay.remove();
+  }
+
+  function render() {
+    const s = WALKTHROUGH_STEPS[step];
+    const isLast = step === WALKTHROUGH_STEPS.length - 1;
+    const dots = WALKTHROUGH_STEPS.map((_, i) =>
+      `<span style="width:6px;height:6px;border-radius:50%;display:inline-block;
+        background:${i === step ? 'var(--ace)' : 'var(--border)'};"></span>`
+    ).join('');
+
+    overlay.innerHTML = `
+      <div class="modal-sheet" style="padding-bottom:calc(env(safe-area-inset-bottom,0px) + 16px);">
+        <div class="modal-handle"></div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;
+          margin-bottom:20px;">
+          <div style="display:flex;gap:5px;align-items:center;">${dots}</div>
+          <button id="btn-tour-dismiss" style="background:none;border:none;cursor:pointer;
+            font-size:12px;color:var(--text3);padding:4px 0;text-decoration:underline;">
+            No volver a mostrar
+          </button>
+        </div>
+
+        <div style="text-align:center;padding:8px 0 28px;">
+          <div style="font-size:44px;margin-bottom:14px;">${s.icon}</div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:10px;line-height:1.3;">${s.title}</div>
+          <div style="font-size:14px;line-height:1.65;color:var(--text2);">${s.body}</div>
+        </div>
+
+        <button class="btn btn-primary" id="btn-tour-next">
+          ${isLast ? '¡Listo!' : 'Siguiente →'}
+        </button>
+      </div>
+    `;
+
+    overlay.querySelector('#btn-tour-next').addEventListener('click', () => {
+      if (isLast) { dismiss(); } else { step++; render(); }
+    });
+    overlay.querySelector('#btn-tour-dismiss').addEventListener('click', dismiss);
+  }
+
+  render();
+  document.body.appendChild(overlay);
 }
 
 // ─── Season stats loader ──────────────────────────────────────────────────────

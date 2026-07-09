@@ -10,6 +10,20 @@
 
 export const CHANGELOG = [
   {
+    version: '1.5.0',
+    date:    '2026-07-09',
+    changes: [
+      'App walkthrough: a step-by-step guide appears on first visit — tap "Siguiente" to go through or "No volver a mostrar" to skip permanently',
+      'Match results: invalid set scores are highlighted in red with a hint (e.g. 8-3 is not a valid tennis score)',
+      'Match results: 3rd set appears automatically when sets are 1-1',
+      'Match results: "Resultado incompleto" option lets you record a walkover or forfeit without entering full scores',
+      'Profile: "Cómo funciona la liga" accordion explains group phase, scheduled vs ad-hoc matches, and the knockout bracket',
+      'Profile: "En honor a Pepe" tribute now shows his photo',
+      'Top-nav: "Temporada" and "Liga" labels added above the selectors',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.4.5',
     date:    '2026-07-07',
     changes: [

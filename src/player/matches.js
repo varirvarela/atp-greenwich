@@ -746,6 +746,29 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
           border-radius:8px;font-weight:700;font-size:13px;">
       </div>
 
+      <!-- Incomplete finish option -->
+      <div id="section-incomplete" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text2);">
+            <input type="checkbox" id="chk-incomplete" style="width:16px;height:16px;cursor:pointer;">
+            Resultado incompleto (walkover / lesión / abandono)
+          </label>
+        </div>
+        <div id="incomplete-winner-row" style="display:none;margin-top:10px;">
+          <div class="t-label t-muted" style="margin-bottom:8px;">¿Quién gana el partido?</div>
+          <div style="display:flex;gap:8px;">
+            <div class="tap-card" data-incomplete-winner="me"
+              style="flex:1;text-align:center;padding:10px 8px;">
+              <div style="font-weight:700;font-size:13px;">Yo</div>
+            </div>
+            <div class="tap-card" data-incomplete-winner="op"
+              style="flex:1;text-align:center;padding:10px 8px;">
+              <div style="font-weight:700;font-size:13px;" data-op-label="true"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style="margin-bottom:20px;">
         <div class="t-label t-muted" style="margin-bottom:8px;">
           Match photo
@@ -789,6 +812,35 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
   document.body.appendChild(overlay);
   overlay.querySelector('#btn-close').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  // Incomplete / walkover
+  const chkIncomplete = overlay.querySelector('#chk-incomplete');
+  const incompleteRow = overlay.querySelector('#incomplete-winner-row');
+  const opLabelEl = overlay.querySelector('[data-op-label="true"]');
+  if (opLabelEl) opLabelEl.textContent = opName;
+
+  let incompleteWinner = null;
+
+  chkIncomplete?.addEventListener('change', () => {
+    const checked = chkIncomplete.checked;
+    incompleteRow.style.display = checked ? 'block' : 'none';
+    if (!checked) {
+      incompleteWinner = null;
+      overlay.dataset.incompleteWinner = '';
+      overlay.querySelectorAll('[data-incomplete-winner]').forEach(c => c.classList.remove('selected'));
+    }
+    _checkResultReady(overlay, isPro10, isAdjust);
+  });
+
+  overlay.querySelectorAll('[data-incomplete-winner]').forEach(card => {
+    card.addEventListener('click', () => {
+      incompleteWinner = card.dataset.incompleteWinner;
+      overlay.dataset.incompleteWinner = incompleteWinner;
+      overlay.querySelectorAll('[data-incomplete-winner]').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      _checkResultReady(overlay, isPro10, isAdjust);
+    });
+  });
 
   let thirdSetAdded = !!(prev?.sets?.length >= 3);
   let selectedFile  = null;
@@ -856,9 +908,10 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
 
   // Submit
   overlay.querySelector('#btn-submit-result').addEventListener('click', async () => {
-    const derivedWinner = _deriveWinner(overlay, isPro10);
+    const incompleteWinner = overlay.dataset.incompleteWinner;
+    const derivedWinner = incompleteWinner || _deriveWinner(overlay, isPro10);
     if (!derivedWinner) return;
-    if (!isAdjust && !selectedFile) return;
+    if (!isAdjust && !selectedFile && !incompleteWinner) return;
 
     const btn = overlay.querySelector('#btn-submit-result');
     btn.disabled = true;
@@ -879,15 +932,15 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
       };
     } else {
       const setCount = thirdSetAdded ? 3 : 2;
-      const sets = _collectSets(overlay, setCount);
-      if (!sets) {
+      const sets = incompleteWinner ? (_collectSets(overlay, setCount) || []) : _collectSets(overlay, setCount);
+      if (!incompleteWinner && !sets) {
         btn.disabled = false;
         overlay.querySelector('#submit-status').style.display = 'none';
         return;
       }
       resultData = {
         winner: winnerUid, loser: loserUid,
-        sets: sets.map(s => {
+        sets: (sets || []).map(s => {
           const base = isMeA ? { a: s.me, b: s.op } : { a: s.op, b: s.me };
           if (s.tbMe !== null && s.tbOp !== null) {
             base.tb = isMeA ? { a: s.tbMe, b: s.tbOp } : { a: s.tbOp, b: s.tbMe };
@@ -895,6 +948,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
           return base;
         }),
         enteredBy: myUid, enteredAt: Date.now(),
+        ...(incompleteWinner ? { incomplete: true } : {}),
       };
     }
 
@@ -922,17 +976,42 @@ function _wireSetRowEvents(overlay, num) {
   // Auto-show/hide tiebreak based on score inputs
   const row = container.querySelector(`[data-set-row="${num}"]`);
   if (row) {
+    // Ensure hint element exists
+    let hintEl = overlay.querySelector(`[data-hint-set="${num}"]`);
+    if (!hintEl) {
+      hintEl = document.createElement('div');
+      hintEl.id = `hint-set-${num}`;
+      hintEl.setAttribute('data-hint-set', String(num));
+      hintEl.style.cssText = 'font-size:11px;color:var(--ace3);margin:2px 0 6px 58px;display:none;';
+      hintEl.textContent = 'Marcador inválido · sets válidos: 6-x, 7-5, 7-6';
+      row.insertAdjacentElement('afterend', hintEl);
+    }
+
     const updateTb = () => {
       const me    = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
       const op    = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
       const tbRow = row.querySelector(`[data-tb-row="${num}"]`);
-      if (!tbRow) return;
-      const needs = _needsTiebreak(me, op);
-      if (needs && tbRow.style.display === 'none') {
-        tbRow.style.display = 'flex';
-      } else if (!needs && tbRow.style.display !== 'none') {
-        tbRow.style.display = 'none';
-        tbRow.querySelectorAll('input').forEach(i => { i.value = ''; });
+      if (tbRow) {
+        const needs = _needsTiebreak(me, op);
+        if (needs && tbRow.style.display === 'none') {
+          tbRow.style.display = 'flex';
+        } else if (!needs && tbRow.style.display !== 'none') {
+          tbRow.style.display = 'none';
+          tbRow.querySelectorAll('input').forEach(i => { i.value = ''; });
+        }
+      }
+      // Invalid score hint
+      const meVal = row.querySelector('[data-score="me"]')?.value ?? '';
+      const opVal = row.querySelector('[data-score="op"]')?.value ?? '';
+      const bothFilled = meVal !== '' && opVal !== '';
+      if (bothFilled && !_isValidTennisSet(me, op)) {
+        hintEl.style.display = '';
+      } else {
+        hintEl.style.display = 'none';
+      }
+      // Auto 3rd set (only for set rows 1 and 2)
+      if (num === 1 || num === 2) {
+        _checkAutoThirdSet(overlay);
       }
     };
     row.querySelectorAll('[data-score]').forEach(input => input.addEventListener('input', updateTb));
@@ -950,6 +1029,25 @@ function _wireSetRowEvents(overlay, num) {
       const event = new CustomEvent('third-set-removed');
       overlay.dispatchEvent(event);
     });
+  }
+}
+
+function _checkAutoThirdSet(overlay) {
+  const c = overlay.querySelector('#sets-container') || overlay;
+  const row1 = c.querySelector('[data-set-row="1"]');
+  const row2 = c.querySelector('[data-set-row="2"]');
+  if (!row1 || !row2) return;
+  const me1 = parseInt(row1.querySelector('[data-score="me"]')?.value ?? '', 10);
+  const op1 = parseInt(row1.querySelector('[data-score="op"]')?.value ?? '', 10);
+  const me2 = parseInt(row2.querySelector('[data-score="me"]')?.value ?? '', 10);
+  const op2 = parseInt(row2.querySelector('[data-score="op"]')?.value ?? '', 10);
+  if (!_isValidTennisSet(me1, op1) || !_isValidTennisSet(me2, op2)) return;
+  const iWonSet1 = me1 > op1;
+  const iWonSet2 = me2 > op2;
+  if (iWonSet1 === iWonSet2) return; // both sets same winner — no split, no 3rd set needed
+  const addBtn = overlay.querySelector('#btn-add-set');
+  if (addBtn && addBtn.style.display !== 'none') {
+    addBtn.click();
   }
 }
 
@@ -1036,6 +1134,8 @@ function _deriveWinner(overlay, isPro10) {
 function _checkResultReady(overlay, isPro10, isAdjust) {
   const hasPhoto = isAdjust || !!(overlay.querySelector('#photo-input')?.files?.length);
   const winner   = _deriveWinner(overlay, isPro10);
+  const incompleteWinner = overlay.dataset.incompleteWinner;
+  const effectiveWinner = winner || (incompleteWinner ? incompleteWinner : null);
 
   // Tiebreak inputs must be filled when visible (bo3 mode)
   let tbReady = true;
@@ -1052,12 +1152,12 @@ function _checkResultReady(overlay, isPro10, isAdjust) {
 
   const display = overlay.querySelector('#winner-display');
   if (display) {
-    if (winner === 'me') {
+    if (effectiveWinner === 'me') {
       display.textContent       = 'You win';
       display.style.color       = 'var(--ace2)';
       display.style.background  = 'rgba(34,197,94,.1)';
       display.style.display     = 'block';
-    } else if (winner === 'op') {
+    } else if (effectiveWinner === 'op') {
       const opName = display.dataset.opName || 'Opponent';
       display.textContent       = `${opName} wins`;
       display.style.color       = 'var(--text)';
@@ -1068,7 +1168,8 @@ function _checkResultReady(overlay, isPro10, isAdjust) {
     }
   }
 
-  overlay.querySelector('#btn-submit-result').disabled = !(winner !== null && hasPhoto && tbReady);
+  overlay.querySelector('#btn-submit-result').disabled =
+    !(effectiveWinner !== null && (hasPhoto || !!incompleteWinner) && tbReady);
 }
 
 function _collectSets(overlay, count) {
