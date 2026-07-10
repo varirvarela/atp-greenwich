@@ -172,7 +172,7 @@ export function showApp(container, player, creds, onSignOut) {
       case 'matches':   _tabCleanup = renderMatchesTab(content, _player, _creds) || null; break;
       case 'standings': _tabCleanup = renderStandingsTab(content, _player, _creds) || null; break;
       case 'bracket':   _tabCleanup = renderBracketTab(content, _player, _creds) || null; break;
-      case 'profile':   renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged); break;
+      case 'profile':   renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial); break;
       default: content.innerHTML = '';
     }
   }
@@ -189,7 +189,8 @@ export function showApp(container, player, creds, onSignOut) {
 
   function onReplayTutorial() {
     localStorage.removeItem(WALKTHROUGH_KEY);
-    _checkWalkthrough(navigateToTab);
+    navigateToTab('feed');
+    _showWalkthroughModal(navigateToTab);
   }
 
   renderShell(activeTab);

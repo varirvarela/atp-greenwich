@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.1',
+    date:    '2026-07-09',
+    changes: [
+      'Fixed: "Replay app tutorial" button now works — tapping it immediately navigates to the Feed tab and launches the tour',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.7.0',
     date:    '2026-07-09',
     changes: [
