@@ -10,19 +10,24 @@ test.describe('Navigation Badges', () => {
     await goTo(page);
     await freshStart(page); // clearLeague + seedLeague + jumpToApp (starts on Feed tab)
 
-    // Wait for the badge listener to fire at least once while feed is active.
-    // This ensures FEED_LAST_OPEN_KEY is stamped before we navigate away — the
-    // Firebase onValue callback is async and may not have run yet at this point.
-    await page.waitForFunction(() => !!localStorage.getItem('atp_feed_last_open'), { timeout: 3000 });
+    // Stamp FEED_LAST_OPEN_KEY to a known value from the test.
+    // _startBadgeListeners is inside an async IIFE that does several DB reads, so
+    // it may not have run by the time jumpToApp returns. By stamping the key here
+    // and writing the item at ts = feedOpenTs + 60000, we guarantee the item is
+    // counted as "new" regardless of when the listener actually starts.
+    const feedOpenTs = await page.evaluate(() => {
+      const ts = Date.now();
+      localStorage.setItem('atp_feed_last_open', String(ts));
+      return ts;
+    });
 
     // Navigate away so the badge can appear (suppressed while feed is active).
     await page.locator('button[data-tab="matches"]').click();
 
-    // Write an item with ts well in the future so it is definitely newer than the
-    // timestamp the app stamped on startup.
+    // Write an item with ts 60 seconds ahead — always newer than feedOpenTs.
     await adminWrite(page, 'activity/badge-test-event', {
       type: 'new_player',
-      ts: Date.now() + 60000,
+      ts: feedOpenTs + 60000,
       uid: 'test_badge_user',
     });
 
@@ -34,14 +39,17 @@ test.describe('Navigation Badges', () => {
     await goTo(page);
     await freshStart(page);
 
-    // Wait for the badge listener's first fire to stamp FEED_LAST_OPEN_KEY.
-    await page.waitForFunction(() => !!localStorage.getItem('atp_feed_last_open'), { timeout: 3000 });
+    const feedOpenTs = await page.evaluate(() => {
+      const ts = Date.now();
+      localStorage.setItem('atp_feed_last_open', String(ts));
+      return ts;
+    });
 
     // Navigate away so badge can appear (suppressed while feed tab is active).
     await page.locator('button[data-tab="matches"]').click();
     await adminWrite(page, 'activity/badge-clear-test', {
       type: 'new_player',
-      ts: Date.now() + 60000,
+      ts: feedOpenTs + 60000,
       uid: 'test_badge_user_2',
     });
 
