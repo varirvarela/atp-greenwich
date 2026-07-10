@@ -445,7 +445,7 @@ function _installApp() {
     return;
   }
 
-  // Android: trigger native prompt if available, otherwise re-show banner.
+  // Android: trigger native prompt if available, otherwise show fallback instructions.
   if (_deferredPrompt) {
     _deferredPrompt.prompt();
     _deferredPrompt.userChoice.then(({ outcome }) => {
@@ -453,8 +453,13 @@ function _installApp() {
       _deferredPrompt = null;
     });
   } else {
-    document.getElementById('pwa-android-banner')?.remove();
-    _setupAndroidInstallBanner();
+    const btn = document.getElementById('btn-install-app');
+    if (btn) {
+      const original = btn.textContent;
+      btn.textContent = 'Open in Chrome → menu → Install app';
+      btn.disabled = true;
+      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 4000);
+    }
   }
 }
 
