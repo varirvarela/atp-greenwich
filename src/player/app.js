@@ -60,7 +60,7 @@ export function showApp(container, player, creds, onSignOut) {
     _creds  = { ..._creds,  avatarId: newAvatarId };
     const content = container.querySelector('#tab-content');
     if (content && activeTab === 'profile') {
-      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged);
+      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial);
     }
   }
 
@@ -68,7 +68,7 @@ export function showApp(container, player, creds, onSignOut) {
     _player = { ..._player, alias: newAlias, username: newAlias };
     const content = container.querySelector('#tab-content');
     if (content && activeTab === 'profile') {
-      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged);
+      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial);
     } else {
       // Update the alias display in place without full re-render
       const aliasEl = container.querySelector('#profile-alias-display');
@@ -139,10 +139,14 @@ export function showApp(container, player, creds, onSignOut) {
         activeTab = newTab;
         tabEnterTime = Date.now();
 
-        // Clear feed badge when opening Feed tab
+        // Clear badges when opening their respective tabs
         if (newTab === 'feed') {
           localStorage.setItem(FEED_LAST_OPEN_KEY, String(Date.now()));
           _updateNavBadge(container, 'feed', 0);
+        }
+        if (newTab === 'matches') {
+          localStorage.setItem(MATCHES_LAST_OPEN_KEY, String(Date.now()));
+          _updateNavBadge(container, 'matches', 0);
         }
 
         // Update active state without full re-render
@@ -173,11 +177,7 @@ export function showApp(container, player, creds, onSignOut) {
     }
   }
 
-  renderShell(activeTab);
-  _setupInstallPrompt(container);
-  _setupPushNotifications(creds.uid);
-  _checkWhatsNew();
-  _checkWalkthrough((tabId) => {
+  function navigateToTab(tabId) {
     activeTab = tabId;
     container.querySelectorAll('.nav-item').forEach(b => {
       const isActive = b.dataset.tab === tabId;
@@ -185,7 +185,18 @@ export function showApp(container, player, creds, onSignOut) {
       b.setAttribute('aria-current', isActive ? 'page' : 'false');
     });
     renderTabContent(tabId);
-  });
+  }
+
+  function onReplayTutorial() {
+    localStorage.removeItem(WALKTHROUGH_KEY);
+    _checkWalkthrough(navigateToTab);
+  }
+
+  renderShell(activeTab);
+  _setupInstallPrompt(container);
+  _setupPushNotifications(creds.uid);
+  _checkWhatsNew();
+  _checkWalkthrough(navigateToTab);
 
   // Top-bar switchers: unified tournament + league init
   (async () => {
@@ -524,7 +535,7 @@ function _urlBase64ToUint8Array(base64String) {
 
 // ─── Tab: Profile ─────────────────────────────────────────────────────────────
 
-function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAliasChanged) {
+function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial) {
   const tier  = eloTierLabel(player.eloRating || 1000);
   const elo   = player.eloRating || 1000;
   const avatarSvg = player.avatarId
@@ -699,6 +710,14 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         </div>
       </div>
 
+      <!-- Replay tutorial -->
+      <div style="margin-bottom:16px;text-align:center;">
+        <button class="btn btn-ghost btn-sm" id="btn-replay-tutorial"
+          style="color:var(--text3);font-size:12px;">
+          Replay app tutorial
+        </button>
+      </div>
+
       <!-- Security -->
       <div class="card" style="margin-bottom:24px;">
         <div class="t-label t-muted" style="margin-bottom:12px;">Security</div>
@@ -838,6 +857,11 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
     editAliasBtn.addEventListener('click', () => {
       showEditAliasModal(player, creds, onAliasChanged);
     });
+  }
+
+  const replayTutorialBtn = el.querySelector('#btn-replay-tutorial');
+  if (replayTutorialBtn && onReplayTutorial) {
+    replayTutorialBtn.addEventListener('click', onReplayTutorial);
   }
 }
 
@@ -1155,14 +1179,18 @@ async function _appCheckNoDuplicate(avatarId, excludeUid) {
 
 // ─── Nav badges ──────────────────────────────────────────────────────────────
 
-const FEED_LAST_OPEN_KEY = 'atp_feed_last_open';
+const FEED_LAST_OPEN_KEY    = 'atp_feed_last_open';
+const MATCHES_LAST_OPEN_KEY = 'atp_matches_last_open';
 
 function _updateNavBadge(cont, tabId, count) {
   const btn = cont.querySelector(`.nav-item[data-tab="${tabId}"]`);
   if (!btn) return;
-  // If this tab is currently active, keep badge clear and refresh the timestamp
   if (btn.classList.contains('active') && tabId === 'feed') {
     localStorage.setItem(FEED_LAST_OPEN_KEY, String(Date.now()));
+    count = 0;
+  }
+  if (btn.classList.contains('active') && tabId === 'matches') {
+    localStorage.setItem(MATCHES_LAST_OPEN_KEY, String(Date.now()));
     count = 0;
   }
   let badge = btn.querySelector('.nav-badge');
@@ -1184,13 +1212,14 @@ function _startBadgeListeners(cont, uid, sid, leagueIds) {
     _updateNavBadge(cont, 'feed', count);
   });
 
-  // Matches badge: scheduled matches where I'm the challenged player
+  // Matches badge: scheduled challenges received after the matches tab was last opened
   const pendingByLeague = {};
   for (const lid of leagueIds) {
     dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
+      const lastOpen = parseInt(localStorage.getItem(MATCHES_LAST_OPEN_KEY) || '0', 10);
       pendingByLeague[lid] = !matchesObj ? 0 :
         Object.values(matchesObj).filter(m =>
-          m.status === 'scheduled' && m.playerB === uid
+          m.status === 'scheduled' && m.playerB === uid && (m.proposedAt || 0) > lastOpen
         ).length;
       const total = Object.values(pendingByLeague).reduce((a, b) => a + b, 0);
       _updateNavBadge(cont, 'matches', total);

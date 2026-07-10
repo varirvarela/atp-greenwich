@@ -10,6 +10,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.0',
+    date:    '2026-07-09',
+    changes: [
+      'Navigation badges now clear when you open the relevant tab — the matches badge goes away once you visit the Matches tab',
+      'Profile: "Replay app tutorial" button lets you re-run the walkthrough tour at any time',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.6.1',
     date:    '2026-07-09',
     changes: [
