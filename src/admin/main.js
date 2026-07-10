@@ -563,6 +563,12 @@ async function _showPlayerProfileModal(player, onDone) {
       return;
     }
     await dbMultiUpdate(updates);
+    Object.entries(updates).forEach(([path, val]) => {
+      if (val !== null) {
+        const [, sid, , lid] = path.split('/');
+        writeActivity('joined_league', { uid: player.uid, sid, lid });
+      }
+    });
     toast('League assignments updated', 'success');
     overlay.remove();
     onDone();
@@ -735,6 +741,7 @@ async function renderLeagues(el) {
       if (!uid) { toast('Select a player', 'error'); return; }
       await dbSet(sRef(sid, lid, 'members/' + uid), { joinedAt: Date.now() });
       await dbSet(dbRef(`notifications/league_assignment/${uid}_${sid}_${lid}`), { uid, sid, lid, createdAt: Date.now() });
+      writeActivity('joined_league', { uid, sid, lid });
       toast('Player added to league', 'success');
       renderLeagues(el);
     });

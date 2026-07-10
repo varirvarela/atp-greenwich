@@ -414,6 +414,14 @@ function _activityCard(item, allPlayers, myLeagues) {
       sub = [league ? escHtml(league.name) : '', item.fixtureCount ? `${item.fixtureCount} matches` : ''].filter(Boolean).join(' · ');
       break;
     }
+    case 'joined_league': {
+      const league = myLeagues?.find(l => l.lid === item.lid);
+      icon = '🎾';
+      avatarUid = item.uid;
+      title = `${playerName(item.uid)} joined ${league ? escHtml(league.name) : 'a league'}`;
+      sub = '';
+      break;
+    }
     case 'new_player': {
       icon = '👋';
       avatarUid = item.uid;

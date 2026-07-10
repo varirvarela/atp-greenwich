@@ -10,9 +10,11 @@
 
 export const CHANGELOG = [
   {
-    version: '1.7.5',
+    version: '1.7.6',
     date:    '2026-07-10',
-    changes: [],
+    changes: [
+      'Feed: a card now appears when a player is added to a league',
+    ],
     adminChanges: [
       'Admin Leagues: player select now groups by "Not in any league" vs "Already in a league", sorted by ELO asc, with ELO shown in each option',
       'Admin Players: active players not in any league show an orange "No league" badge on their card',
