@@ -42,11 +42,6 @@
       ".write": true
     },
 
-    "pending_approvals": {
-      ".read": false,
-      ".write": true
-    },
-
     "password_resets": {
       ".read": true,
       ".write": true,
