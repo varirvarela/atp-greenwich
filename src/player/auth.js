@@ -389,13 +389,6 @@ function showRequestAccess(container, onAuthenticated) {
           lastActive: now,
         },
         ['email_index/' + emailKey]: uid,
-        ['pending_approvals/' + uid]: {
-          name,
-          email,
-          username: alias,
-          createdAt: now,
-          status: 'pending',
-        },
       });
 
       _pending = { uid, pwdHash, email };
