@@ -9,7 +9,7 @@ const fetch = require('node-fetch');
 
 const APP_URL       = 'https://varirvarela.github.io/atp-greenwich/';
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
-const FROM_EMAIL    = 'atp.greenwich.league@gmail.com';
+const FROM_EMAIL    = 'atpgreenwich@gmail.com';
 const FROM_NAME     = 'ATP Greenwich';
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
