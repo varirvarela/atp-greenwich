@@ -3,8 +3,6 @@
 import { test, expect } from '@playwright/test';
 import { goTo, freshStart, adminWrite, adminRead } from './helpers.js';
 
-const FEED_LAST_OPEN_KEY = 'atp_feed_last_open';
-
 test.describe('Navigation Badges', () => {
   // ─── Feed badge ───────────────────────────────────────────────────────────────
 
@@ -12,21 +10,18 @@ test.describe('Navigation Badges', () => {
     await goTo(page);
     await freshStart(page); // clearLeague + seedLeague + jumpToApp
 
-    // Navigate away from Feed so the tab is not active — _updateNavBadge forces
-    // count=0 when the feed tab is active, which would suppress the badge.
+    // The app stamps FEED_LAST_OPEN_KEY = now when it loads on the Feed tab.
+    // Navigate away so the tab is inactive — badge is suppressed while feed is active.
     await page.locator('button[data-tab="matches"]').click();
 
-    // Set last-open to the past so any new item is "unseen".
-    await page.evaluate(k => localStorage.setItem(k, String(Date.now() - 60000)), FEED_LAST_OPEN_KEY);
-
-    // Write a new activity item with a future timestamp so it is definitely "newer".
+    // Write an item with ts well in the future so it is definitely newer than the
+    // timestamp the app stamped on startup.
     await adminWrite(page, 'activity/badge-test-event', {
       type: 'new_player',
       ts: Date.now() + 60000,
       uid: 'test_badge_user',
     });
 
-    // The badge listener (dbListen on 'activity') should update the badge.
     const feedBadge = page.locator('.nav-item[data-tab="feed"] .nav-badge');
     await expect(feedBadge).toBeVisible({ timeout: 5000 });
   });
@@ -35,10 +30,8 @@ test.describe('Navigation Badges', () => {
     await goTo(page);
     await freshStart(page);
 
-    // Navigate away from Feed first — badge is suppressed while feed tab is active.
+    // Navigate away so badge can appear (suppressed while feed tab is active).
     await page.locator('button[data-tab="matches"]').click();
-
-    await page.evaluate(k => localStorage.setItem(k, String(Date.now() - 60000)), FEED_LAST_OPEN_KEY);
     await adminWrite(page, 'activity/badge-clear-test', {
       type: 'new_player',
       ts: Date.now() + 60000,

@@ -441,7 +441,7 @@ function _activityCard(item, allPlayers, myLeagues) {
     : `<span style="font-size:22px;flex-shrink:0;">${icon}</span>`;
 
   return `
-    <div style="background:var(--surface2);border:1px solid var(--border);
+    <div data-feed-activity="1" style="background:var(--surface2);border:1px solid var(--border);
       border-radius:var(--radius);padding:11px 14px;margin-bottom:10px;
       display:flex;align-items:center;gap:11px;">
       ${avHtml}

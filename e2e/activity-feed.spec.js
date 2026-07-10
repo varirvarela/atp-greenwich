@@ -63,7 +63,7 @@ test.describe('Activity Feed Cards', () => {
     await expect(page.getByText('brunoc joined the tournament')).toBeVisible({ timeout: 5000 });
 
     // Reaction buttons (.reaction-btn) only exist on match-result cards, never on
-    // activity cards rendered by _activityCard.
-    await expect(page.locator('.reaction-btn')).toHaveCount(0);
+    // activity cards rendered by _activityCard (which carries data-feed-activity="1").
+    await expect(page.locator('[data-feed-activity] .reaction-btn')).toHaveCount(0);
   });
 });
