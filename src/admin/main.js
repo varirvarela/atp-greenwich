@@ -255,10 +255,16 @@ function toast(msg, type = '') {
 // ─── Players ──────────────────────────────────────────────────────────────────
 
 async function renderPlayers(el) {
-  const allObj  = await dbGet(pRef());
+  const [allObj, seasonsRaw] = await Promise.all([dbGet(pRef()), dbGet(dbRef('seasons'))]);
   const players = allObj
     ? Object.entries(allObj).map(([uid, p]) => ({ uid, ...p }))
     : [];
+  const seasons = seasonsRaw || {};
+  const leagueMemberUids = new Set(
+    Object.values(seasons).flatMap(s =>
+      Object.values(s.leagues || {}).flatMap(l => Object.keys(l.members || {}))
+    )
+  );
 
   const pending    = players.filter(p => p.status === 'invited');
   const onboarding = players.filter(p => p.status === 'onboarding');
@@ -286,7 +292,7 @@ async function renderPlayers(el) {
     ` : ''}
 
     <div class="section-group-label">Active Players (${active.length})</div>
-    ${active.length ? active.map(p => _playerCard(p)).join('') : `<div class="admin-empty">No active players yet.</div>`}
+    ${active.length ? active.map(p => _playerCard(p, !leagueMemberUids.has(p.uid))).join('') : `<div class="admin-empty">No active players yet.</div>`}
 
     ${other.length ? `
       <div class="section-group-label">Other (${other.length})</div>
@@ -358,7 +364,7 @@ async function renderPlayers(el) {
   });
 }
 
-function _playerCard(p) {
+function _playerCard(p, noLeague = false) {
   const statusClass = { invited: 'badge-red', onboarding: 'badge-orange', active: 'badge-green' }[p.status] || 'badge-muted';
   const displayName = escHtml(p.alias || p.name || p.uid);
   return `
@@ -375,6 +381,7 @@ function _playerCard(p) {
       </div>
       <div class="admin-card-actions">
         <span class="badge-admin ${statusClass}">${escHtml(p.status || '?')}</span>
+        ${noLeague ? `<span class="badge-admin badge-orange" title="Not assigned to any league">No league</span>` : ''}
         ${p.status === 'invited' ? `
           <button class="btn-admin btn-teal" data-action="approve" data-uid="${p.uid}">Approve</button>
           <button class="btn-admin btn-danger" data-action="decline"
@@ -428,6 +435,19 @@ async function _showPlayerProfileModal(player, onDone) {
     if (currentSid) break;
   }
 
+  const leagueList = [];
+  for (const sid of seasonOrder) {
+    const leagues = (seasons[sid] && seasons[sid].leagues) || {};
+    for (const [lid, league] of Object.entries(leagues)) {
+      leagueList.push({
+        sid, lid,
+        seasonName: seasons[sid].name || sid,
+        leagueName: league.name || lid,
+        isMember: !!(league.members && league.members[player.uid]),
+      });
+    }
+  }
+
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
@@ -475,8 +495,25 @@ async function _showPlayerProfileModal(player, onDone) {
         </div>
       </div>
 
-      <button id="btn-close-profile" class="btn-admin btn-secondary"
-        style="width:100%;margin-top:16px;">Close</button>
+      <div class="admin-input-group" style="margin-top:16px;">
+        <label class="admin-input-label">League Membership</label>
+        ${leagueList.length === 0 ? `
+          <div style="font-size:13px;color:var(--text3);">No leagues found.</div>
+        ` : leagueList.map(entry => `
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;
+            border-bottom:1px solid var(--border);cursor:pointer;">
+            <input type="checkbox" data-sid="${entry.sid}" data-lid="${entry.lid}"
+              class="league-assign-cb" ${entry.isMember ? 'checked' : ''}>
+            <span style="flex:1;">${escHtml(entry.leagueName)}</span>
+            <span style="color:var(--text3);font-size:11px;">${escHtml(entry.seasonName)}</span>
+          </label>
+        `).join('')}
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button id="btn-save-leagues" class="btn-admin btn-primary" style="flex:1;">Save Leagues</button>
+        <button id="btn-close-profile" class="btn-admin btn-secondary">Close</button>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -501,6 +538,34 @@ async function _showPlayerProfileModal(player, onDone) {
     await dbUpdate(pRef(player.uid), { passwordHash: simpleHash(pwd) });
     toast(`Password reset for ${player.alias || player.name}`, 'success');
     input.value = '';
+  });
+
+  overlay.querySelector('#btn-save-leagues').addEventListener('click', async () => {
+    const saveBtn = overlay.querySelector('#btn-save-leagues');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    const updates = {};
+    overlay.querySelectorAll('.league-assign-cb').forEach(cb => {
+      const { sid, lid } = cb.dataset;
+      const path = `seasons/${sid}/leagues/${lid}/members/${player.uid}`;
+      const entry = leagueList.find(e => e.sid === sid && e.lid === lid);
+      const wasMember = entry ? entry.isMember : false;
+      if (cb.checked && !wasMember) {
+        updates[path] = { joinedAt: Date.now() };
+      } else if (!cb.checked && wasMember) {
+        updates[path] = null;
+      }
+    });
+    if (Object.keys(updates).length === 0) {
+      toast('No changes', '');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Leagues';
+      return;
+    }
+    await dbMultiUpdate(updates);
+    toast('League assignments updated', 'success');
+    overlay.remove();
+    onDone();
   });
 }
 
@@ -1002,9 +1067,20 @@ function _renderSeason(sid, season, allPlayers) {
       ${Object.entries(leagues).map(([lid, league]) => {
         const members     = league.members || {};
         const memberUids  = Object.keys(members);
+        const membersInOtherLeagues = new Set(
+          Object.entries(leagues)
+            .filter(([l]) => l !== lid)
+            .flatMap(([, l]) => Object.keys(l.members || {}))
+        );
         const activePlayers = Object.entries(allPlayers)
           .filter(([uid, p]) => p.status === 'active' && !memberUids.includes(uid))
           .map(([uid, p]) => ({ uid, ...p }));
+        const freeAgents = activePlayers
+          .filter(p => !membersInOtherLeagues.has(p.uid))
+          .sort((a, b) => (a.eloRating || 1000) - (b.eloRating || 1000));
+        const inOtherLeague = activePlayers
+          .filter(p => membersInOtherLeagues.has(p.uid))
+          .sort((a, b) => (a.eloRating || 1000) - (b.eloRating || 1000));
 
         const gs     = league.groupStageConfig || {};
         const pts    = league.pointsConfig    || {};
@@ -1052,13 +1128,24 @@ function _renderSeason(sid, season, allPlayers) {
             }).join('')}
 
             <!-- Add member -->
-            ${activePlayers.length ? `
+            ${(freeAgents.length || inOtherLeague.length) ? `
               <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
                 <select id="member-select-${lid}" class="admin-input" style="flex:1;">
                   <option value="">Select player to add…</option>
-                  ${activePlayers.map(p => `
-                    <option value="${p.uid}">${escHtml(p.alias || p.name || p.uid)}</option>
-                  `).join('')}
+                  ${freeAgents.length ? `
+                    <optgroup label="Not in any league">
+                      ${freeAgents.map(p => `
+                        <option value="${p.uid}">${escHtml(p.alias || p.name || p.uid)} — ELO ${p.eloRating || 1000}</option>
+                      `).join('')}
+                    </optgroup>
+                  ` : ''}
+                  ${inOtherLeague.length ? `
+                    <optgroup label="Already in a league">
+                      ${inOtherLeague.map(p => `
+                        <option value="${p.uid}">${escHtml(p.alias || p.name || p.uid)} — ELO ${p.eloRating || 1000}</option>
+                      `).join('')}
+                    </optgroup>
+                  ` : ''}
                 </select>
                 <button class="btn-admin btn-teal" data-action="add-member"
                   data-sid="${sid}" data-lid="${lid}">Add</button>

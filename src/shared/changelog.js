@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.5',
+    date:    '2026-07-10',
+    changes: [],
+    adminChanges: [
+      'Admin Leagues: player select now groups by "Not in any league" vs "Already in a league", sorted by ELO asc, with ELO shown in each option',
+      'Admin Players: active players not in any league show an orange "No league" badge on their card',
+      'Admin Players: player profile modal now shows all leagues as checkboxes — check/uncheck to assign or remove, then tap Save Leagues',
+    ],
+  },
+  {
     version: '1.7.4',
     date:    '2026-07-10',
     changes: [],
