@@ -50,6 +50,11 @@
       }
     },
 
+    "notifications": {
+      ".read": false,
+      ".write": true
+    },
+
     "analytics": {
       ".read": false,
       "events":   { ".write": true },

@@ -669,6 +669,7 @@ async function renderLeagues(el) {
       const uid = select && select.value;
       if (!uid) { toast('Select a player', 'error'); return; }
       await dbSet(sRef(sid, lid, 'members/' + uid), { joinedAt: Date.now() });
+      await dbSet(dbRef(`notifications/league_assignment/${uid}_${sid}_${lid}`), { uid, sid, lid, createdAt: Date.now() });
       toast('Player added to league', 'success');
       renderLeagues(el);
     });
@@ -902,6 +903,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
     updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/matchesPerPlayer`] = newMpp;
     updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyPoints`]    = newQP;
     if (dl) updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/deadline`] = dl;
+    updates[`notifications/group_fixtures/${sid}_${lid}`] = { sid, lid, deadline: dl || null, createdAt: Date.now() };
 
     await dbMultiUpdate(updates);
     writeActivity('fixtures_released', { sid, lid, fixtureCount: pairs.length });
@@ -1784,6 +1786,7 @@ async function renderBracketAdmin(el) {
         if (!confirm(`Generate bracket for ${qualified.length} players?`)) return;
         const bracket = _generateBracket(qualified, players);
         await dbSet(sRef(activeSid, lid, 'bracket'), bracket);
+        await dbSet(dbRef(`notifications/bracket/${activeSid}_${lid}`), { sid: activeSid, lid, createdAt: Date.now() });
         toast('Bracket generated!', 'success');
         loadAndRender();
       });

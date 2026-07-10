@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.4',
+    date:    '2026-07-10',
+    changes: [],
+    adminChanges: [
+      'Admin: players now receive an email when added to a league, when group fixtures are released, and when the knockout bracket is published',
+    ],
+  },
+  {
     version: '1.7.3',
     date:    '2026-07-10',
     changes: [
