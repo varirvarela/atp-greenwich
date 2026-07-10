@@ -10,6 +10,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.3',
+    date:    '2026-07-10',
+    changes: [
+      'Profile: "Install App" button lets you add the app to your home screen at any time (mobile only, hidden once installed)',
+      'Install prompt reappears on each new session if the app has not been installed yet',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.7.2',
     date:    '2026-07-10',
     changes: [

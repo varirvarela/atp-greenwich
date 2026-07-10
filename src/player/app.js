@@ -14,6 +14,9 @@ import { renderBracketTab }   from '@player/bracket.js';
 import { buildLeagueTable, calculateStanding } from '@shared/scoring.js';
 import { APP_VERSION, changesSince } from '@shared/changelog.js';
 
+// Captured by beforeinstallprompt; module-level so the profile Install button can use it.
+let _deferredPrompt = null;
+
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 const TABS = [
   {
@@ -60,7 +63,7 @@ export function showApp(container, player, creds, onSignOut) {
     _creds  = { ..._creds,  avatarId: newAvatarId };
     const content = container.querySelector('#tab-content');
     if (content && activeTab === 'profile') {
-      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial);
+      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial, _installApp);
     }
   }
 
@@ -68,7 +71,7 @@ export function showApp(container, player, creds, onSignOut) {
     _player = { ..._player, alias: newAlias, username: newAlias };
     const content = container.querySelector('#tab-content');
     if (content && activeTab === 'profile') {
-      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial);
+      renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial, _installApp);
     } else {
       // Update the alias display in place without full re-render
       const aliasEl = container.querySelector('#profile-alias-display');
@@ -172,7 +175,7 @@ export function showApp(container, player, creds, onSignOut) {
       case 'matches':   _tabCleanup = renderMatchesTab(content, _player, _creds) || null; break;
       case 'standings': _tabCleanup = renderStandingsTab(content, _player, _creds) || null; break;
       case 'bracket':   _tabCleanup = renderBracketTab(content, _player, _creds) || null; break;
-      case 'profile':   renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial); break;
+      case 'profile':   renderProfileTab(content, _player, _creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial, _installApp); break;
       default: content.innerHTML = '';
     }
   }
@@ -411,15 +414,15 @@ function _showLeaguePicker(allLeagues, container, onSwitch) {
 // ─── PWA install prompt ───────────────────────────────────────────────────────
 
 function _setupInstallPrompt() {
-  if (localStorage.getItem('pwa_install_dismissed') === '1') return;
+  if (sessionStorage.getItem('pwa_install_dismissed') === '1') return;
   if (window.matchMedia('(display-mode: standalone)').matches) return;
-  if (window.navigator.standalone === true) return; // iOS already installed
+  if (window.navigator.standalone === true) return;
 
   const ua        = navigator.userAgent;
   const isIOS     = /iPhone|iPad|iPod/.test(ua);
   const isAndroid = /Android/.test(ua);
 
-  if (!isIOS && !isAndroid) return; // desktop: nothing to do
+  if (!isIOS && !isAndroid) return; // desktop: nothing
 
   if (isAndroid) {
     _setupAndroidInstallBanner();
@@ -428,10 +431,36 @@ function _setupInstallPrompt() {
   }
 }
 
-function _setupAndroidInstallBanner() {
-  let deferredPrompt = null;
+// Called from the profile "Install App" button.
+function _installApp() {
+  if (window.matchMedia('(display-mode: standalone)').matches) return;
+  if (window.navigator.standalone === true) return;
 
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+
+  if (isIOS) {
+    // Remove existing banner if already showing, then re-show.
+    document.getElementById('pwa-ios-banner')?.remove();
+    _showIOSInstallBanner();
+    return;
+  }
+
+  // Android: trigger native prompt if available, otherwise re-show banner.
+  if (_deferredPrompt) {
+    _deferredPrompt.prompt();
+    _deferredPrompt.userChoice.then(({ outcome }) => {
+      if (outcome === 'accepted') logInstallCompleted('android');
+      _deferredPrompt = null;
+    });
+  } else {
+    document.getElementById('pwa-android-banner')?.remove();
+    _setupAndroidInstallBanner();
+  }
+}
+
+function _setupAndroidInstallBanner() {
   const banner = document.createElement('div');
+  banner.id = 'pwa-android-banner';
   banner.style.cssText = `
     display:none;position:fixed;bottom:72px;left:50%;transform:translateX(-50%);
     background:var(--text);color:#fff;border-radius:12px;
@@ -451,31 +480,34 @@ function _setupAndroidInstallBanner() {
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
-    deferredPrompt = e;
+    _deferredPrompt = e;
     banner.style.display = 'flex';
     logInstallPrompted('android');
   });
 
+  // If prompt was already captured before banner was created (e.g. via profile button).
+  if (_deferredPrompt) banner.style.display = 'flex';
+
   banner.querySelector('#pwa-install-btn').addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
+    if (!_deferredPrompt) return;
+    _deferredPrompt.prompt();
+    const { outcome } = await _deferredPrompt.userChoice;
     if (outcome === 'accepted') logInstallCompleted('android');
-    deferredPrompt = null;
+    _deferredPrompt = null;
     banner.remove();
   });
 
   banner.querySelector('#pwa-dismiss-btn').addEventListener('click', () => {
-    localStorage.setItem('pwa_install_dismissed', '1');
+    sessionStorage.setItem('pwa_install_dismissed', '1');
     banner.remove();
   });
 }
 
 function _showIOSInstallBanner() {
-  const ua       = navigator.userAgent;
-  const isChrome = /CriOS/.test(ua); // Chrome on iOS uses CriOS token
+  const isChrome = /CriOS/.test(navigator.userAgent);
 
   const banner = document.createElement('div');
+  banner.id = 'pwa-ios-banner';
   banner.style.cssText = `
     position:fixed;bottom:72px;left:50%;transform:translateX(-50%);
     background:var(--surface);border:1px solid var(--border);border-radius:16px;
@@ -539,7 +571,7 @@ function _showIOSInstallBanner() {
   });
 
   banner.querySelector('#pwa-dismiss-btn').addEventListener('click', () => {
-    localStorage.setItem('pwa_install_dismissed', '1');
+    sessionStorage.setItem('pwa_install_dismissed', '1');
     banner.remove();
   });
 }
@@ -623,7 +655,7 @@ function _urlBase64ToUint8Array(base64String) {
 
 // ─── Tab: Profile ─────────────────────────────────────────────────────────────
 
-function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial) {
+function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAliasChanged, onReplayTutorial, onInstallApp) {
   const tier  = eloTierLabel(player.eloRating || 1000);
   const elo   = player.eloRating || 1000;
   const avatarSvg = player.avatarId
@@ -798,12 +830,23 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         </div>
       </div>
 
-      <!-- Replay tutorial -->
-      <div style="margin-bottom:16px;text-align:center;">
+      <!-- Replay tutorial + Install App -->
+      <div style="margin-bottom:16px;display:flex;justify-content:center;gap:16px;flex-wrap:wrap;">
         <button class="btn btn-ghost btn-sm" id="btn-replay-tutorial"
           style="color:var(--text3);font-size:12px;">
           Replay app tutorial
         </button>
+        ${(() => {
+          const ua = navigator.userAgent;
+          const isMobile = /iPhone|iPad|iPod|Android/.test(ua);
+          const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+          return isMobile && !isPWA
+            ? `<button class="btn btn-ghost btn-sm" id="btn-install-app"
+                style="color:var(--ace);font-size:12px;font-weight:600;">
+                Install App
+              </button>`
+            : '';
+        })()}
       </div>
 
       <!-- Security -->
@@ -950,6 +993,11 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
   const replayTutorialBtn = el.querySelector('#btn-replay-tutorial');
   if (replayTutorialBtn && onReplayTutorial) {
     replayTutorialBtn.addEventListener('click', onReplayTutorial);
+  }
+
+  const installAppBtn = el.querySelector('#btn-install-app');
+  if (installAppBtn && onInstallApp) {
+    installAppBtn.addEventListener('click', onInstallApp);
   }
 }
 
