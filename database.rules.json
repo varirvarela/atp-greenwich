@@ -57,7 +57,10 @@
 
     "notifications": {
       ".read": false,
-      ".write": true
+      ".write": true,
+      "league_assignment": {
+        ".read": true
+      }
     },
 
     "analytics": {

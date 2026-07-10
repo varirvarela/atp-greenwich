@@ -597,7 +597,7 @@ async function renderLeagues(el) {
   const [allPlayers, allSeasonsRaw, leagueNotifsRaw] = await Promise.all([
     dbGet(pRef()),
     dbGet(dbRef('seasons')),
-    dbGet(dbRef('notifications/league_assignment')),
+    dbGet(dbRef('notifications/league_assignment')).catch(() => null),
   ]);
   const seasons = allSeasonsRaw || {};
   const leagueNotifications = leagueNotifsRaw || {};

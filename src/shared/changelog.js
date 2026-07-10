@@ -10,10 +10,11 @@
 
 export const CHANGELOG = [
   {
-    version: '1.7.8',
+    version: '1.7.9',
     date:    '2026-07-10',
     changes: [],
     adminChanges: [
+      'Fix: Leagues screen no longer crashes with Permission denied — league assignment email status now loads correctly',
       'Fix: activity feed now correctly records and displays all activity types (profile changes, challenges, league joins, fixtures, bracket advances)',
     ],
   },
