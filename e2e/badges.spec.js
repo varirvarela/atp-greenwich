@@ -8,10 +8,14 @@ test.describe('Navigation Badges', () => {
 
   test('BD-01 feed badge appears when activity item is newer than atp_feed_last_open', async ({ page }) => {
     await goTo(page);
-    await freshStart(page); // clearLeague + seedLeague + jumpToApp
+    await freshStart(page); // clearLeague + seedLeague + jumpToApp (starts on Feed tab)
 
-    // The app stamps FEED_LAST_OPEN_KEY = now when it loads on the Feed tab.
-    // Navigate away so the tab is inactive — badge is suppressed while feed is active.
+    // Wait for the badge listener to fire at least once while feed is active.
+    // This ensures FEED_LAST_OPEN_KEY is stamped before we navigate away — the
+    // Firebase onValue callback is async and may not have run yet at this point.
+    await page.waitForFunction(() => !!localStorage.getItem('atp_feed_last_open'), { timeout: 3000 });
+
+    // Navigate away so the badge can appear (suppressed while feed is active).
     await page.locator('button[data-tab="matches"]').click();
 
     // Write an item with ts well in the future so it is definitely newer than the
@@ -29,6 +33,9 @@ test.describe('Navigation Badges', () => {
   test('BD-02 feed badge disappears after clicking the Feed tab', async ({ page }) => {
     await goTo(page);
     await freshStart(page);
+
+    // Wait for the badge listener's first fire to stamp FEED_LAST_OPEN_KEY.
+    await page.waitForFunction(() => !!localStorage.getItem('atp_feed_last_open'), { timeout: 3000 });
 
     // Navigate away so badge can appear (suppressed while feed tab is active).
     await page.locator('button[data-tab="matches"]').click();
