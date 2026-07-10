@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.8',
+    date:    '2026-07-10',
+    changes: [],
+    adminChanges: [
+      'Fix: activity feed now correctly records and displays all activity types (profile changes, challenges, league joins, fixtures, bracket advances)',
+    ],
+  },
+  {
     version: '1.7.7',
     date:    '2026-07-10',
     changes: [

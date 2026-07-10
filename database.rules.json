@@ -50,6 +50,11 @@
       }
     },
 
+    "activity": {
+      ".read": true,
+      ".write": true
+    },
+
     "notifications": {
       ".read": false,
       ".write": true
