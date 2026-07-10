@@ -64,6 +64,7 @@ async function sendApprovalEmails(db, brevoKey) {
     const name = player.name || player.alias || 'Player';
     console.log(`Sending approval email to ${player.email} (${name})`);
 
+    const alias = player.alias || player.username || name;
     const ok = await sendEmail(brevoKey, {
       to:      [{ email: player.email, name }],
       subject: 'You\'re in — ATP Greenwich League',
@@ -71,9 +72,17 @@ async function sendApprovalEmails(db, brevoKey) {
         <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;">
           <h1 style="font-size:22px;color:#b84008;margin-bottom:8px;">ATP Greenwich</h1>
           <p style="font-size:16px;color:#1c1814;margin-bottom:24px;">Hi ${escName(name)},</p>
-          <p style="font-size:15px;color:#4a4038;line-height:1.6;margin-bottom:24px;">
-            Your account has been approved. You can now sign in and start playing.
+          <p style="font-size:15px;color:#4a4038;line-height:1.6;margin-bottom:16px;">
+            Your account has been approved — welcome to the league!
           </p>
+          <table style="background:#f7f3ef;border-radius:10px;padding:16px 20px;margin-bottom:24px;width:100%;border-collapse:collapse;">
+            <tr>
+              <td style="font-size:13px;color:#8a7e72;padding-bottom:4px;">Your alias on the app</td>
+            </tr>
+            <tr>
+              <td style="font-size:20px;font-weight:700;color:#b84008;letter-spacing:0.5px;">${escName(alias)}</td>
+            </tr>
+          </table>
           <a href="${APP_URL}"
             style="display:inline-block;background:#b84008;color:#fff;text-decoration:none;
               border-radius:10px;padding:13px 28px;font-size:15px;font-weight:700;">

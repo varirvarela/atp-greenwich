@@ -1,14 +1,20 @@
 # .github/workflows/test-email.yml
-# Manual one-shot trigger: seeds a test password-reset entry then runs the mailer.
-# Usage: gh workflow run test-email.yml -f email=pablorvarela@gmail.com
+# Manual trigger to test email sending end-to-end.
+# Usage:
+#   gh workflow run test-email.yml -f type=approval -f email=pablorvarela@gmail.com
+#   gh workflow run test-email.yml -f type=reset    -f email=pablorvarela@gmail.com
 
 name: Test Email (manual)
 
 on:
   workflow_dispatch:
     inputs:
+      type:
+        description: 'Email type to test: "approval" or "reset"'
+        required: true
+        default: 'approval'
       email:
-        description: 'Player email to send the test reset to'
+        description: 'Player email address to send the test to'
         required: true
 
 jobs:
@@ -26,7 +32,16 @@ jobs:
         run: npm install
         working-directory: scripts
 
-      - name: Seed test reset entry
+      - name: Seed test approval entry
+        if: ${{ github.event.inputs.type == 'approval' }}
+        run: EMAIL="${{ github.event.inputs.email }}" node seed-test-approval.js
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+
+      - name: Seed test password-reset entry
+        if: ${{ github.event.inputs.type == 'reset' }}
         run: EMAIL="${{ github.event.inputs.email }}" node seed-test-reset.js
         working-directory: scripts
         env:
@@ -40,3 +55,11 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+
+      - name: Clean up test approval entry
+        if: ${{ github.event.inputs.type == 'approval' }}
+        run: node cleanup-test-approval.js
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
