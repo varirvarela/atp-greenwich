@@ -10,6 +10,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.7',
+    date:    '2026-07-10',
+    changes: [
+      'Feed: a card now appears when a player is added to a league',
+    ],
+    adminChanges: [
+      'Admin Leagues: each member row now shows whether their league assignment email has been sent',
+      'Admin Players: player profile modal shows approval email status (✓ Sent or ⏳ Pending)',
+    ],
+  },
+  {
     version: '1.7.6',
     date:    '2026-07-10',
     changes: [

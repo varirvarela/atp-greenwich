@@ -475,6 +475,12 @@ async function _showPlayerProfileModal(player, onDone) {
           <td style="font-family:var(--font-mono);font-weight:700;">${player.eloRating || 1000}</td></tr>
         <tr><td style="color:var(--text3);padding:4px 0;">League</td>
           <td>${currentLeagueName ? escHtml(currentLeagueName) : '<span style="color:var(--text3);">None</span>'}</td></tr>
+        ${player.status === 'onboarding' || player.status === 'active' ? `
+        <tr><td style="color:var(--text3);padding:4px 0;">Approval email</td>
+          <td>${player.emailSent
+            ? '<span style="color:var(--ace3);">✓ Sent</span>'
+            : '<span style="color:var(--text3);">⏳ Pending</span>'}</td></tr>
+        ` : ''}
       </table>
 
       <div class="admin-input-group">
@@ -588,11 +594,13 @@ function _getAdminSid(sortedSeasons) {
 // ─── Leagues ──────────────────────────────────────────────────────────────────
 
 async function renderLeagues(el) {
-  const [allPlayers, allSeasonsRaw] = await Promise.all([
+  const [allPlayers, allSeasonsRaw, leagueNotifsRaw] = await Promise.all([
     dbGet(pRef()),
     dbGet(dbRef('seasons')),
+    dbGet(dbRef('notifications/league_assignment')),
   ]);
   const seasons = allSeasonsRaw || {};
+  const leagueNotifications = leagueNotifsRaw || {};
 
   const sortedSeasons = Object.entries(seasons)
     .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
@@ -649,7 +657,7 @@ async function renderLeagues(el) {
                     data-name="${escHtml(season.name||sid)}">Delete</button>
                 </div>
               </div>
-              ${_renderSeason(sid, season, allPlayers||{})}
+              ${_renderSeason(sid, season, allPlayers||{}, leagueNotifications)}
             </div>
           `).join('')}
         </div>
@@ -1048,7 +1056,7 @@ function _showMovePlayerModal(uid, playerName, sid, fromLid, allLeagues, onDone)
   });
 }
 
-function _renderSeason(sid, season, allPlayers) {
+function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
   if (!season) return '<div class="admin-empty">Tournament data not found.</div>';
   const leagues = season.leagues || {};
 
@@ -1116,11 +1124,17 @@ function _renderSeason(sid, season, allPlayers) {
             <!-- Members list -->
             ${memberUids.map(uid => {
               const p = allPlayers[uid] || {};
+              const notifKey = `${uid}_${sid}_${lid}`;
+              const leagueEmailSent = leagueNotifications[notifKey]?.emailSent === true;
               return `
                 <div style="display:flex;align-items:center;gap:8px;padding:6px 0;
                   border-bottom:1px solid var(--border);">
                   ${avatarToSvg(p.avatarId || null, 24)}
                   <span style="flex:1;font-size:13px;">${escHtml(p.alias || p.name || uid)}</span>
+                  <span title="${leagueEmailSent ? 'League email sent' : 'League email not yet sent'}"
+                    style="font-size:10px;color:${leagueEmailSent ? 'var(--ace3)' : 'var(--text3)'};">
+                    ${leagueEmailSent ? '✉ sent' : '✉ pending'}
+                  </span>
                   <button class="btn-admin btn-ghost" style="color:var(--text3);font-size:11px;"
                     data-action="move-member" data-sid="${sid}" data-lid="${lid}" data-uid="${uid}"
                     data-player-name="${escHtml(p.alias || p.name || uid)}">
