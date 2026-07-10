@@ -194,7 +194,7 @@ export function showApp(container, player, creds, onSignOut) {
   }
 
   renderShell(activeTab);
-  _setupInstallPrompt(container);
+  _setupInstallPrompt();
   _setupPushNotifications(creds.uid);
   _checkWhatsNew();
   _checkWalkthrough(navigateToTab);
@@ -410,18 +410,32 @@ function _showLeaguePicker(allLeagues, container, onSwitch) {
 
 // ─── PWA install prompt ───────────────────────────────────────────────────────
 
-function _setupInstallPrompt(container) {
+function _setupInstallPrompt() {
   if (localStorage.getItem('pwa_install_dismissed') === '1') return;
   if (window.matchMedia('(display-mode: standalone)').matches) return;
+  if (window.navigator.standalone === true) return; // iOS already installed
 
+  const ua        = navigator.userAgent;
+  const isIOS     = /iPhone|iPad|iPod/.test(ua);
+  const isAndroid = /Android/.test(ua);
+
+  if (!isIOS && !isAndroid) return; // desktop: nothing to do
+
+  if (isAndroid) {
+    _setupAndroidInstallBanner();
+  } else {
+    setTimeout(_showIOSInstallBanner, 3000);
+  }
+}
+
+function _setupAndroidInstallBanner() {
   let deferredPrompt = null;
 
   const banner = document.createElement('div');
-  banner.id = 'pwa-install-banner';
   banner.style.cssText = `
-    display:none;position:fixed;bottom:64px;left:50%;transform:translateX(-50%);
+    display:none;position:fixed;bottom:72px;left:50%;transform:translateX(-50%);
     background:var(--text);color:#fff;border-radius:12px;
-    padding:10px 14px 10px 16px;display:none;align-items:center;gap:10px;
+    padding:10px 14px 10px 16px;align-items:center;gap:10px;
     font-size:13px;font-family:var(--font-sans);z-index:900;
     box-shadow:0 4px 16px rgba(28,24,20,0.25);max-width:calc(100vw - 32px);
   `;
@@ -439,16 +453,89 @@ function _setupInstallPrompt(container) {
     e.preventDefault();
     deferredPrompt = e;
     banner.style.display = 'flex';
-    logInstallPrompted(navigator.userAgent.includes('Android') ? 'android' : 'ios');
+    logInstallPrompted('android');
   });
 
   banner.querySelector('#pwa-install-btn').addEventListener('click', async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') logInstallCompleted(navigator.userAgent.includes('Android') ? 'android' : 'ios');
+    if (outcome === 'accepted') logInstallCompleted('android');
     deferredPrompt = null;
     banner.remove();
+  });
+
+  banner.querySelector('#pwa-dismiss-btn').addEventListener('click', () => {
+    localStorage.setItem('pwa_install_dismissed', '1');
+    banner.remove();
+  });
+}
+
+function _showIOSInstallBanner() {
+  const ua       = navigator.userAgent;
+  const isChrome = /CriOS/.test(ua); // Chrome on iOS uses CriOS token
+
+  const banner = document.createElement('div');
+  banner.style.cssText = `
+    position:fixed;bottom:72px;left:50%;transform:translateX(-50%);
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    padding:16px;z-index:900;box-shadow:0 4px 24px rgba(28,24,20,0.18);
+    max-width:calc(100vw - 32px);width:320px;font-family:var(--font-sans);
+  `;
+
+  banner.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <span style="font-size:14px;font-weight:700;color:var(--text);">Add to Home Screen</span>
+      <button id="pwa-dismiss-btn" style="background:none;border:none;color:var(--text3);
+        cursor:pointer;font-size:22px;line-height:1;padding:0;">×</button>
+    </div>
+
+    <div style="display:flex;gap:6px;margin-bottom:14px;">
+      <button data-browser="safari" style="flex:1;padding:7px 0;border-radius:8px;
+        border:1px solid var(--border);font-size:13px;font-weight:600;cursor:pointer;
+        background:${!isChrome ? 'var(--ace)' : 'transparent'};
+        color:${!isChrome ? '#fff' : 'var(--text2)'};">Safari</button>
+      <button data-browser="chrome" style="flex:1;padding:7px 0;border-radius:8px;
+        border:1px solid var(--border);font-size:13px;font-weight:600;cursor:pointer;
+        background:${isChrome ? 'var(--ace)' : 'transparent'};
+        color:${isChrome ? '#fff' : 'var(--text2)'};">Chrome</button>
+    </div>
+
+    <ol id="ios-steps" style="margin:0;padding-left:20px;font-size:13px;
+      color:var(--text2);line-height:2;">
+      ${!isChrome ? `
+        <li>Tap the <strong>Share</strong> button ↑ at the bottom of Safari</li>
+        <li>Tap <strong>Add to Home Screen</strong></li>
+        <li>Tap <strong>Add</strong></li>
+      ` : `
+        <li>Tap the <strong>⋯</strong> menu at the bottom right</li>
+        <li>Tap <strong>Add to Home Screen</strong></li>
+        <li>Tap <strong>Add</strong></li>
+      `}
+    </ol>
+  `;
+
+  document.body.appendChild(banner);
+  logInstallPrompted('ios');
+
+  banner.querySelectorAll('[data-browser]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const chrome = btn.dataset.browser === 'chrome';
+      banner.querySelectorAll('[data-browser]').forEach(b => {
+        const active = (b.dataset.browser === 'chrome') === chrome;
+        b.style.background = active ? 'var(--ace)' : 'transparent';
+        b.style.color      = active ? '#fff' : 'var(--text2)';
+      });
+      banner.querySelector('#ios-steps').innerHTML = chrome ? `
+        <li>Tap the <strong>⋯</strong> menu at the bottom right</li>
+        <li>Tap <strong>Add to Home Screen</strong></li>
+        <li>Tap <strong>Add</strong></li>
+      ` : `
+        <li>Tap the <strong>Share</strong> button ↑ at the bottom of Safari</li>
+        <li>Tap <strong>Add to Home Screen</strong></li>
+        <li>Tap <strong>Add</strong></li>
+      `;
+    });
   });
 
   banner.querySelector('#pwa-dismiss-btn').addEventListener('click', () => {

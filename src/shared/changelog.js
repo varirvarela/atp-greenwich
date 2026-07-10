@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.7.2',
+    date:    '2026-07-10',
+    changes: [
+      'Install prompt: Android shows a one-tap Install button; iPhone shows step-by-step instructions for Safari or Chrome; desktop sees nothing',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.7.1',
     date:    '2026-07-09',
     changes: [
