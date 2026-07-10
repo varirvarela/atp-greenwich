@@ -3,7 +3,7 @@
 // Imported by all three apps (player, admin, companion).
 
 import { initializeApp } from 'firebase/app';
-import { getDatabase, connectDatabaseEmulator, ref, set, get, update, push, remove, onValue, off } from 'firebase/database';
+import { getDatabase, connectDatabaseEmulator, ref, set, get, update, push, remove, onValue } from 'firebase/database';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // ─── Firebase config ────────────────────────────────────────────────────────
@@ -129,11 +129,12 @@ async function dbRemove(refOrPath) {
 // Always detach listeners before switching season/league context.
 function dbListen(refOrPath, callback) {
   const r = typeof refOrPath === 'string' ? dbRef(refOrPath) : refOrPath;
-  onValue(r, (snap) => {
+  // onValue returns a per-listener unsubscribe. Use it instead of off(r), which
+  // would remove ALL listeners on the path (including badge listeners on the
+  // same activity path that must survive tab navigation).
+  return onValue(r, (snap) => {
     callback(snap.exists() ? snap.val() : null);
   });
-  // Return detach function
-  return () => off(r);
 }
 
 // Multi-path atomic update — use this whenever you need to write to
