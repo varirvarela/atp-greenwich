@@ -1,0 +1,42 @@
+# .github/workflows/test-email.yml
+# Manual one-shot trigger: seeds a test password-reset entry then runs the mailer.
+# Usage: gh workflow run test-email.yml -f email=pablorvarela@gmail.com
+
+name: Test Email (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 'Player email to send the test reset to'
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: scripts
+
+      - name: Seed test reset entry
+        run: EMAIL="${{ github.event.inputs.email }}" node seed-test-reset.js
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+
+      - name: Send pending emails
+        run: node send-email.js
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
