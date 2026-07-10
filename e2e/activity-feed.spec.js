@@ -58,7 +58,9 @@ test.describe('Activity Feed Cards', () => {
       uid: 'test_player_004', // brunoc
     });
 
-    await expect(page.getByText('joined the tournament')).toBeVisible({ timeout: 5000 });
+    // Use the full rendered text to avoid strict-mode collisions with items
+    // seeded by earlier tests in the same run (e.g. AF-03 writes devplayer).
+    await expect(page.getByText('brunoc joined the tournament')).toBeVisible({ timeout: 5000 });
 
     // Reaction buttons (.reaction-btn) only exist on match-result cards, never on
     // activity cards rendered by _activityCard.

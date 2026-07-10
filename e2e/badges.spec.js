@@ -12,6 +12,10 @@ test.describe('Navigation Badges', () => {
     await goTo(page);
     await freshStart(page); // clearLeague + seedLeague + jumpToApp
 
+    // Navigate away from Feed so the tab is not active — _updateNavBadge forces
+    // count=0 when the feed tab is active, which would suppress the badge.
+    await page.locator('button[data-tab="matches"]').click();
+
     // Set last-open to the past so any new item is "unseen".
     await page.evaluate(k => localStorage.setItem(k, String(Date.now() - 60000)), FEED_LAST_OPEN_KEY);
 
@@ -30,6 +34,9 @@ test.describe('Navigation Badges', () => {
   test('BD-02 feed badge disappears after clicking the Feed tab', async ({ page }) => {
     await goTo(page);
     await freshStart(page);
+
+    // Navigate away from Feed first — badge is suppressed while feed tab is active.
+    await page.locator('button[data-tab="matches"]').click();
 
     await page.evaluate(k => localStorage.setItem(k, String(Date.now() - 60000)), FEED_LAST_OPEN_KEY);
     await adminWrite(page, 'activity/badge-clear-test', {
