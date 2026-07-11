@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.4',
+    date:    '2026-07-11',
+    changes: [
+      'All match times now display in Eastern Time (EDT/EST) regardless of your device\'s timezone setting',
+    ],
+    adminChanges: [
+      'All date/time fields (match schedule, group stage deadline) now consistently use Eastern Time',
+    ],
+  },
+  {
     version: '1.8.3',
     date:    '2026-07-11',
     changes: [

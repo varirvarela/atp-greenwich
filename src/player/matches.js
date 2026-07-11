@@ -5,6 +5,7 @@
 
 import { dbGet, dbRef, dbMultiUpdate, dbListen, dbPush, pRef, sRef, uploadMatchPhoto } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
+import { fmtTime, tsToLocalInput, localInputToTs } from '@shared/tz.js';
 import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
 import { showPlayerModal } from '@player/player-modal.js';
@@ -316,7 +317,7 @@ function _matchCard(match, myUid, allPlayers) {
     : '';
   const dateBadge   = (match.scheduledAt && (match.status === 'scheduled' || match.status === 'open_challenge'))
     ? `<span class="t-label t-muted" style="font-size:10px;">
-         📅 ${new Date(match.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
+         📅 ${fmtTime(match.scheduledAt)}
        </span>`
     : '';
   const deadlineBadge = (match.groupMatch && match.deadline && match.status !== 'confirmed')
@@ -485,9 +486,7 @@ function _cardMeta(match, myUid) {
 
 function _openChallengeCard(match, allPlayers) {
   const op   = allPlayers[match.playerA] || { name: 'Unknown', alias: match.playerA };
-  const when = match.scheduledAt
-    ? new Date(match.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
-    : null;
+  const when = match.scheduledAt ? fmtTime(match.scheduledAt) : null;
   return `
     <div class="card" style="margin-bottom:10px;padding:14px 16px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
@@ -536,7 +535,7 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
     .map(uid => allPlayers[uid] ? { ...allPlayers[uid], uid } : null)
     .filter(Boolean);
 
-  const minDate = new Date(Date.now() + 60000).toISOString().slice(0, 16);
+  const minDate = tsToLocalInput(Date.now() + 60000);
 
   const overlay = _createOverlay();
   overlay.innerHTML = `
@@ -676,7 +675,7 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
     btn.disabled = true; btn.textContent = 'Proposing…';
     try {
       const val = overlay.querySelector('#propose-date-direct')?.value;
-      const scheduledAt = val ? new Date(val).getTime() : null;
+      const scheduledAt = localInputToTs(val);
       const _newMatchRef = await dbPush(sRef(sid, lid, 'matches'), {
         playerA: myUid, playerB: selectedUid, proposedBy: myUid,
         proposedAt: Date.now(), scheduledAt, status: 'scheduled',
@@ -696,7 +695,7 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
     btn.disabled = true; btn.textContent = 'Posting…';
     try {
       const val = overlay.querySelector('#propose-date-open')?.value;
-      const scheduledAt = val ? new Date(val).getTime() : null;
+      const scheduledAt = localInputToTs(val);
       const _newMatchRef = await dbPush(sRef(sid, lid, 'matches'), {
         playerA: myUid, playerB: null, proposedBy: myUid,
         proposedAt: Date.now(), scheduledAt, status: 'open_challenge',
@@ -1894,9 +1893,7 @@ function _showCancelProposalModal(match, myUid, sid, lid) {
 }
 
 function _showEditProposalModal(match, myUid, sid, lid) {
-  const current = match.scheduledAt
-    ? new Date(match.scheduledAt).toISOString().slice(0, 16)
-    : '';
+  const current = match.scheduledAt ? tsToLocalInput(match.scheduledAt) : '';
   const overlay = _createOverlay();
   overlay.innerHTML = `
     <div class="modal-sheet">
@@ -1909,7 +1906,7 @@ function _showEditProposalModal(match, myUid, sid, lid) {
         <div class="t-label t-muted" style="margin-bottom:8px;">Suggested date &amp; time</div>
         <input class="input" id="edit-date" type="datetime-local"
           value="${current}"
-          min="${new Date(Date.now() + 60000).toISOString().slice(0, 16)}"
+          min="${tsToLocalInput(Date.now() + 60000)}"
           style="font-size:14px;">
       </div>
       <button class="btn btn-primary" id="btn-save-time">Save</button>
@@ -1925,7 +1922,7 @@ function _showEditProposalModal(match, myUid, sid, lid) {
     btn.disabled = true; btn.textContent = 'Saving…';
     try {
       const val = overlay.querySelector('#edit-date').value;
-      const scheduledAt = val ? new Date(val).getTime() : null;
+      const scheduledAt = localInputToTs(val);
       await dbMultiUpdate({
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/scheduledAt`]: scheduledAt,
       });
@@ -1938,9 +1935,7 @@ function _showEditProposalModal(match, myUid, sid, lid) {
 }
 
 function _showEditOpenChallengeModal(match, myUid, allPlayers, memberUids, sid, lid) {
-  const current = match.scheduledAt
-    ? new Date(match.scheduledAt).toISOString().slice(0, 16)
-    : '';
+  const current = match.scheduledAt ? tsToLocalInput(match.scheduledAt) : '';
   const opponentOptions = memberUids
     .filter(uid => uid !== myUid)
     .map(uid => {
@@ -1961,7 +1956,7 @@ function _showEditOpenChallengeModal(match, myUid, allPlayers, memberUids, sid, 
         <div class="t-label t-muted" style="margin-bottom:8px;">Suggested date &amp; time</div>
         <input class="input" id="oc-date" type="datetime-local"
           value="${current}"
-          min="${new Date(Date.now() + 60000).toISOString().slice(0, 16)}"
+          min="${tsToLocalInput(Date.now() + 60000)}"
           style="font-size:14px;">
       </div>
       <div style="margin-bottom:20px;">
@@ -1987,7 +1982,7 @@ function _showEditOpenChallengeModal(match, myUid, allPlayers, memberUids, sid, 
     btn.disabled = true; btn.textContent = 'Saving…';
     try {
       const val = overlay.querySelector('#oc-date').value;
-      const scheduledAt = val ? new Date(val).getTime() : null;
+      const scheduledAt = localInputToTs(val);
       const opponentUid = overlay.querySelector('#oc-opponent').value || null;
       const base = `seasons/${sid}/leagues/${lid}/matches/${match.mid}`;
       const updates = { [base + '/scheduledAt']: scheduledAt };

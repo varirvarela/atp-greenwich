@@ -11,6 +11,7 @@ import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
 import { showPlayerModal } from '@player/player-modal.js';
 import { writeActivity } from '@shared/activity.js';
+import { fmtTime, tsToLocalInput, localInputToTs } from '@shared/tz.js';
 
 const ADMIN_CREDS_KEY  = 'atp_admin_creds';
 const ADMIN_SEASON_KEY = 'atp_admin_season';
@@ -797,7 +798,7 @@ async function renderLeagues(el) {
       const mpp = parseInt(el.querySelector(`#gs-mpp-${lid}`)?.value, 10) || 4;
       const qp  = parseInt(el.querySelector(`#gs-qp-${lid}`)?.value,  10) || 6;
       const dlRaw = el.querySelector(`#gs-dl-${lid}`)?.value;
-      const dl  = dlRaw ? new Date(dlRaw).getTime() : null;
+      const dl  = localInputToTs(dlRaw);
 
       const pointsConfig = {
         played:        parseFloat(el.querySelector(`#gs-pts-played-${lid}`)?.value)  ?? 1,
@@ -885,9 +886,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   const ptsPerWin   = (pts.played ?? 1) + (pts.wonBonus ?? 2);
   const smartQP     = Math.round(mpp * ptsPerWin * (2 / 3));
 
-  const deadlineDefault = gs.deadline
-    ? new Date(gs.deadline - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-    : '';
+  const deadlineDefault = gs.deadline ? tsToLocalInput(gs.deadline) : '';
 
   const previewCount = Math.floor(memberUids.length * mpp / 2);
 
@@ -959,7 +958,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
     const newMpp = parseInt(mppInput.value, 10) || mpp;
     const newQP  = parseInt(overlay.querySelector('#rf-qp').value, 10) ?? qualifyPts;
     const dlRaw  = overlay.querySelector('#rf-deadline').value;
-    const dl     = dlRaw ? new Date(dlRaw).getTime() : null;
+    const dl     = localInputToTs(dlRaw);
 
     const btn = overlay.querySelector('#btn-rf-confirm');
     btn.disabled = true; btn.textContent = '…';
@@ -1205,7 +1204,7 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
                   <div class="admin-input-group" style="grid-column:1/-1;">
                     <label class="admin-input-label">Deadline (${deadlineStr})</label>
                     <input id="gs-dl-${lid}" class="admin-input" type="datetime-local"
-                      value="${gs.deadline ? new Date(gs.deadline - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16) : ''}"/>
+                      value="${gs.deadline ? tsToLocalInput(gs.deadline) : ''}"/>
                   </div>
                 </div>
                 <div style="font-size:11px;font-weight:700;color:var(--text3);
@@ -1570,9 +1569,7 @@ function _matchCard(m, allPlayers) {
     open_challenge: 'badge-orange',
   }[m.status] || 'badge-muted';
   const score = m.result?.sets ? m.result.sets.map(s => `${s.a}-${s.b}`).join(' ') : '';
-  const scheduledStr = m.scheduledAt
-    ? new Date(m.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
-    : null;
+  const scheduledStr = m.scheduledAt ? fmtTime(m.scheduledAt) : null;
   return `
     <div class="admin-card" data-mid="${m.mid}">
       <div class="admin-card-body">
@@ -1816,9 +1813,7 @@ function _showMatchEditModal(match, allPlayers, onDone) {
 
 function _showOpenChallengeAdminModal(match, allPlayers, onDone) {
   const pA = allPlayers[match.playerA] || {};
-  const currentDate = match.scheduledAt
-    ? new Date(match.scheduledAt).toISOString().slice(0, 16)
-    : '';
+  const currentDate = match.scheduledAt ? tsToLocalInput(match.scheduledAt) : '';
   const opponentOptions = Object.entries(allPlayers)
     .filter(([uid, p]) => uid !== match.playerA && p.status === 'active')
     .sort((a, b) => (a[1].alias || a[1].name || '').localeCompare(b[1].alias || b[1].name || ''))
@@ -1871,7 +1866,7 @@ function _showOpenChallengeAdminModal(match, allPlayers, onDone) {
     saveBtn.disabled = true; saveBtn.textContent = '…';
 
     const val = overlay.querySelector('#oc-date').value;
-    const scheduledAt = val ? new Date(val).getTime() : null;
+    const scheduledAt = localInputToTs(val);
     const opponentUid = overlay.querySelector('#oc-opponent').value || null;
     const base = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
     const updates = { [base + '/scheduledAt']: scheduledAt };

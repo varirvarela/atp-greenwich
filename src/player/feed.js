@@ -3,6 +3,7 @@
 
 import { dbGet, dbRef, dbListen, dbSet, dbRemove, pRef, sRef } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
+import { fmtTime } from '@shared/tz.js';
 import { avatarToSvg } from '@player/avatars.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -391,9 +392,7 @@ function _activityCard(item, allPlayers, myLeagues) {
   switch (item.type) {
     case 'match_proposed': {
       const league = myLeagues?.find(l => l.lid === item.lid);
-      const whenStr = item.scheduledAt
-        ? new Date(item.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
-        : null;
+      const whenStr = item.scheduledAt ? fmtTime(item.scheduledAt) : null;
       icon = '⚔️';
       avatarUid = item.challengerId;
       title = `${playerName(item.challengerId)} sent a challenge`;
