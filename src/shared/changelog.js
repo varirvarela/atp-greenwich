@@ -10,6 +10,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.5',
+    date:    '2026-07-11',
+    changes: [
+      'Push notifications now active — you\'ll be prompted to allow them on next visit',
+      'Notifications: open challenges in your league, match confirmations, and direct challenges all trigger a push',
+    ],
+    adminChanges: [
+      'Push notifications: new player access requests now send a push to all admins',
+    ],
+  },
+  {
     version: '1.8.4',
     date:    '2026-07-11',
     changes: [
