@@ -10,6 +10,13 @@ export function fmtTime(ts) {
   });
 }
 
+// Format a UTC timestamp as a date-only string in the league timezone (e.g. "18 Jul 2026")
+export function fmtDate(ts) {
+  return new Date(ts).toLocaleDateString('en-GB', {
+    timeZone: LEAGUE_TZ, day: 'numeric', month: 'short', year: 'numeric',
+  });
+}
+
 // UTC ms → "YYYY-MM-DDTHH:mm" in LEAGUE_TZ, for pre-filling a datetime-local input
 export function tsToLocalInput(ts) {
   return new Date(ts).toLocaleString('sv', { timeZone: LEAGUE_TZ }).slice(0, 16).replace(' ', 'T');

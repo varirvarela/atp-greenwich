@@ -11,7 +11,7 @@ import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
 import { showPlayerModal } from '@player/player-modal.js';
 import { writeActivity } from '@shared/activity.js';
-import { fmtTime, tsToLocalInput, localInputToTs } from '@shared/tz.js';
+import { fmtTime, fmtDate, tsToLocalInput, localInputToTs } from '@shared/tz.js';
 
 const ADMIN_CREDS_KEY  = 'atp_admin_creds';
 const ADMIN_SEASON_KEY = 'atp_admin_season';
@@ -1110,9 +1110,7 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
           active:  `<span class="badge-admin badge-green">Active</span>`,
           closed:  `<span class="badge-admin badge-muted" style="background:#e0e0e0;">Closed</span>`,
         }[gsStatus] || '';
-        const deadlineStr = gs.deadline
-          ? new Date(gs.deadline).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
-          : 'not set';
+        const deadlineStr = gs.deadline ? fmtDate(gs.deadline) : 'not set';
 
         return `
           <div style="background:var(--surface2);border-radius:var(--radius);

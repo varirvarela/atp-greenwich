@@ -16,7 +16,7 @@ export const CHANGELOG = [
       'All match times now display in Eastern Time (EDT/EST) regardless of your device\'s timezone setting',
     ],
     adminChanges: [
-      'All date/time fields (match schedule, group stage deadline) now consistently use Eastern Time',
+      'All date/time fields (match schedule, group stage deadline) now consistently use Eastern Time — inputs and displays are locked to America/New_York',
     ],
   },
   {
