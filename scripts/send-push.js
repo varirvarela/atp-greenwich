@@ -39,6 +39,8 @@ async function run() {
   const config  = configSnap.val();
   const players = playersSnap.val() || {};
   const sid     = config && config.defaultSeason;
+  console.log(`Config defaultSeason: ${sid}`);
+  console.log(`Players loaded: ${Object.keys(players).length}`);
   if (!sid) { console.log('No active season.'); return; }
 
   const adminUids = Object.entries(players)
@@ -63,10 +65,12 @@ async function run() {
 
   const leaguesSnap = await db.ref(`seasons/${sid}/leagues`).once('value');
   const leagues = leaguesSnap.val() || {};
+  console.log(`Leagues in season ${sid}: ${Object.keys(leagues).join(', ') || '(none)'}`);
 
   for (const [lid, league] of Object.entries(leagues)) {
     const matchesSnap = await db.ref(`seasons/${sid}/leagues/${lid}/matches`).once('value');
     const matches = matchesSnap.val() || {};
+    console.log(`  League ${lid}: ${Object.keys(matches).length} matches, ${Object.keys(league.members || {}).length} members`);
 
     for (const [mid, match] of Object.entries(matches)) {
       const base     = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
