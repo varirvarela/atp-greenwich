@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.0',
+    date:    '2026-07-10',
+    changes: [],
+    adminChanges: [
+      'CI: new e2e tests cover joined_league, fixtures_released, and unknown activity types in the feed; admin add-member is verified to write the activity entry end-to-end',
+    ],
+  },
+  {
     version: '1.7.9',
     date:    '2026-07-10',
     changes: [],

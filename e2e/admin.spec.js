@@ -12,7 +12,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
-  goTo, freshStart, adminWrite,
+  goTo, freshStart, adminWrite, adminRead,
   adminAppLogin, adminNavTo, openAdminSidebar, ADMIN_BASE,
 } from './helpers.js';
 
@@ -175,6 +175,14 @@ test.describe('Flow A4 — Leagues Section', () => {
     const p = await browser.newPage();
     await goTo(p);
     await freshStart(p);
+    // Seed a 5th active player not in any league — used by A4-07 to test the add-member flow
+    await adminWrite(p, 'players/test_player_005', {
+      name: 'Carlos Lima',
+      alias: 'carlosl',
+      status: 'active',
+      eloRating: 1100,
+      createdAt: Date.now(),
+    });
     await p.close();
   });
 
@@ -226,6 +234,32 @@ test.describe('Flow A4 — Leagues Section', () => {
     await page.locator('#btn-rf-cancel').waitFor({ timeout: 5000 });
     await page.locator('#btn-rf-cancel').click();
     await expect(page.locator('#rf-mpp')).not.toBeVisible({ timeout: 3000 });
+  });
+
+  test('A4-07 adding a member via the dropdown writes a joined_league activity entry', async ({ page, browser }) => {
+    // Open a player-app page so we can read Firebase after the admin action
+    const helper = await browser.newPage();
+    await goTo(helper);
+
+    // Navigate away and back to reload the player list (picks up test_player_005)
+    await adminNavTo(page, 'matches');
+    await adminNavTo(page, 'leagues');
+
+    // Select the unseeded player in the league_a dropdown and add them
+    await page.locator('#member-select-league_a').waitFor({ timeout: 8000 });
+    await page.locator('#member-select-league_a').selectOption('test_player_005');
+    await page.locator('button[data-action="add-member"][data-lid="league_a"]').click();
+    await expect(page.getByText('Player added to league')).toBeVisible({ timeout: 5000 });
+
+    // Poll until writeActivity (fire-and-forget) completes and the entry is in Firebase
+    await expect.poll(async () => {
+      const activity = await adminRead(helper, 'activity');
+      return Object.values(activity || {}).filter(
+        e => e.type === 'joined_league' && e.uid === 'test_player_005'
+      ).length;
+    }, { timeout: 5000 }).toBeGreaterThan(0);
+
+    await helper.close();
   });
 });
 
