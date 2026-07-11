@@ -155,6 +155,8 @@ async function _sendTo(players, uid, payload) {
   } catch (err) {
     if (err.statusCode === 410 || err.statusCode === 404) {
       await admin.database().ref(`players/${uid}/pushSubscription`).remove();
+      // Null out in-memory so subsequent sends this run don't retry the dead subscription
+      delete players[uid].pushSubscription;
       console.log(`Removed expired subscription for ${uid}`);
     } else {
       console.error(`Push failed for ${uid}:`, err.message);
