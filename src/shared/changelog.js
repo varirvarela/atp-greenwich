@@ -10,6 +10,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.1',
+    date:    '2026-07-10',
+    changes: [
+      'Feed: past league additions now appear in the feed after the admin runs the backfill (Actions → Backfill League Emails)',
+    ],
+    adminChanges: [
+      'Fix: assigning a player to a league via the player profile modal now sends the league assignment email correctly',
+      'Backfill script updated: now seeds both email notifications AND feed activity entries for all existing league members',
+    ],
+  },
+  {
     version: '1.8.0',
     date:    '2026-07-10',
     changes: [],

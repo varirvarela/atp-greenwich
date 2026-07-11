@@ -569,12 +569,18 @@ async function _showPlayerProfileModal(player, onDone) {
       return;
     }
     await dbMultiUpdate(updates);
+    // Write email notifications + feed activity for each newly added league
+    const notifUpdates = {};
     Object.entries(updates).forEach(([path, val]) => {
       if (val !== null) {
         const [, sid, , lid] = path.split('/');
+        notifUpdates[`notifications/league_assignment/${player.uid}_${sid}_${lid}`] = {
+          uid: player.uid, sid, lid, createdAt: Date.now(),
+        };
         writeActivity('joined_league', { uid: player.uid, sid, lid });
       }
     });
+    if (Object.keys(notifUpdates).length > 0) await dbMultiUpdate(notifUpdates);
     toast('League assignments updated', 'success');
     overlay.remove();
     onDone();
