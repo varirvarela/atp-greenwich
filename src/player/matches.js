@@ -247,7 +247,8 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
       if (action === 'accept-challenge')  _showAcceptChallengeModal(match, myUid, allPlayers, matchesObj, sid, lid);
       if (action === 'cancel-challenge')  _showCancelProposalModal(match, myUid, sid, lid);
       if (action === 'cancel-proposal')   _showCancelProposalModal(match, myUid, sid, lid);
-      if (action === 'edit-proposal')     _showEditProposalModal(match, myUid, sid, lid);
+      if (action === 'edit-proposal')        _showEditProposalModal(match, myUid, sid, lid);
+      if (action === 'edit-open-challenge')  _showEditOpenChallengeModal(match, myUid, allPlayers, memberUids, sid, lid);
       if (action === 'decline-proposal')  _showCancelProposalModal(match, myUid, sid, lid);
     });
   });
@@ -313,7 +314,7 @@ function _matchCard(match, myUid, allPlayers) {
   const groupBadge  = match.groupMatch
     ? `<span class="badge" style="font-size:10px;background:rgba(0,100,220,.10);color:#0054c4;">Group</span>`
     : '';
-  const dateBadge   = (match.status === 'scheduled' && match.scheduledAt)
+  const dateBadge   = (match.scheduledAt && (match.status === 'scheduled' || match.status === 'open_challenge'))
     ? `<span class="t-label t-muted" style="font-size:10px;">
          📅 ${new Date(match.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })}
        </span>`
@@ -332,8 +333,10 @@ function _matchCard(match, myUid, allPlayers) {
   const isTheirProposal   = !match.groupMatch && match.playerB === myUid && match.proposedBy !== myUid && match.status === 'scheduled';
 
   const mgmtBtns = isMyOpenChallenge
-    ? `<button class="btn btn-ghost btn-sm" data-action="cancel-challenge" data-mid="${escHtml(match.mid)}"
-        style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Cancel Challenge</button>`
+    ? `<button class="btn btn-ghost btn-sm" data-action="edit-open-challenge" data-mid="${escHtml(match.mid)}"
+        style="width:auto;">Edit</button>
+       <button class="btn btn-ghost btn-sm" data-action="cancel-challenge" data-mid="${escHtml(match.mid)}"
+        style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Cancel</button>`
     : isMyProposal
     ? `<button class="btn btn-ghost btn-sm" data-action="edit-proposal" data-mid="${escHtml(match.mid)}"
         style="width:auto;">Edit Time</button>
@@ -1929,6 +1932,73 @@ function _showEditProposalModal(match, myUid, sid, lid) {
       overlay.remove();
     } catch (err) {
       console.error('Edit proposal error:', err);
+      btn.disabled = false; btn.textContent = 'Save';
+    }
+  });
+}
+
+function _showEditOpenChallengeModal(match, myUid, allPlayers, memberUids, sid, lid) {
+  const current = match.scheduledAt
+    ? new Date(match.scheduledAt).toISOString().slice(0, 16)
+    : '';
+  const opponentOptions = memberUids
+    .filter(uid => uid !== myUid)
+    .map(uid => {
+      const p = allPlayers[uid] || {};
+      return `<option value="${escHtml(uid)}">${escHtml(p.alias || p.name || uid)}</option>`;
+    })
+    .join('');
+
+  const overlay = _createOverlay();
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
+        <div style="font-size:16px;font-weight:700;">Edit Open Challenge</div>
+        <button class="btn-icon" id="btn-close">${_closeIcon()}</button>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div class="t-label t-muted" style="margin-bottom:8px;">Suggested date &amp; time</div>
+        <input class="input" id="oc-date" type="datetime-local"
+          value="${current}"
+          min="${new Date(Date.now() + 60000).toISOString().slice(0, 16)}"
+          style="font-size:14px;">
+      </div>
+      <div style="margin-bottom:20px;">
+        <div class="t-label t-muted" style="margin-bottom:8px;">Opponent</div>
+        <select class="input" id="oc-opponent" style="font-size:14px;">
+          <option value="">Keep open (no specific opponent)</option>
+          ${opponentOptions}
+        </select>
+        <p class="t-small t-muted" style="margin:6px 0 0;">
+          Selecting an opponent converts this into a direct challenge.
+        </p>
+      </div>
+      <button class="btn btn-primary" id="btn-save-oc">Save</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btn-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#btn-save-oc').addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-save-oc');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const val = overlay.querySelector('#oc-date').value;
+      const scheduledAt = val ? new Date(val).getTime() : null;
+      const opponentUid = overlay.querySelector('#oc-opponent').value || null;
+      const base = `seasons/${sid}/leagues/${lid}/matches/${match.mid}`;
+      const updates = { [base + '/scheduledAt']: scheduledAt };
+      if (opponentUid) {
+        updates[base + '/playerB']  = opponentUid;
+        updates[base + '/status']   = 'scheduled';
+      }
+      await dbMultiUpdate(updates);
+      overlay.remove();
+    } catch (err) {
+      console.error('Edit open challenge error:', err);
       btn.disabled = false; btn.textContent = 'Save';
     }
   });

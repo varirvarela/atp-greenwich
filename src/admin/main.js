@@ -1517,6 +1517,15 @@ async function renderMatches(el) {
         loadMatches().then(renderList);
       });
     });
+
+    // Edit button (same modal as card click — needed because card click returns early on button targets)
+    listEl.querySelectorAll('[data-action="open-edit"]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const row = rows.find(m => m.mid === btn.dataset.mid);
+        if (row) _showMatchEditModal(row, players, () => loadMatches().then(renderList));
+      });
+    });
   }
 
   // Initial shell
@@ -1609,6 +1618,10 @@ function _isAdminValidTennisSet(a, b) {
 }
 
 function _showMatchEditModal(match, allPlayers, onDone) {
+  if (match.status === 'open_challenge') {
+    return _showOpenChallengeAdminModal(match, allPlayers, onDone);
+  }
+
   const pA = allPlayers[match.playerA] || {};
   const pB = allPlayers[match.playerB] || {};
 
@@ -1797,6 +1810,79 @@ function _showMatchEditModal(match, allPlayers, onDone) {
     await dbMultiUpdate(updates);
     overlay.remove();
     toast('Match saved — ELO updated', 'success');
+    onDone();
+  });
+}
+
+function _showOpenChallengeAdminModal(match, allPlayers, onDone) {
+  const pA = allPlayers[match.playerA] || {};
+  const currentDate = match.scheduledAt
+    ? new Date(match.scheduledAt).toISOString().slice(0, 16)
+    : '';
+  const opponentOptions = Object.entries(allPlayers)
+    .filter(([uid, p]) => uid !== match.playerA && p.status === 'active')
+    .sort((a, b) => (a[1].alias || a[1].name || '').localeCompare(b[1].alias || b[1].name || ''))
+    .map(([uid, p]) => `<option value="${escHtml(uid)}">${escHtml(p.alias||p.name||uid)}</option>`)
+    .join('');
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
+    display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;`;
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;
+      width:100%;max-width:440px;box-shadow:0 8px 32px rgba(28,24,20,0.2);">
+      <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;margin-bottom:4px;">
+        Edit Open Challenge
+      </div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">
+        Posted by ${escHtml(pA.alias||pA.name||match.playerA)}
+        &nbsp;·&nbsp;<span class="badge-admin badge-orange">open</span>
+      </div>
+
+      <div class="admin-input-group">
+        <label class="admin-input-label">Scheduled Date &amp; Time</label>
+        <input id="oc-date" class="admin-input" type="datetime-local" value="${escHtml(currentDate)}">
+      </div>
+
+      <div class="admin-input-group">
+        <label class="admin-input-label">Assign Opponent</label>
+        <select id="oc-opponent" class="admin-input">
+          <option value="">Leave open (no opponent)</option>
+          ${opponentOptions}
+        </select>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">
+          Selecting an opponent converts this to a scheduled match.
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button id="btn-save-oc" class="btn-admin btn-primary" style="flex:1;">Save</button>
+        <button id="btn-close-oc" class="btn-admin btn-secondary">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#btn-close-oc').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#btn-save-oc').addEventListener('click', async () => {
+    const saveBtn = overlay.querySelector('#btn-save-oc');
+    saveBtn.disabled = true; saveBtn.textContent = '…';
+
+    const val = overlay.querySelector('#oc-date').value;
+    const scheduledAt = val ? new Date(val).getTime() : null;
+    const opponentUid = overlay.querySelector('#oc-opponent').value || null;
+    const base = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
+    const updates = { [base + '/scheduledAt']: scheduledAt };
+    if (opponentUid) {
+      updates[base + '/playerB'] = opponentUid;
+      updates[base + '/status']  = 'scheduled';
+    }
+
+    await dbMultiUpdate(updates);
+    overlay.remove();
+    toast(opponentUid ? 'Opponent assigned — match scheduled' : 'Open challenge updated', 'success');
     onDone();
   });
 }

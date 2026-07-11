@@ -10,6 +10,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.3',
+    date:    '2026-07-11',
+    changes: [
+      'Matches: your open challenge card now shows an Edit button — change the date/time or convert it to a direct challenge by picking a specific opponent',
+      'Matches: scheduled date/time is now shown on your own open challenge card',
+    ],
+    adminChanges: [
+      'Admin Matches: Edit button on open challenges now works — assign an opponent (converts to scheduled) or update the proposed time',
+    ],
+  },
+  {
     version: '1.8.2',
     date:    '2026-07-11',
     changes: [
