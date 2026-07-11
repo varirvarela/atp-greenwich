@@ -391,12 +391,17 @@ function _activityCard(item, allPlayers, myLeagues) {
   switch (item.type) {
     case 'match_proposed': {
       const league = myLeagues?.find(l => l.lid === item.lid);
+      const whenStr = item.scheduledAt
+        ? new Date(item.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+        : null;
       icon = '⚔️';
       avatarUid = item.challengerId;
       title = `${playerName(item.challengerId)} sent a challenge`;
+      const _leaguePart = league ? ' · ' + escHtml(league.name) : '';
+      const _whenPart = whenStr ? ' · 📅 ' + whenStr : '';
       sub = item.opponentId
-        ? `vs ${playerName(item.opponentId)}${league ? ' · ' + escHtml(league.name) : ''}`
-        : `Open challenge${league ? ' · ' + escHtml(league.name) : ''}`;
+        ? `vs ${playerName(item.opponentId)}${_leaguePart}${_whenPart}`
+        : `Open challenge${_leaguePart}${_whenPart}`;
       break;
     }
     case 'bracket_advance': {

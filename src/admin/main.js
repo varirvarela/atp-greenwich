@@ -1553,22 +1553,28 @@ async function renderMatches(el) {
 
 function _matchCard(m, allPlayers) {
   const pA = allPlayers[m.playerA] || {};
-  const pB = allPlayers[m.playerB] || {};
+  const pB = m.playerB ? (allPlayers[m.playerB] || {}) : null;
+  const pBLabel = pB ? escHtml(pB.alias||pB.name||m.playerB) : '<span style="color:var(--ace);">Open</span>';
   const statusClass = {
     scheduled: 'badge-muted', result_pending: 'badge-orange',
     photo_pending: 'badge-orange', confirmed: 'badge-green', cancelled: 'badge-muted',
+    open_challenge: 'badge-orange',
   }[m.status] || 'badge-muted';
   const score = m.result?.sets ? m.result.sets.map(s => `${s.a}-${s.b}`).join(' ') : '';
+  const scheduledStr = m.scheduledAt
+    ? new Date(m.scheduledAt).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+    : null;
   return `
     <div class="admin-card" data-mid="${m.mid}">
       <div class="admin-card-body">
         <div class="admin-card-name">
-          ${escHtml(pA.alias||pA.name||m.playerA)} vs ${escHtml(pB.alias||pB.name||m.playerB)}
+          ${escHtml(pA.alias||pA.name||m.playerA)} vs ${pBLabel}
         </div>
         <div class="admin-card-sub">
           ${escHtml(m.leagueName||'')}
           ${score ? ' &middot; ' + escHtml(score) : ''}
           ${m.proposedAt||m.createdAt ? ' &middot; ' + timeAgo(m.proposedAt||m.createdAt) : ''}
+          ${scheduledStr ? ' &middot; 📅 ' + scheduledStr : ''}
           ${m.disputed ? ' &middot; <span style="color:var(--ace3);">Disputed</span>' : ''}
           ${m.groupMatch ? ' &middot; <span style="color:#0a7a5e;">Group</span>' : ''}
         </div>

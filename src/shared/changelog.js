@@ -10,6 +10,18 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.2',
+    date:    '2026-07-11',
+    changes: [
+      'Matches: open challenges from league mates now appear correctly under "Open challenges" so you can accept them',
+      'Matches: proposed date and time now shows on open challenge cards in the feed',
+    ],
+    adminChanges: [
+      'Admin Matches: open challenge cards now show "Open" as the opponent and display the proposed date/time',
+      'What\'s New: version entries with no player-facing changes are no longer shown',
+    ],
+  },
+  {
     version: '1.8.1',
     date:    '2026-07-10',
     changes: [
@@ -326,5 +338,6 @@ export function changesSince(sinceVersion, { includeAdmin = false } = {}) {
       changes: includeAdmin
         ? [...(e.changes || []), ...(e.adminChanges || [])]
         : (e.changes || []),
-    }));
+    }))
+    .filter(e => e.changes.length > 0);
 }

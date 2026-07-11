@@ -128,8 +128,9 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
   const mine    = matches.filter(m => m.playerA === myUid || m.playerB === myUid);
 
   // Open challenges from others that the current player can accept
+  // Note: Firebase omits null fields on read, so playerB is undefined (not null) for open challenges
   const openChallenges = matches.filter(m =>
-    m.status === 'open_challenge' && m.playerA !== myUid && m.playerB === null
+    m.status === 'open_challenge' && m.playerA !== myUid && !m.playerB
   );
 
   // Apply status + search filters to own matches
@@ -678,7 +679,7 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
         proposedAt: Date.now(), scheduledAt, status: 'scheduled',
         result: null, photoUrl: null, eloDeltas: null, confirmedAt: null,
       });
-      writeActivity('match_proposed', { sid, lid, mid: _newMatchRef.key, challengerId: myUid, opponentId: selectedUid || null });
+      writeActivity('match_proposed', { sid, lid, mid: _newMatchRef.key, challengerId: myUid, opponentId: selectedUid || null, scheduledAt });
       overlay.remove();
     } catch (err) {
       console.error('Propose error:', err);
@@ -698,7 +699,7 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
         proposedAt: Date.now(), scheduledAt, status: 'open_challenge',
         result: null, photoUrl: null, eloDeltas: null, confirmedAt: null,
       });
-      writeActivity('match_proposed', { sid, lid, mid: _newMatchRef.key, challengerId: myUid, opponentId: null });
+      writeActivity('match_proposed', { sid, lid, mid: _newMatchRef.key, challengerId: myUid, opponentId: null, scheduledAt });
       overlay.remove();
     } catch (err) {
       console.error('Open challenge error:', err);
