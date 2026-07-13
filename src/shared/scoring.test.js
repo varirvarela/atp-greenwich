@@ -373,6 +373,31 @@ describe('generateFixtures — edge cases', () => {
   });
 });
 
+describe('generateFixtures — mathematically impossible combinations (n×mpp is odd)', () => {
+  it('3 players × 1 match (3 total slots — odd): cannot give everyone 1 match', () => {
+    // Total slots = 3 (odd) — provably impossible to schedule as pairs
+    const players = uids(3);
+    const fixtures = generateFixtures(players, 1);
+    const { ok } = validateFixtures(fixtures, players, 1);
+    expect(ok).toBe(false);
+  });
+
+  it('5 players × 1 match (5 total slots — odd): cannot give everyone 1 match', () => {
+    const players = uids(5);
+    const fixtures = generateFixtures(players, 1);
+    const { ok } = validateFixtures(fixtures, players, 1);
+    expect(ok).toBe(false);
+  });
+
+  it('3 players × 2 matches (6 total slots — even): full round-robin works perfectly', () => {
+    const players = uids(3);
+    const fixtures = generateFixtures(players, 2);
+    const { ok } = validateFixtures(fixtures, players, 2);
+    expect(ok).toBe(true);
+    expect(fixtures).toHaveLength(3);
+  });
+});
+
 // ─── validateFixtures ────────────────────────────────────────────────────────
 
 describe('validateFixtures', () => {

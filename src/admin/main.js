@@ -958,20 +958,38 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   overlay.querySelector('#btn-rf-cancel').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  // Back to step 1
-  overlay.querySelector('#rf-step2').querySelector && overlay.addEventListener('click', e => {});
-
   let pendingPairs = null;
 
   // Step 1: generate and preview
   overlay.querySelector('#btn-rf-preview').addEventListener('click', () => {
     if (memberUids.length < 2) { toast('Need at least 2 members', 'error'); return; }
     const newMpp = parseInt(mppInput.value, 10) || mpp;
+    const validationEl = overlay.querySelector('#rf-validation');
+    const confirmBtn   = overlay.querySelector('#btn-rf-confirm');
+
+    // Mathematically impossible: n×mpp is odd → can never be split into pairs
+    if ((memberUids.length * newMpp) % 2 !== 0) {
+      pendingPairs = null;
+      validationEl.innerHTML = `
+        <div style="background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);
+          border-radius:8px;padding:12px 14px;">
+          <div style="font-weight:600;color:#b91c1c;margin-bottom:4px;">
+            ✗ Impossible combination
+          </div>
+          <div style="font-size:13px;color:var(--text2);">
+            ${memberUids.length} players × ${newMpp} matches = ${memberUids.length * newMpp} total slots —
+            an odd number that cannot be split into pairs.<br><br>
+            Try an even number of matches per player (e.g. ${newMpp + 1}).
+          </div>
+        </div>`;
+      confirmBtn.style.display = 'none';
+      overlay.querySelector('#rf-step1-btns').style.display = 'none';
+      overlay.querySelector('#rf-step2').style.display = 'block';
+      return;
+    }
 
     pendingPairs = generateFixtures(memberUids, newMpp);
     const { ok, counts, shortfall } = validateFixtures(pendingPairs, memberUids, newMpp);
-
-    const validationEl = overlay.querySelector('#rf-validation');
 
     if (ok) {
       validationEl.innerHTML = `
@@ -984,8 +1002,9 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
             ${pendingPairs.length} matches · every player gets exactly ${newMpp} fixtures
           </div>
         </div>`;
-      overlay.querySelector('#btn-rf-confirm').textContent = 'Confirm & Release';
-      overlay.querySelector('#btn-rf-confirm').className = 'btn-admin btn-teal';
+      confirmBtn.textContent = 'Confirm & Release';
+      confirmBtn.className = 'btn-admin btn-teal';
+      confirmBtn.style.display = '';
     } else {
       const rows = memberUids.map(uid => {
         const name  = escHtml((allPlayers[uid] || {}).alias || (allPlayers[uid] || {}).name || uid);
@@ -1010,8 +1029,9 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
           </div>
           <table style="font-size:12px;width:100%;"><tbody>${rows}</tbody></table>
         </div>`;
-      overlay.querySelector('#btn-rf-confirm').textContent = 'Release Anyway';
-      overlay.querySelector('#btn-rf-confirm').className = 'btn-admin btn-admin-danger';
+      confirmBtn.textContent = 'Release Anyway';
+      confirmBtn.className = 'btn-admin btn-secondary';
+      confirmBtn.style.display = '';
     }
 
     overlay.querySelector('#rf-step1-btns').style.display = 'none';
