@@ -310,37 +310,71 @@ export function calculateGroupPoints(allMatches, uid, pointsConfig) {
   return points;
 }
 
-// Generate a balanced set of group-stage fixtures for a league.
+// Generate group-stage fixtures using the circle-method round-robin scheduler.
+// For even n: guaranteed exactly matchesPerPlayer matches per player (as long as mpp ≤ n-1).
+// For odd n: best-effort across rounds (one player per round gets a bye).
 // Returns an array of [uidA, uidB] pairs.
-// Best-effort: with few players or high matchesPerPlayer some players may get fewer.
 export function generateFixtures(memberUids, matchesPerPlayer) {
   const uids = [...memberUids];
-  const counts = Object.fromEntries(uids.map(u => [u, 0]));
+  const n = uids.length;
+  if (n < 2 || matchesPerPlayer < 1) return [];
 
-  // All unique pairs, shuffled
-  const pairs = [];
-  for (let i = 0; i < uids.length; i++)
-    for (let j = i + 1; j < uids.length; j++)
-      pairs.push([uids[i], uids[j]]);
-  for (let i = pairs.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+  const mpp = Math.min(matchesPerPlayer, n - 1);
+  const isOdd = n % 2 === 1;
+  const arr = isOdd ? [...uids, null] : [...uids]; // null = bye slot
+  const total = arr.length; // always even
+
+  // Circle method: fix arr[0], rotate arr[1..total-1] each round.
+  // Each round produces exactly one real match per player (no byes when n is even).
+  const allRounds = [];
+  for (let r = 0; r < total - 1; r++) {
+    const rotated = new Array(total);
+    rotated[0] = arr[0];
+    for (let i = 1; i < total; i++) {
+      rotated[i] = arr[((i - 1 + r) % (total - 1)) + 1];
+    }
+    const round = [];
+    for (let i = 0; i < total / 2; i++) {
+      const a = rotated[i];
+      const b = rotated[total - 1 - i];
+      if (a !== null && b !== null) round.push([a, b]);
+    }
+    allRounds.push(round);
   }
 
+  if (!isOdd) {
+    // Even n: first mpp rounds → exactly mpp matches per player, guaranteed.
+    return allRounds.slice(0, mpp).flat();
+  }
+
+  // Odd n: greedily consume rounds, skipping bye slots, until all players reach mpp.
+  const counts = Object.fromEntries(uids.map(u => [u, 0]));
   const fixtures = [];
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const [a, b] of pairs) {
-      if (counts[a] >= matchesPerPlayer || counts[b] >= matchesPerPlayer) continue;
-      if (fixtures.some(f => (f[0] === a && f[1] === b) || (f[0] === b && f[1] === a))) continue;
-      fixtures.push([a, b]);
-      counts[a]++;
-      counts[b]++;
-      changed = true;
+  for (const round of allRounds) {
+    for (const [a, b] of round) {
+      if (counts[a] < mpp && counts[b] < mpp) {
+        fixtures.push([a, b]);
+        counts[a]++;
+        counts[b]++;
+      }
     }
+    if (uids.every(u => counts[u] >= mpp)) break;
   }
   return fixtures;
+}
+
+// Validate a fixture list: returns { ok, counts, shortfall }
+// ok       — true if every member has exactly matchesPerPlayer fixtures
+// counts   — { uid: number } map of actual match counts
+// shortfall — uids that got fewer than matchesPerPlayer
+export function validateFixtures(fixtures, memberUids, matchesPerPlayer) {
+  const counts = Object.fromEntries(memberUids.map(u => [u, 0]));
+  for (const [a, b] of fixtures) {
+    if (a in counts) counts[a]++;
+    if (b in counts) counts[b]++;
+  }
+  const shortfall = memberUids.filter(u => counts[u] < matchesPerPlayer);
+  return { ok: shortfall.length === 0, counts, shortfall };
 }
 
 // ─── Exports ─────────────────────────────────────────────────────────────────

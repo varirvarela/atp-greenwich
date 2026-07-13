@@ -6,7 +6,7 @@ import '@admin/style.css';
 import { APP_VERSION } from '@shared/changelog.js';
 import { dbGet, dbSet, dbRef, dbUpdate, dbPush, dbRemove, dbMultiUpdate, pRef, sRef } from '@shared/firebase.js';
 import { escHtml, simpleHash, generateUid, generateInviteCode, timeAgo } from '@shared/utils.js';
-import { buildLeagueTable, isQualified, getQualifiedPlayers, calculateGroupPoints, generateFixtures } from '@shared/scoring.js';
+import { buildLeagueTable, isQualified, getQualifiedPlayers, calculateGroupPoints, generateFixtures, validateFixtures } from '@shared/scoring.js';
 import { calculateElo } from '@shared/elo.js';
 import { avatarToSvg } from '@player/avatars.js';
 import { showPlayerModal } from '@player/player-modal.js';
@@ -882,13 +882,9 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   const mpp         = gs.matchesPerPlayer || 4;
   const qualifyPts  = gs.qualifyPoints ?? 6;
 
-  // Smart default for qualifyPoints: 2/3 of max achievable pts (played+wonBonus per win)
-  const ptsPerWin   = (pts.played ?? 1) + (pts.wonBonus ?? 2);
-  const smartQP     = Math.round(mpp * ptsPerWin * (2 / 3));
-
+  const ptsPerWin      = (pts.played ?? 1) + (pts.wonBonus ?? 2);
+  const smartQP        = Math.round(mpp * ptsPerWin * (2 / 3));
   const deadlineDefault = gs.deadline ? tsToLocalInput(gs.deadline) : '';
-
-  const previewCount = Math.floor(memberUids.length * mpp / 2);
 
   const overlay = document.createElement('div');
   overlay.style.cssText = `position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
@@ -900,18 +896,18 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
         Release Group Fixtures
       </div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">
-        ${memberUids.length} players · <span id="fixture-preview">${previewCount}</span> fixtures will be created
+        ${memberUids.length} players
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <div class="admin-input-group">
           <label class="admin-input-label">Matches per player</label>
-          <input id="rf-mpp" class="admin-input" type="number" min="1" max="20" value="${mpp}"/>
+          <input id="rf-mpp" class="admin-input" type="number" min="1" max="${memberUids.length - 1}" value="${mpp}"/>
         </div>
         <div class="admin-input-group">
           <label class="admin-input-label">
             Qualify points (≥)
-            <span style="color:var(--text3);font-weight:400;"> — recommended ${smartQP}</span>
+            <span style="color:var(--text3);font-weight:400;"> — recommended <span id="rf-smart-qp">${smartQP}</span></span>
           </label>
           <input id="rf-qp" class="admin-input" type="number" min="0" value="${qualifyPts}"/>
         </div>
@@ -923,37 +919,115 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
 
       <div style="background:rgba(184,64,8,.06);border-radius:8px;padding:10px 12px;
         font-size:12px;color:var(--ace);margin-bottom:16px;">
-        Point system: won ${(pts.played??1)+(pts.wonBonus??2)} pts &nbsp;·&nbsp;
-        lost ${pts.played??1} pts &nbsp;·&nbsp;
-        missed ${pts.missed??-1} pts &nbsp;·&nbsp;
-        forfeit ${pts.forfeitLoser??-1} / +${pts.forfeitWinner??2} pts
+        Points: won ${ptsPerWin} &nbsp;·&nbsp; lost ${pts.played??1} &nbsp;·&nbsp;
+        missed ${pts.missed??-1} &nbsp;·&nbsp; forfeit ${pts.forfeitLoser??-1}&nbsp;/&nbsp;+${pts.forfeitWinner??2}
       </div>
 
-      <div style="display:flex;gap:10px;">
-        <button id="btn-rf-confirm" class="btn-admin btn-teal" style="flex:1;">
-          Release Fixtures
-        </button>
+      <!-- Step 1 buttons -->
+      <div id="rf-step1-btns" style="display:flex;gap:10px;">
+        <button id="btn-rf-preview" class="btn-admin btn-teal" style="flex:1;">Generate &amp; Preview</button>
         <button id="btn-rf-cancel" class="btn-admin btn-secondary">Cancel</button>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">
-        This action cannot be undone.
+
+      <!-- Step 2: validation result + confirm (hidden until preview) -->
+      <div id="rf-step2" style="display:none;">
+        <div id="rf-validation" style="margin-bottom:14px;"></div>
+        <div style="display:flex;gap:10px;">
+          <button id="btn-rf-confirm" class="btn-admin btn-teal" style="flex:1;">Confirm &amp; Release</button>
+          <button id="btn-rf-back" class="btn-admin btn-secondary">Back</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center;">
+          This action cannot be undone.
+        </div>
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
 
-  // Live-update fixture count preview
   const mppInput = overlay.querySelector('#rf-mpp');
+
+  // Update recommended qualify points when mpp changes
   mppInput.addEventListener('input', () => {
-    const n = parseInt(mppInput.value, 10) || 0;
-    overlay.querySelector('#fixture-preview').textContent = Math.floor(memberUids.length * n / 2);
+    const newMpp = parseInt(mppInput.value, 10) || 1;
+    overlay.querySelector('#rf-smart-qp').textContent = Math.round(newMpp * ptsPerWin * (2 / 3));
+    // Reset to step 1 if user changes mpp after previewing
+    overlay.querySelector('#rf-step2').style.display = 'none';
+    overlay.querySelector('#rf-step1-btns').style.display = 'flex';
   });
 
   overlay.querySelector('#btn-rf-cancel').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  overlay.querySelector('#btn-rf-confirm').addEventListener('click', async () => {
+  // Back to step 1
+  overlay.querySelector('#rf-step2').querySelector && overlay.addEventListener('click', e => {});
+
+  let pendingPairs = null;
+
+  // Step 1: generate and preview
+  overlay.querySelector('#btn-rf-preview').addEventListener('click', () => {
     if (memberUids.length < 2) { toast('Need at least 2 members', 'error'); return; }
+    const newMpp = parseInt(mppInput.value, 10) || mpp;
+
+    pendingPairs = generateFixtures(memberUids, newMpp);
+    const { ok, counts, shortfall } = validateFixtures(pendingPairs, memberUids, newMpp);
+
+    const validationEl = overlay.querySelector('#rf-validation');
+
+    if (ok) {
+      validationEl.innerHTML = `
+        <div style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);
+          border-radius:8px;padding:12px 14px;">
+          <div style="font-weight:600;color:#15803d;margin-bottom:4px;">
+            ✓ Fixtures look good
+          </div>
+          <div style="font-size:13px;color:var(--text2);">
+            ${pendingPairs.length} matches · every player gets exactly ${newMpp} fixtures
+          </div>
+        </div>`;
+      overlay.querySelector('#btn-rf-confirm').textContent = 'Confirm & Release';
+      overlay.querySelector('#btn-rf-confirm').className = 'btn-admin btn-teal';
+    } else {
+      const rows = memberUids.map(uid => {
+        const name  = escHtml((allPlayers[uid] || {}).alias || (allPlayers[uid] || {}).name || uid);
+        const got   = counts[uid];
+        const short = got < newMpp;
+        return `<tr>
+          <td style="padding:3px 8px 3px 0;">${name}</td>
+          <td style="padding:3px 0;color:${short ? '#b91c1c' : 'var(--text2)'};">
+            ${got}/${newMpp}${short ? ' ⚠' : ''}
+          </td>
+        </tr>`;
+      }).join('');
+      validationEl.innerHTML = `
+        <div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);
+          border-radius:8px;padding:12px 14px;margin-bottom:10px;">
+          <div style="font-weight:600;color:#92400e;margin-bottom:4px;">
+            ⚠ Incomplete schedule
+          </div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">
+            ${shortfall.length} player(s) will get fewer than ${newMpp} fixtures.
+            This can happen with an odd number of players.
+          </div>
+          <table style="font-size:12px;width:100%;"><tbody>${rows}</tbody></table>
+        </div>`;
+      overlay.querySelector('#btn-rf-confirm').textContent = 'Release Anyway';
+      overlay.querySelector('#btn-rf-confirm').className = 'btn-admin btn-admin-danger';
+    }
+
+    overlay.querySelector('#rf-step1-btns').style.display = 'none';
+    overlay.querySelector('#rf-step2').style.display = 'block';
+  });
+
+  // Back button resets to step 1
+  overlay.querySelector('#btn-rf-back').addEventListener('click', () => {
+    pendingPairs = null;
+    overlay.querySelector('#rf-step2').style.display = 'none';
+    overlay.querySelector('#rf-step1-btns').style.display = 'flex';
+  });
+
+  // Step 2: commit to Firebase
+  overlay.querySelector('#btn-rf-confirm').addEventListener('click', async () => {
+    if (!pendingPairs || !pendingPairs.length) return;
 
     const newMpp = parseInt(mppInput.value, 10) || mpp;
     const newQP  = parseInt(overlay.querySelector('#rf-qp').value, 10) ?? qualifyPts;
@@ -963,16 +1037,9 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
     const btn = overlay.querySelector('#btn-rf-confirm');
     btn.disabled = true; btn.textContent = '…';
 
-    const pairs = generateFixtures(memberUids, newMpp);
-    if (!pairs.length) {
-      toast('Could not generate fixtures — check player count vs matches per player', 'error');
-      btn.disabled = false; btn.textContent = 'Release Fixtures';
-      return;
-    }
-
     const now = Date.now();
     const updates = {};
-    for (const [playerA, playerB] of pairs) {
+    for (const [playerA, playerB] of pendingPairs) {
       const mid = 'gm_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 7);
       const base = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
       updates[base + '/playerA']    = playerA;
@@ -991,9 +1058,9 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
     updates[`notifications/group_fixtures/${sid}_${lid}`] = { sid, lid, deadline: dl || null, createdAt: Date.now() };
 
     await dbMultiUpdate(updates);
-    writeActivity('fixtures_released', { sid, lid, fixtureCount: pairs.length });
+    writeActivity('fixtures_released', { sid, lid, fixtureCount: pendingPairs.length });
     overlay.remove();
-    toast(`${pairs.length} fixtures released`, 'success');
+    toast(`${pendingPairs.length} fixtures released`, 'success');
     onDone();
   });
 }

@@ -10,6 +10,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.6',
+    date:    '2026-07-13',
+    changes: [],
+    adminChanges: [
+      'Release Fixtures: now uses a round-robin scheduler — for even player counts every player is guaranteed exactly the configured number of fixtures',
+      'Release Fixtures: new two-step flow — "Generate & Preview" shows a validation summary before you commit; if any player would get fewer fixtures it warns you with a per-player breakdown and requires explicit confirmation',
+    ],
+  },
+  {
     version: '1.8.5',
     date:    '2026-07-11',
     changes: [
