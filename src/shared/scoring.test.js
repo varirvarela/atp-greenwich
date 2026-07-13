@@ -6,6 +6,8 @@ import {
   getQualifiedPlayers,
   matchCountBetween,
   canPlayAgainst,
+  generateFixtures,
+  validateFixtures,
 } from './scoring.js';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
@@ -252,6 +254,170 @@ describe('matchCountBetween', () => {
 
   it('handles null match object', () =>
     expect(matchCountBetween(null, A, B)).toBe(0));
+});
+
+// ─── generateFixtures ────────────────────────────────────────────────────────
+
+function uids(n) {
+  return Array.from({ length: n }, (_, i) => `p${i}`);
+}
+
+function countMap(fixtures, members) {
+  const counts = Object.fromEntries(members.map(u => [u, 0]));
+  for (const [a, b] of fixtures) { counts[a]++; counts[b]++; }
+  return counts;
+}
+
+function hasDuplicatePair(fixtures) {
+  const seen = new Set();
+  for (const [a, b] of fixtures) {
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+}
+
+describe('generateFixtures — even player count (guaranteed)', () => {
+  it('4 players × 2 matches: every player gets exactly 2', () => {
+    const players = uids(4);
+    const fixtures = generateFixtures(players, 2);
+    const counts = Object.values(countMap(fixtures, players));
+    expect(counts.every(c => c === 2)).toBe(true);
+  });
+
+  it('4 players × 3 matches (full round-robin): every player gets exactly 3', () => {
+    const players = uids(4);
+    const fixtures = generateFixtures(players, 3);
+    const counts = Object.values(countMap(fixtures, players));
+    expect(counts.every(c => c === 3)).toBe(true);
+  });
+
+  it('6 players × 5 matches (full round-robin): every player gets exactly 5', () => {
+    const players = uids(6);
+    const fixtures = generateFixtures(players, 5);
+    const counts = Object.values(countMap(fixtures, players));
+    expect(counts.every(c => c === 5)).toBe(true);
+  });
+
+  it('20 players × 5 matches: every player gets exactly 5', () => {
+    const players = uids(20);
+    const fixtures = generateFixtures(players, 5);
+    const counts = Object.values(countMap(fixtures, players));
+    expect(counts.every(c => c === 5)).toBe(true);
+  });
+
+  it('20 players × 5 matches: correct total of 50 fixtures', () => {
+    expect(generateFixtures(uids(20), 5)).toHaveLength(50);
+  });
+
+  it('10 players × 4 matches: correct total of 20 fixtures', () => {
+    expect(generateFixtures(uids(10), 4)).toHaveLength(20);
+  });
+
+  it('no duplicate pairs', () => {
+    expect(hasDuplicatePair(generateFixtures(uids(20), 5))).toBe(false);
+  });
+
+  it('no player plays themselves', () => {
+    const fixtures = generateFixtures(uids(20), 5);
+    expect(fixtures.every(([a, b]) => a !== b)).toBe(true);
+  });
+
+  it('all players in output are from the input list', () => {
+    const players = uids(10);
+    const set = new Set(players);
+    const fixtures = generateFixtures(players, 4);
+    expect(fixtures.every(([a, b]) => set.has(a) && set.has(b))).toBe(true);
+  });
+
+  it('matchesPerPlayer capped at n-1 (cannot play more opponents than exist)', () => {
+    const players = uids(4);
+    const fixtures = generateFixtures(players, 99);
+    const counts = Object.values(countMap(fixtures, players));
+    expect(counts.every(c => c === 3)).toBe(true); // capped at 4-1=3
+  });
+});
+
+describe('generateFixtures — odd player count (best-effort)', () => {
+  it('5 players × 2 matches: returns at least some fixtures', () => {
+    const fixtures = generateFixtures(uids(5), 2);
+    expect(fixtures.length).toBeGreaterThan(0);
+  });
+
+  it('no duplicate pairs with odd player count', () => {
+    expect(hasDuplicatePair(generateFixtures(uids(5), 3))).toBe(false);
+  });
+
+  it('no player plays themselves with odd player count', () => {
+    const fixtures = generateFixtures(uids(5), 3);
+    expect(fixtures.every(([a, b]) => a !== b)).toBe(true);
+  });
+});
+
+describe('generateFixtures — edge cases', () => {
+  it('2 players × 1 match: produces 1 fixture', () => {
+    expect(generateFixtures(['x', 'y'], 1)).toHaveLength(1);
+  });
+
+  it('empty list returns empty', () => {
+    expect(generateFixtures([], 5)).toHaveLength(0);
+  });
+
+  it('1 player returns empty', () => {
+    expect(generateFixtures(['x'], 3)).toHaveLength(0);
+  });
+
+  it('0 matchesPerPlayer returns empty', () => {
+    expect(generateFixtures(uids(4), 0)).toHaveLength(0);
+  });
+});
+
+// ─── validateFixtures ────────────────────────────────────────────────────────
+
+describe('validateFixtures', () => {
+  it('ok when all players have exactly matchesPerPlayer fixtures', () => {
+    const players = uids(4);
+    const fixtures = generateFixtures(players, 2);
+    const result = validateFixtures(fixtures, players, 2);
+    expect(result.ok).toBe(true);
+    expect(result.shortfall).toHaveLength(0);
+  });
+
+  it('counts map has correct values', () => {
+    const players = uids(4);
+    const fixtures = generateFixtures(players, 2);
+    const { counts } = validateFixtures(fixtures, players, 2);
+    expect(Object.values(counts).every(c => c === 2)).toBe(true);
+  });
+
+  it('ok is false when a player has fewer fixtures', () => {
+    const players = ['a', 'b', 'c'];
+    const fixtures = [['a', 'b']]; // c has 0 matches
+    const result = validateFixtures(fixtures, players, 1);
+    expect(result.ok).toBe(false);
+    expect(result.shortfall).toContain('c');
+  });
+
+  it('shortfall lists exactly the players that are short', () => {
+    const players = ['a', 'b', 'c', 'd'];
+    const fixtures = [['a', 'b'], ['a', 'c']]; // a=2, b=1, c=1, d=0; target=2
+    const result = validateFixtures(fixtures, players, 2);
+    expect(result.shortfall.sort()).toEqual(['b', 'c', 'd']);
+  });
+
+  it('empty fixture list — all players are short', () => {
+    const players = uids(4);
+    const { ok, shortfall } = validateFixtures([], players, 3);
+    expect(ok).toBe(false);
+    expect(shortfall).toHaveLength(4);
+  });
+
+  it('20 players × 5 matches generated by round-robin — validates as ok', () => {
+    const players = uids(20);
+    const fixtures = generateFixtures(players, 5);
+    expect(validateFixtures(fixtures, players, 5).ok).toBe(true);
+  });
 });
 
 // ─── canPlayAgainst ───────────────────────────────────────────────────────────
