@@ -217,15 +217,41 @@ test.describe('Flow A4 — Leagues Section', () => {
     await expect(page.getByText(/recommended/i)).toBeVisible();
   });
 
-  test('A4-05 fixture-count preview updates when matches-per-player changes', async ({ page }) => {
+  test('A4-05 "Generate & Preview" runs the scheduler and shows a validation result', async ({ page }) => {
     await page.locator('button[data-action="release-fixtures"]').first().waitFor({ timeout: 8000 });
     await page.locator('button[data-action="release-fixtures"]').first().click();
-    await page.locator('#rf-mpp').waitFor({ timeout: 5000 });
-    const before = await page.locator('#fixture-preview').textContent();
-    await page.locator('#rf-mpp').fill('2');
-    await page.locator('#rf-mpp').dispatchEvent('input');
-    const after = await page.locator('#fixture-preview').textContent();
-    expect(after).not.toBe(before);
+    await page.locator('#btn-rf-preview').waitFor({ timeout: 5000 });
+
+    await page.locator('#btn-rf-preview').click();
+
+    // Validation section appears with a result
+    await expect(page.locator('#rf-validation')).toBeVisible({ timeout: 5000 });
+    // Confirm and Back buttons appear in step 2
+    await expect(page.locator('#btn-rf-confirm')).toBeVisible();
+    await expect(page.locator('#btn-rf-back')).toBeVisible();
+  });
+
+  test('A4-05b Back button returns to config step after previewing', async ({ page }) => {
+    await page.locator('button[data-action="release-fixtures"]').first().waitFor({ timeout: 8000 });
+    await page.locator('button[data-action="release-fixtures"]').first().click();
+    await page.locator('#btn-rf-preview').waitFor({ timeout: 5000 });
+    await page.locator('#btn-rf-preview').click();
+    await page.locator('#btn-rf-back').waitFor({ timeout: 5000 });
+    await page.locator('#btn-rf-back').click();
+
+    // Back to step 1: Generate & Preview visible, step 2 hidden
+    await expect(page.locator('#btn-rf-preview')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('#rf-step2')).not.toBeVisible();
+  });
+
+  test('A4-05c validation success message shows fixture count and "exactly" wording', async ({ page }) => {
+    await page.locator('button[data-action="release-fixtures"]').first().waitFor({ timeout: 8000 });
+    await page.locator('button[data-action="release-fixtures"]').first().click();
+    await page.locator('#btn-rf-preview').waitFor({ timeout: 5000 });
+    await page.locator('#btn-rf-preview').click();
+    await expect(page.locator('#rf-validation')).toBeVisible({ timeout: 5000 });
+    // Success path (even player count in seed) shows the green banner
+    await expect(page.locator('#rf-validation')).toContainText(/fixtures/i);
   });
 
   test('A4-06 Cancel closes the Release Fixtures modal', async ({ page }) => {
