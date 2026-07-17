@@ -855,17 +855,20 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
             style="display:block;margin:6px auto 0;background:none;border:none;
               cursor:pointer;font-size:11px;color:var(--text3);">Remove photo</button>
         </div>
-        <label class="btn btn-surface" id="photo-label"
-          style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-            <circle cx="12" cy="13" r="3"/>
-          </svg>
-          <span id="photo-btn-text">Choose / Take Photo</span>
-          <input type="file" id="photo-input" accept="image/*"
-            style="display:none;">
-        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <label class="btn btn-surface"
+            style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+            📷 Camera
+            <input type="file" id="photo-camera" accept="image/*" capture="environment"
+              style="display:none;">
+          </label>
+          <label class="btn btn-surface"
+            style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+            🖼 Gallery
+            <input type="file" id="photo-gallery" accept="image/*"
+              style="display:none;">
+          </label>
+        </div>
       </div>
 
       <div style="padding-bottom:8px;">
@@ -957,22 +960,24 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
   [1, 2].forEach(n => _wireSetRowEvents(overlay, n));
   if (thirdSetAdded) _wireSetRowEvents(overlay, 3);
 
-  // Photo
-  overlay.querySelector('#photo-input').addEventListener('change', e => {
-    const file = e.target.files?.[0];
+  // Photo — shared handler for both camera and gallery inputs
+  function _onPhotoChosen(file) {
     if (!file) return;
     selectedFile = file;
+    overlay.dataset.hasPhoto = '1';
     overlay.querySelector('#photo-img').src = URL.createObjectURL(file);
     overlay.querySelector('#photo-preview').style.display = 'block';
-    overlay.querySelector('#photo-btn-text').textContent = 'Change Photo';
     _checkResultReady(overlay, isPro10, isAdjust);
-  });
+  }
+  overlay.querySelector('#photo-camera').addEventListener('change', e => _onPhotoChosen(e.target.files?.[0]));
+  overlay.querySelector('#photo-gallery').addEventListener('change', e => _onPhotoChosen(e.target.files?.[0]));
 
   overlay.querySelector('#btn-remove-photo').addEventListener('click', () => {
     selectedFile = null;
-    overlay.querySelector('#photo-input').value = '';
+    delete overlay.dataset.hasPhoto;
+    overlay.querySelector('#photo-camera').value = '';
+    overlay.querySelector('#photo-gallery').value = '';
     overlay.querySelector('#photo-preview').style.display = 'none';
-    overlay.querySelector('#photo-btn-text').textContent = 'Choose / Take Photo';
     _checkResultReady(overlay, isPro10, isAdjust);
   });
 
@@ -1229,7 +1234,7 @@ function _deriveWinner(overlay, isPro10) {
 }
 
 function _checkResultReady(overlay, isPro10, isAdjust) {
-  const hasPhoto = isAdjust || !!(overlay.querySelector('#photo-input')?.files?.length);
+  const hasPhoto = isAdjust || !!overlay.dataset.hasPhoto;
   const winner   = _deriveWinner(overlay, isPro10);
   const incompleteWinner = overlay.dataset.incompleteWinner;
   const effectiveWinner = winner || (incompleteWinner ? incompleteWinner : null);
@@ -1443,11 +1448,20 @@ function _showUploadPhotoModal(match, myUid, allPlayers, sid, lid) {
       </div>
 
       <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:8px;">
-        <label class="btn btn-surface" style="cursor:pointer;text-align:center;">
-          📷  Choose / Take Photo
-          <input type="file" id="photo-input" accept="image/*"
-            style="display:none;">
-        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <label class="btn btn-surface"
+            style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+            📷 Camera
+            <input type="file" id="photo-camera" accept="image/*" capture="environment"
+              style="display:none;">
+          </label>
+          <label class="btn btn-surface"
+            style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+            🖼 Gallery
+            <input type="file" id="photo-gallery" accept="image/*"
+              style="display:none;">
+          </label>
+        </div>
         <button class="btn btn-primary" id="btn-upload" disabled>
           Confirm &amp; Update ELO
         </button>
@@ -1470,14 +1484,15 @@ function _showUploadPhotoModal(match, myUid, allPlayers, sid, lid) {
 
   let selectedFile = null;
 
-  overlay.querySelector('#photo-input').addEventListener('change', e => {
-    const file = e.target.files?.[0];
+  function _onAdjustPhotoChosen(file) {
     if (!file) return;
     selectedFile = file;
     overlay.querySelector('#photo-img').src = URL.createObjectURL(file);
     overlay.querySelector('#photo-preview').style.display = 'block';
     overlay.querySelector('#btn-upload').disabled = false;
-  });
+  }
+  overlay.querySelector('#photo-camera').addEventListener('change', e => _onAdjustPhotoChosen(e.target.files?.[0]));
+  overlay.querySelector('#photo-gallery').addEventListener('change', e => _onAdjustPhotoChosen(e.target.files?.[0]));
 
   overlay.querySelector('#btn-upload').addEventListener('click', async () => {
     if (!selectedFile) return;
