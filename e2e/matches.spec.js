@@ -74,8 +74,8 @@ test.describe('Flow 7 — Matches Tab', () => {
     // Still disabled — photo required
     await expect(page.locator('#btn-submit-result')).toBeDisabled();
 
-    // Attach a photo (1×1 transparent PNG stub)
-    await page.locator('#photo-input').setInputFiles({
+    // Attach a photo via the gallery input (camera input can't be tested headlessly)
+    await page.locator('#photo-gallery').setInputFiles({
       name: 'match.png',
       mimeType: 'image/png',
       buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'),

@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Production match photos — public read, image writes only (max 10 MB)
+    match /match-photos/{file} {
+      allow read: if true;
+      allow write: if request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+    // Dev-mode match photos (prefixed by DEV_ROOT = '_dev/')
+    match /_dev/match-photos/{file} {
+      allow read: if true;
+      allow write: if request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+    // All other paths are denied by default
+  }
+}

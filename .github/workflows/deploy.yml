@@ -54,11 +54,11 @@ jobs:
           cp -r dist-admin/. dist/admin/
           mv dist/admin/admin.html dist/admin/index.html
 
-      - name: Deploy Firebase Database Rules
+      - name: Deploy Firebase Rules
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa-key.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-key.json
-          npx firebase deploy --only database --project atp-greenwich
+          npx firebase deploy --only database,storage --project atp-greenwich
         continue-on-error: true
 
       - name: Setup Pages
