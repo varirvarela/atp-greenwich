@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.8.7',
+    date:    '2026-07-13',
+    changes: [
+      'Match results: photo button now lets you choose from your gallery as well as take a new photo',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.8.6',
     date:    '2026-07-13',
     changes: [],

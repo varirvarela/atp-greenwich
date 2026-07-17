@@ -863,7 +863,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
             <circle cx="12" cy="13" r="3"/>
           </svg>
           <span id="photo-btn-text">Choose / Take Photo</span>
-          <input type="file" id="photo-input" accept="image/*" capture="environment"
+          <input type="file" id="photo-input" accept="image/*"
             style="display:none;">
         </label>
       </div>
@@ -1445,7 +1445,7 @@ function _showUploadPhotoModal(match, myUid, allPlayers, sid, lid) {
       <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:8px;">
         <label class="btn btn-surface" style="cursor:pointer;text-align:center;">
           📷  Choose / Take Photo
-          <input type="file" id="photo-input" accept="image/*" capture="environment"
+          <input type="file" id="photo-input" accept="image/*"
             style="display:none;">
         </label>
         <button class="btn btn-primary" id="btn-upload" disabled>
