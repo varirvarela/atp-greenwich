@@ -10,6 +10,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.9.0',
+    date:    '2026-07-17',
+    changes: [
+      'Matches: both players can now reschedule a match — tap "Reschedule" on any scheduled match card',
+      'Matches: rescheduling a match posts an update to the Feed so league mates stay informed',
+      'Feed: daily match preview at 7am — see which matches are scheduled for today and when',
+      'Feed: end-of-day standings at 9pm — see updated league standings after the day\'s results',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.8.7',
     date:    '2026-07-13',
     changes: [

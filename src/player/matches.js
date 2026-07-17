@@ -332,6 +332,10 @@ function _matchCard(match, myUid, allPlayers) {
   const isMyOpenChallenge = match.status === 'open_challenge' && match.playerA === myUid;
   const isMyProposal      = !match.groupMatch && match.proposedBy === myUid && match.status === 'scheduled';
   const isTheirProposal   = !match.groupMatch && match.playerB === myUid && match.proposedBy !== myUid && match.status === 'scheduled';
+  const canReschedule     = (match.playerA === myUid || match.playerB === myUid) && match.status === 'scheduled';
+
+  const _rescheduleBtn = `<button class="btn btn-ghost btn-sm" data-action="edit-proposal" data-mid="${escHtml(match.mid)}"
+        style="width:auto;">Reschedule</button>`;
 
   const mgmtBtns = isMyOpenChallenge
     ? `<button class="btn btn-ghost btn-sm" data-action="edit-open-challenge" data-mid="${escHtml(match.mid)}"
@@ -339,13 +343,15 @@ function _matchCard(match, myUid, allPlayers) {
        <button class="btn btn-ghost btn-sm" data-action="cancel-challenge" data-mid="${escHtml(match.mid)}"
         style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Cancel</button>`
     : isMyProposal
-    ? `<button class="btn btn-ghost btn-sm" data-action="edit-proposal" data-mid="${escHtml(match.mid)}"
-        style="width:auto;">Edit Time</button>
+    ? `${_rescheduleBtn}
        <button class="btn btn-ghost btn-sm" data-action="cancel-proposal" data-mid="${escHtml(match.mid)}"
         style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Cancel</button>`
     : isTheirProposal
-    ? `<button class="btn btn-ghost btn-sm" data-action="decline-proposal" data-mid="${escHtml(match.mid)}"
+    ? `${_rescheduleBtn}
+       <button class="btn btn-ghost btn-sm" data-action="decline-proposal" data-mid="${escHtml(match.mid)}"
         style="color:var(--ace3);border-color:rgba(190,30,30,.25);width:auto;">Decline</button>`
+    : canReschedule
+    ? _rescheduleBtn
     : '';
 
   const hasAnyAction = action || canForfeit || mgmtBtns;
@@ -1914,7 +1920,7 @@ function _showEditProposalModal(match, myUid, sid, lid) {
     <div class="modal-sheet">
       <div class="modal-handle"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
-        <div style="font-size:16px;font-weight:700;">Edit Proposed Time</div>
+        <div style="font-size:16px;font-weight:700;">Reschedule Match</div>
         <button class="btn-icon" id="btn-close">${_closeIcon()}</button>
       </div>
       <div style="margin-bottom:20px;">
@@ -1940,6 +1946,14 @@ function _showEditProposalModal(match, myUid, sid, lid) {
       const scheduledAt = localInputToTs(val);
       await dbMultiUpdate({
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/scheduledAt`]: scheduledAt,
+      });
+      writeActivity('match_rescheduled', {
+        sid, lid, mid: match.mid,
+        changedBy: myUid,
+        playerA: match.playerA,
+        playerB: match.playerB,
+        oldScheduledAt: match.scheduledAt || null,
+        newScheduledAt: scheduledAt,
       });
       overlay.remove();
     } catch (err) {

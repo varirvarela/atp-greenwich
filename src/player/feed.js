@@ -441,6 +441,45 @@ function _activityCard(item, allPlayers, myLeagues) {
       sub = item.what === 'alias' && item.newVal ? `→ "${escHtml(item.newVal)}"` : '';
       break;
     }
+    case 'match_rescheduled': {
+      const league = myLeagues?.find(l => l.lid === item.lid);
+      const other = item.changedBy === item.playerA ? item.playerB : item.playerA;
+      icon = '🔄';
+      avatarUid = item.changedBy;
+      title = `${playerName(item.changedBy)} rescheduled a match`;
+      const parts = [];
+      if (other) parts.push(`vs ${playerName(other)}`);
+      if (league) parts.push(escHtml(league.name));
+      if (item.newScheduledAt) parts.push('📅 ' + fmtTime(item.newScheduledAt));
+      sub = parts.join(' · ');
+      break;
+    }
+    case 'daily_schedule': {
+      const league = myLeagues?.find(l => l.lid === item.lid);
+      icon = '📅';
+      avatarUid = null;
+      title = `Today's matches${league ? ' · ' + escHtml(league.name) : ''}`;
+      sub = (item.matches || []).map(m => {
+        const nameA = playerName(m.playerA);
+        const nameB = m.playerB ? playerName(m.playerB) : '?';
+        const when  = m.scheduledAt ? fmtTime(m.scheduledAt) : '';
+        return `${nameA} vs ${nameB}${when ? ' at ' + when : ''}`;
+      }).join('<br>');
+      break;
+    }
+    case 'standings_update': {
+      const league = myLeagues?.find(l => l.lid === item.lid);
+      icon = '📊';
+      avatarUid = null;
+      title = `End of day standings${league ? ' · ' + escHtml(league.name) : ''}`;
+      const rows = (item.standings || []).slice(0, 5)
+        .map((s, i) => `${i + 1}. ${playerName(s.uid)} ${s.wins}-${s.losses}`);
+      const played = item.matchesPlayedToday
+        ? `${item.matchesPlayedToday} match${item.matchesPlayedToday !== 1 ? 'es' : ''} played today`
+        : '';
+      sub = [...rows, played].filter(Boolean).join('<br>');
+      break;
+    }
     default:
       return '';
   }
