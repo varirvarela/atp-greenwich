@@ -56,4 +56,24 @@ test.describe('Flow 8 — Standings Tab', () => {
   test('P4-03 current player row shows "You" label', async ({ page }) => {
     await expect(page.getByText('You').first()).toBeVisible();
   });
+
+  test('P4-04 clicking a player row opens the unified profile modal', async ({ page }) => {
+    await page.locator('#standings-mount [data-view-player]').filter({ hasText: 'sofia' }).click();
+    await expect(page.locator('.player-profile-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.player-profile-modal').getByText('sofia')).toBeVisible();
+    await expect(page.locator('.player-profile-modal').getByText('Played')).toBeVisible();
+    await expect(page.locator('.player-profile-modal').getByText('Missed')).toBeVisible();
+  });
+
+  test('P4-05 profile modal shows match history section', async ({ page }) => {
+    await page.locator('#standings-mount [data-view-player]').filter({ hasText: 'sofia' }).click();
+    await expect(page.locator('.player-profile-modal').getByText(/Match History/)).toBeVisible({ timeout: 5000 });
+  });
+
+  test('P4-06 profile modal closes on backdrop click', async ({ page }) => {
+    await page.locator('#standings-mount [data-view-player]').filter({ hasText: 'sofia' }).click();
+    await expect(page.locator('.player-profile-modal')).toBeVisible({ timeout: 5000 });
+    await page.locator('.player-profile-modal').click({ position: { x: 4, y: 4 } });
+    await expect(page.locator('.player-profile-modal')).not.toBeVisible();
+  });
 });

@@ -190,4 +190,20 @@ test.describe('Flow 7 — Matches Tab', () => {
     await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 });
     await expect(page.locator('button[data-action="decline-proposal"]')).not.toBeVisible({ timeout: 5000 });
   });
+
+  test('P3-15 clicking a player name in a match card opens the profile modal', async ({ page }) => {
+    // Match cards render player names as [data-view-player] spans — click any visible one
+    await expect(page.locator('[data-view-player]').first()).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-view-player]').first().click();
+    await expect(page.locator('.player-profile-modal')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.player-profile-modal').getByText('Played')).toBeVisible();
+    await expect(page.locator('.player-profile-modal').getByText('Match History')).toBeVisible();
+  });
+
+  test('P3-16 profile modal from matches tab closes on X button', async ({ page }) => {
+    await page.locator('[data-view-player]').first().click();
+    await expect(page.locator('.player-profile-modal')).toBeVisible({ timeout: 5000 });
+    await page.locator('#btn-close-player-modal').click();
+    await expect(page.locator('.player-profile-modal')).not.toBeVisible();
+  });
 });
