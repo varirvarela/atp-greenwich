@@ -370,7 +370,7 @@ function _matchCard(match, myUid, allPlayers) {
       ${isConfirmed ? `data-view-match="${escHtml(match.mid)}"` : ''}>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
-          ${meAv}
+          <span data-view-player="${escHtml(myUid)}" style="cursor:pointer;flex-shrink:0;display:inline-flex;">${meAv}</span>
           <span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
             text-overflow:ellipsis;cursor:pointer;" data-view-player="${escHtml(myUid)}">You</span>
         </div>
@@ -381,7 +381,7 @@ function _matchCard(match, myUid, allPlayers) {
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;
           justify-content:flex-end;">
           ${opDisplay}
-          ${opAv}
+          ${opUid ? `<span data-view-player="${escHtml(opUid)}" style="cursor:pointer;flex-shrink:0;display:inline-flex;">${opAv}</span>` : opAv}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
