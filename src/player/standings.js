@@ -246,6 +246,24 @@ function _rulesAccordion(pts, qualifyPts, deadlineStr) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function _computePlayerStats(allMatches, uid) {
+  let missed = 0, forfeited = 0, opponentForfeited = 0, won = 0, played = 0;
+  for (const m of Object.values(allMatches || {})) {
+    if (m.playerA !== uid && m.playerB !== uid) continue;
+    if (m.forfeited) {
+      if (m.forfeited === uid) forfeited++;
+      else opponentForfeited++;
+    } else if (m.deadlinePenaltyApplied) {
+      missed++;
+    }
+    if (m.status === 'confirmed') {
+      played++;
+      if (m.result?.winner === uid) won++;
+    }
+  }
+  return { missed, forfeited, opponentForfeited, won, played };
+}
+
 function _renderEmpty(el) {
   el.innerHTML = `
     <div class="empty-state" style="padding-top:40px;">
