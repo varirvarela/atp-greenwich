@@ -60,7 +60,7 @@ test.describe('Flow 8 — Standings Tab', () => {
   test('P4-04 clicking a player row opens the unified profile modal', async ({ page }) => {
     await page.locator('#standings-mount [data-view-player]').filter({ hasText: 'sofia' }).click();
     await expect(page.locator('.player-profile-modal')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('.player-profile-modal').getByText('sofia')).toBeVisible();
+    await expect(page.locator('.player-profile-modal').getByText('sofia', { exact: true }).first()).toBeVisible();
     await expect(page.locator('.player-profile-modal').getByText('Played')).toBeVisible();
     await expect(page.locator('.player-profile-modal').getByText('Missed')).toBeVisible();
   });
