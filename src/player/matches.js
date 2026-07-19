@@ -887,6 +887,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         <div class="spinner" style="margin:0 auto 8px;"></div>
         <p class="t-small t-muted">Saving and updating ratings…</p>
       </div>
+      <p id="submit-error" style="display:none;color:var(--ace3);font-size:13px;text-align:center;margin:4px 0 0;"></p>
     </div>
   `;
 
@@ -1035,6 +1036,8 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
       };
     }
 
+    const errEl = overlay.querySelector('#submit-error');
+    if (errEl) errEl.style.display = 'none';
     try {
       const photoFile = selectedFile ? await _compressPhoto(selectedFile) : null;
       const photoUrl  = photoFile
@@ -1048,6 +1051,10 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
       console.error('Submit result error:', err);
       btn.disabled = false;
       overlay.querySelector('#submit-status').style.display = 'none';
+      if (errEl) {
+        errEl.textContent = 'Something went wrong uploading the photo. Check your connection and try again.';
+        errEl.style.display = 'block';
+      }
     }
   });
 }

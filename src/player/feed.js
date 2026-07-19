@@ -5,6 +5,7 @@ import { dbGet, dbRef, dbListen, dbSet, dbRemove, pRef, sRef } from '@shared/fir
 import { escHtml } from '@shared/utils.js';
 import { fmtTime } from '@shared/tz.js';
 import { avatarToSvg } from '@player/avatars.js';
+import { showNotifSettings } from '@player/notif-settings.js';
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -95,7 +96,7 @@ export function renderFeedTab(el, player, creds) {
         .slice(0, 50);
 
       _renderFeed(el, allItems, creds.uid, allPlayers || {}, allTournamentLeagues, sid, () => {
-        _showFeedSettings(allTournamentLeagues, renderAll);
+        _showFeedSettings(allTournamentLeagues, renderAll, creds.uid);
       });
     }
 
@@ -196,7 +197,7 @@ function _renderFeed(el, allItems, myUid, allPlayers, myLeagues, sid, onGear) {
 
 // ─── Feed settings modal ─────────────────────────────────────────────────────
 
-function _showFeedSettings(allLeagues, onClose) {
+function _showFeedSettings(allLeagues, onClose, uid) {
   const included = (() => {
     const stored = localStorage.getItem('atp_feed_leagues');
     if (!stored) return allLeagues.map(l => l.lid);
@@ -237,6 +238,20 @@ function _showFeedSettings(allLeagues, onClose) {
       </div>
       <button id="feed-settings-save" class="btn btn-primary"
         style="width:100%;margin-top:20px;">Save</button>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+        <p class="t-label t-muted" style="margin:0 0 8px;">Notifications</p>
+        <button id="feed-notif-settings-btn"
+          style="display:flex;align-items:center;justify-content:space-between;
+            width:100%;background:var(--surface2);border:none;border-radius:8px;
+            padding:10px 12px;cursor:pointer;">
+          <span style="font-size:13px;font-weight:600;">Push notification preferences</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </button>
+      </div>
       <div style="padding-bottom:8px;"></div>
     </div>
   `;
@@ -253,6 +268,11 @@ function _showFeedSettings(allLeagues, onClose) {
     const save    = checked.length ? checked : allLeagues.map(l => l.lid);
     localStorage.setItem('atp_feed_leagues', JSON.stringify(save));
     close();
+  });
+
+  overlay.querySelector('#feed-notif-settings-btn').addEventListener('click', () => {
+    overlay.remove();
+    showNotifSettings(uid);
   });
 }
 

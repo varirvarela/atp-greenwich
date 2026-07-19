@@ -91,7 +91,7 @@ async function uploadMatchPhoto(matchId, file) {
   const ext      = file.name.split('.').pop() || 'jpg';
   const path     = DEV_ROOT + 'match-photos/' + matchId + '.' + ext;
   const photoRef = storageRef(storage, path);
-  const snap     = await uploadBytes(photoRef, file);
+  const snap     = await uploadBytes(photoRef, file, { contentType: file.type || 'image/jpeg' });
   return getDownloadURL(snap.ref);
 }
 

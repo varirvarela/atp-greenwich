@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.10.0',
+    date:    '2026-07-19',
+    changes: [
+      'Notification preferences: choose which push notifications to receive — challenges, results, confirmations, and daily match reminders',
+      'Notification settings accessible from the Feed gear icon and from Profile → Account → Notifications',
+      'Daily match reminder: opt in to receive a morning push on days when you have a match scheduled',
+      'Fix: submitting a result with a photo now shows a clear error message if the upload fails',
+    ],
+  },
+  {
     version: '1.9.0',
     date:    '2026-07-17',
     changes: [

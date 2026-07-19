@@ -3,12 +3,21 @@
 // Evening run (2am UTC / 9pm EST): post end-of-day standings per league with play
 //
 // Required secrets: FIREBASE_SERVICE_ACCOUNT, FIREBASE_DATABASE_URL
+// Optional secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (push reminders)
 
 'use strict';
 
-const admin = require('firebase-admin');
+const admin   = require('firebase-admin');
+const webpush = require('web-push');
 
-const DB_URL = process.env.FIREBASE_DATABASE_URL;
+const DB_URL        = process.env.FIREBASE_DATABASE_URL;
+const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
+
+const pushEnabled = !!(VAPID_PUBLIC && VAPID_PRIVATE);
+if (pushEnabled) {
+  webpush.setVapidDetails('mailto:atp.greenwich.league@gmail.com', VAPID_PUBLIC, VAPID_PRIVATE);
+}
 
 const svcAccount = (() => {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -45,8 +54,12 @@ async function run() {
   const mode = isMorning ? 'morning schedule' : 'evening standings';
   console.log(`Daily digest — mode: ${mode}, ET date: ${todayET}`);
 
-  const seasonsSnap = await db.ref('seasons').once('value');
+  const [seasonsSnap, playersSnap] = await Promise.all([
+    db.ref('seasons').once('value'),
+    isMorning && pushEnabled ? db.ref('players').once('value') : Promise.resolve(null),
+  ]);
   const seasons = seasonsSnap.val() || {};
+  const players = playersSnap ? (playersSnap.val() || {}) : {};
 
   for (const [sid, season] of Object.entries(seasons)) {
     const leagues = season.leagues || {};
@@ -56,7 +69,7 @@ async function run() {
       if (memberUids.length < 2) continue;
 
       if (isMorning) {
-        await _morningSchedule(sid, lid, matches, todayET, now);
+        await _morningSchedule(sid, lid, matches, todayET, now, players);
       } else {
         await _eveningStandings(sid, lid, matches, memberUids, todayET, now);
       }
@@ -66,7 +79,7 @@ async function run() {
   console.log('Daily digest complete.');
 }
 
-async function _morningSchedule(sid, lid, matches, todayET, now) {
+async function _morningSchedule(sid, lid, matches, todayET, now, players) {
   const flagRef = db.ref(`config/dailyDigest/${todayET}/schedule/${lid}`);
   if ((await flagRef.once('value')).val()) {
     console.log(`  [${lid}] schedule already posted for ${todayET}`);
@@ -94,6 +107,42 @@ async function _morningSchedule(sid, lid, matches, todayET, now) {
   });
   await flagRef.set(true);
   console.log(`  [${lid}] posted daily_schedule with ${todayMatches.length} match(es)`);
+
+  // Push reminders — players who opted in and have a match today
+  if (pushEnabled && players && Object.keys(players).length > 0) {
+    const notifiedUids = new Set();
+    for (const { playerA, playerB, scheduledAt } of todayMatches) {
+      const time = scheduledAt
+        ? new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true,
+          }).format(new Date(scheduledAt))
+        : null;
+      for (const uid of [playerA, playerB].filter(Boolean)) {
+        if (notifiedUids.has(uid)) continue;
+        const p = players[uid];
+        if (!p?.pushSubscription || p.pushPrefs?.reminders !== true) continue;
+        const oppUid = uid === playerA ? playerB : playerA;
+        const oppName = (players[oppUid]?.alias || players[oppUid]?.name) || 'your opponent';
+        const body = time
+          ? `You play ${oppName} at ${time} today.`
+          : `You have a match vs ${oppName} scheduled for today.`;
+        try {
+          await webpush.sendNotification(p.pushSubscription, JSON.stringify({
+            title: 'Match today!',
+            body,
+            tag:  `reminder-${uid}-${todayET}`,
+            url:  'https://varirvarela.github.io/atp-greenwich/',
+          }));
+          notifiedUids.add(uid);
+          console.log(`  Push reminder sent to ${uid}`);
+        } catch (err) {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await db.ref(`players/${uid}/pushSubscription`).remove();
+          }
+        }
+      }
+    }
+  }
 }
 
 async function _eveningStandings(sid, lid, matches, memberUids, todayET, now) {

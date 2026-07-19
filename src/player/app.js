@@ -13,6 +13,7 @@ import { renderFeedTab }      from '@player/feed.js';
 import { renderBracketTab }   from '@player/bracket.js';
 import { buildLeagueTable, calculateStanding } from '@shared/scoring.js';
 import { APP_VERSION, changesSince } from '@shared/changelog.js';
+import { showNotifSettings } from '@player/notif-settings.js';
 
 // Captured by beforeinstallprompt; module-level so the profile Install button can use it.
 let _deferredPrompt = null;
@@ -826,6 +827,11 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
             <span class="t-small t-muted">Status</span>
             <div class="badge badge-teal">${escHtml(player.status || 'active')}</div>
           </div>
+          <div class="flex-between">
+            <span class="t-small t-muted">Notifications</span>
+            <button class="btn btn-ghost btn-sm" id="btn-manage-notif"
+              style="font-size:11px;padding:2px 10px;">Manage</button>
+          </div>
           ${player.selfAssessment
             ? `<div class="flex-between">
                 <span class="t-small t-muted">Self-assessed level</span>
@@ -994,6 +1000,10 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
       showEditAliasModal(player, creds, onAliasChanged);
     });
   }
+
+  el.querySelector('#btn-manage-notif')?.addEventListener('click', () => {
+    showNotifSettings(creds.uid);
+  });
 
   const replayTutorialBtn = el.querySelector('#btn-replay-tutorial');
   if (replayTutorialBtn && onReplayTutorial) {
