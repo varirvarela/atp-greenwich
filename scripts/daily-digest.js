@@ -176,12 +176,13 @@ async function _eveningStandings(sid, lid, league, matches, memberUids, todayET,
 
   const matchValues = Object.values(matches);
 
+  const cutoff = now - 36 * 60 * 60 * 1000;
   const confirmedToday = matchValues.filter(
-    m => m.status === 'confirmed' && m.confirmedAt && etDateStr(m.confirmedAt) === todayET
+    m => m.status === 'confirmed' && m.confirmedAt && m.confirmedAt >= cutoff
   );
 
   if (confirmedToday.length === 0) {
-    console.log(`  [${lid}] no matches confirmed today`);
+    console.log(`  [${lid}] no matches confirmed in last 36h`);
     return;
   }
 

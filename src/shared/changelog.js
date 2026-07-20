@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.5',
+    date:    '2026-07-20',
+    changes: [
+      'Fix: evening standings now catch games confirmed up to 36 hours ago, preventing missed digests after a delayed run',
+    ],
+  },
+  {
     version: '1.11.4',
     date:    '2026-07-20',
     changes: [
