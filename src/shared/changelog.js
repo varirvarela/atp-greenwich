@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.10.2',
+    date:    '2026-07-19',
+    changes: [
+      'Fix: submitting a result with a photo now works — Storage rules no longer block the upload',
+    ],
+  },
+  {
     version: '1.10.1',
     date:    '2026-07-19',
     changes: [

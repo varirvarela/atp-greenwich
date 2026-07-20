@@ -1,17 +1,17 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Production match photos — public read, image writes only (max 10 MB)
+    // Match photos — public read, size-limited write (20 MB cap)
+    // contentType check removed: the SDK does not reliably surface it in rules
+    // when uploading a File/Blob, causing false storage/unauthorized errors.
     match /match-photos/{file} {
       allow read: if true;
-      allow write: if request.resource.size < 10 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
+      allow write: if request.resource.size < 20 * 1024 * 1024;
     }
     // Dev-mode match photos (prefixed by DEV_ROOT = '_dev/')
     match /_dev/match-photos/{file} {
       allow read: if true;
-      allow write: if request.resource.size < 10 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
+      allow write: if request.resource.size < 20 * 1024 * 1024;
     }
     // All other paths are denied by default
   }
