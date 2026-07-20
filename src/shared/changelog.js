@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.7',
+    date:    '2026-07-20',
+    changes: [
+      'Admin: send a test push notification to any player directly from their profile popup',
+    ],
+  },
+  {
     version: '1.11.6',
     date:    '2026-07-20',
     changes: [

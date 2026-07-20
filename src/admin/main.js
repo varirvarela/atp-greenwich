@@ -519,6 +519,19 @@ async function _showPlayerProfileModal(player, onDone) {
         `).join('')}
       </div>
 
+      <div class="admin-input-group" style="margin-top:12px;">
+        <label class="admin-input-label">Push Notification</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="btn-test-push" class="btn-admin btn-secondary" style="flex:1;">
+            🔔 Send test push
+          </button>
+          <span id="test-push-status" style="font-size:11px;color:var(--text3);"></span>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">
+          Queues a notification — delivered within 5 minutes if player has push enabled.
+        </div>
+      </div>
+
       <div style="display:flex;gap:8px;margin-top:16px;">
         <button id="btn-save-leagues" class="btn-admin btn-primary" style="flex:1;">Save Leagues</button>
         <button id="btn-close-profile" class="btn-admin btn-secondary">Close</button>
@@ -547,6 +560,21 @@ async function _showPlayerProfileModal(player, onDone) {
     await dbUpdate(pRef(player.uid), { passwordHash: simpleHash(pwd) });
     toast(`Password reset for ${player.alias || player.name}`, 'success');
     input.value = '';
+  });
+
+  overlay.querySelector('#btn-test-push').addEventListener('click', async () => {
+    const btn    = overlay.querySelector('#btn-test-push');
+    const status = overlay.querySelector('#test-push-status');
+    if (!player.pushSubscription) {
+      status.textContent = 'No push subscription on file for this player.';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Queuing…';
+    await dbSet(dbRef(`config/testPush/${player.uid}`), { requestedAt: Date.now(), sentAt: null });
+    btn.textContent = '🔔 Send test push';
+    btn.disabled = false;
+    status.textContent = '✓ Queued — delivered within 5 min';
   });
 
   overlay.querySelector('#btn-save-leagues').addEventListener('click', async () => {

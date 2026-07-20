@@ -171,6 +171,33 @@ async function run() {
     }
   }
 
+  // ── Test push queue (admin → player) ──────────────────────────────────────
+  if (pushEnabled) {
+    const testSnap = await db.ref('config/testPush').once('value');
+    const testQueue = testSnap.val() || {};
+    for (const [uid, entry] of Object.entries(testQueue)) {
+      if (!entry?.requestedAt || entry.sentAt) continue;
+      const p = players[uid];
+      if (!p?.pushSubscription?.endpoint) {
+        await db.ref(`config/testPush/${uid}/sentAt`).set(-1);
+        continue;
+      }
+      try {
+        await webpush.sendNotification(p.pushSubscription, JSON.stringify({
+          title: '🎾 Test notification',
+          body:  'Push notifications are working!',
+          tag:   'test-push',
+          url:   APP_URL,
+        }));
+        await db.ref(`config/testPush/${uid}/sentAt`).set(Date.now());
+        console.log(`Test push sent to ${uid}`);
+      } catch (err) {
+        await db.ref(`config/testPush/${uid}/sentAt`).set(-1);
+        console.error(`Test push failed for ${uid}:`, err.message);
+      }
+    }
+  }
+
   // ── Pending WhatsApp broadcast ─────────────────────────────────────────────
   if (waEnabled) {
     const bcSnap = await db.ref('config/whatsappBroadcast').once('value');
