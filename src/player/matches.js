@@ -1037,24 +1037,39 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     }
 
     const errEl = overlay.querySelector('#submit-error');
-    if (errEl) errEl.style.display = 'none';
-    try {
-      const photoFile = selectedFile ? await _compressPhoto(selectedFile) : null;
-      const photoUrl  = photoFile
-        ? await uploadMatchPhoto(match.mid, photoFile)
-        : (match.photoUrl || null);
-      const prevEloDeltas = isAdjust ? (match.eloDeltas || null) : null;
-      const resultFormat  = isPro10 ? 'pro10' : 'bo3';
-      await _finalizeResult(match, resultData, photoUrl, resultFormat, sid, lid, allPlayers, prevEloDeltas);
-      overlay.remove();
-    } catch (err) {
-      console.error('Submit result error:', err);
+    const _showErr = (msg, err) => {
+      console.error(msg, err);
       btn.disabled = false;
       overlay.querySelector('#submit-status').style.display = 'none';
       if (errEl) {
-        errEl.textContent = 'Something went wrong uploading the photo. Check your connection and try again.';
+        const code = err?.code || err?.message || '';
+        errEl.textContent = `${msg}${code ? ` [${code}]` : ''} — please try again.`;
         errEl.style.display = 'block';
       }
+    };
+    if (errEl) errEl.style.display = 'none';
+    try {
+      const photoFile = selectedFile ? await _compressPhoto(selectedFile) : null;
+      let photoUrl = match.photoUrl || null;
+      if (photoFile) {
+        try {
+          photoUrl = await uploadMatchPhoto(match.mid, photoFile);
+        } catch (uploadErr) {
+          _showErr('Photo upload failed', uploadErr);
+          return;
+        }
+      }
+      const prevEloDeltas = isAdjust ? (match.eloDeltas || null) : null;
+      const resultFormat  = isPro10 ? 'pro10' : 'bo3';
+      try {
+        await _finalizeResult(match, resultData, photoUrl, resultFormat, sid, lid, allPlayers, prevEloDeltas);
+      } catch (dbErr) {
+        _showErr('Could not save result', dbErr);
+        return;
+      }
+      overlay.remove();
+    } catch (err) {
+      _showErr('Something went wrong', err);
     }
   });
 }
@@ -1564,10 +1579,13 @@ async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, al
   const elo     = calculateElo(ra, rb, winner, 32);
   const now     = Date.now();
 
+  // Normalise history to an array — Firebase can return an object if keys aren't sequential
+  const _toArr = v => Array.isArray(v) ? v : (v ? Object.values(v) : []);
+
   // ELO history: remove old entry for this match (if adjusting), append new
-  const newHistA = [...(histA || []).filter(h => h.match !== match.mid),
+  const newHistA = [..._toArr(histA).filter(h => h.match !== match.mid),
     { delta: elo.deltaA, match: match.mid, ts: now }];
-  const newHistB = [...(histB || []).filter(h => h.match !== match.mid),
+  const newHistB = [..._toArr(histB).filter(h => h.match !== match.mid),
     { delta: elo.deltaB, match: match.mid, ts: now }];
 
   await dbMultiUpdate({

@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.10.1',
+    date:    '2026-07-19',
+    changes: [
+      'Fix: submit-result error message now distinguishes photo-upload failures from save failures, showing the exact error code',
+      'Fix: ELO history update is now robust if Firebase returns history as an object instead of an array',
+    ],
+  },
+  {
     version: '1.10.0',
     date:    '2026-07-19',
     changes: [
