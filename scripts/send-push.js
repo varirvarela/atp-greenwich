@@ -37,13 +37,15 @@ if (pushEnabled) {
 }
 
 async function run() {
-  const [playersSnap, seasonsSnap] = await Promise.all([
+  const [playersSnap, seasonsSnap, waPrefsSnap] = await Promise.all([
     db.ref('players').once('value'),
     db.ref('seasons').once('value'),
+    db.ref('config/whatsappPrefs').once('value'),
   ]);
 
-  const players = playersSnap.val() || {};
-  const seasons = seasonsSnap.val() || {};
+  const players  = playersSnap.val() || {};
+  const seasons  = seasonsSnap.val() || {};
+  const waPrefs  = waPrefsSnap.val() || {};
 
   const adminUids = Object.entries(players)
     .filter(([, p]) => p.isAdmin === true)
@@ -88,7 +90,8 @@ async function run() {
               url:   APP_URL,
             });
           }
-          await sendWA(`🎾 *New challenge!*\n${proposerName} challenged ${challengedName} to a match.`);
+          if (_wantsWA(waPrefs, 'challenged'))
+            await sendWA(`🎾 *New challenge!*\n${proposerName} challenged ${challengedName} to a match.`);
           await db.ref(`${base}/pushNotified/proposed`).set(true);
         }
 
@@ -106,7 +109,8 @@ async function run() {
               });
             }
           }
-          await sendWA(`🎾 *Open challenge from ${challengerName}!*\nFirst to accept in the app wins the spot.`);
+          if (_wantsWA(waPrefs, 'openChallenge'))
+            await sendWA(`🎾 *Open challenge from ${challengerName}!*\nFirst to accept in the app wins the spot.`);
           await db.ref(`${base}/pushNotified/open_challenge`).set(true);
         }
 
@@ -149,7 +153,7 @@ async function run() {
           // WhatsApp group: show who won with ELO delta
           const winnerUid  = match.result?.winner;
           const loserUid   = match.result?.loser;
-          if (winnerUid && loserUid) {
+          if (winnerUid && loserUid && _wantsWA(waPrefs, 'confirmed')) {
             const wName   = _playerName(players, winnerUid);
             const lName   = _playerName(players, loserUid);
             const deltas  = match.eloDeltas || {};
@@ -167,12 +171,27 @@ async function run() {
     }
   }
 
+  // ── Pending WhatsApp broadcast ─────────────────────────────────────────────
+  if (waEnabled) {
+    const bcSnap = await db.ref('config/whatsappBroadcast').once('value');
+    const bc     = bcSnap.val();
+    if (bc?.message && !bc.sentAt) {
+      await sendWA(bc.message);
+      await db.ref('config/whatsappBroadcast/sentAt').set(Date.now());
+      console.log('Broadcast sent.');
+    }
+  }
+
   console.log('Notification pass complete.');
 }
 
 function _playerName(players, uid) {
   const p = players[uid] || {};
   return p.alias || p.name || 'Your opponent';
+}
+
+function _wantsWA(prefs, key) {
+  return prefs[key] !== false;
 }
 
 function _wantsPush(players, uid, type) {

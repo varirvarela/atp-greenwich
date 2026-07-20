@@ -56,10 +56,12 @@ async function run() {
   const mode = isMorning ? 'morning schedule' : 'evening standings';
   console.log(`Daily digest — mode: ${mode}, ET date: ${todayET}`);
 
-  const [seasonsSnap, playersSnap] = await Promise.all([
+  const [seasonsSnap, playersSnap, waPrefsSnap] = await Promise.all([
     db.ref('seasons').once('value'),
     (isMorning && pushEnabled) || waEnabled ? db.ref('players').once('value') : Promise.resolve(null),
+    waEnabled ? db.ref('config/whatsappPrefs').once('value') : Promise.resolve(null),
   ]);
+  const waPrefs = waPrefsSnap ? (waPrefsSnap.val() || {}) : {};
   const seasons = seasonsSnap.val() || {};
   const players = playersSnap ? (playersSnap.val() || {}) : {};
 
@@ -71,9 +73,9 @@ async function run() {
       if (memberUids.length < 2) continue;
 
       if (isMorning) {
-        await _morningSchedule(sid, lid, league, matches, todayET, now, players);
+        await _morningSchedule(sid, lid, league, matches, todayET, now, players, waPrefs);
       } else {
-        await _eveningStandings(sid, lid, league, matches, memberUids, todayET, now, players);
+        await _eveningStandings(sid, lid, league, matches, memberUids, todayET, now, players, waPrefs);
       }
     }
   }
@@ -81,7 +83,7 @@ async function run() {
   console.log('Daily digest complete.');
 }
 
-async function _morningSchedule(sid, lid, league, matches, todayET, now, players) {
+async function _morningSchedule(sid, lid, league, matches, todayET, now, players, waPrefs) {
   const flagRef = db.ref(`config/dailyDigest/${todayET}/schedule/${lid}`);
   if ((await flagRef.once('value')).val()) {
     console.log(`  [${lid}] schedule already posted for ${todayET}`);
@@ -111,7 +113,7 @@ async function _morningSchedule(sid, lid, league, matches, todayET, now, players
   console.log(`  [${lid}] posted daily_schedule with ${todayMatches.length} match(es)`);
 
   // WhatsApp: morning schedule
-  if (waEnabled && players) {
+  if (waEnabled && players && waPrefs.dailySchedule !== false) {
     const leagueName = league.name || lid;
     const MEDALS = ['🥇', '🥈', '🥉'];
     let msg = `📅 *Today's matches — ${leagueName}*\n`;
@@ -165,7 +167,7 @@ async function _morningSchedule(sid, lid, league, matches, todayET, now, players
   }
 }
 
-async function _eveningStandings(sid, lid, league, matches, memberUids, todayET, now, players) {
+async function _eveningStandings(sid, lid, league, matches, memberUids, todayET, now, players, waPrefs) {
   const flagRef = db.ref(`config/dailyDigest/${todayET}/standings/${lid}`);
   if ((await flagRef.once('value')).val()) {
     console.log(`  [${lid}] standings already posted for ${todayET}`);
@@ -210,7 +212,7 @@ async function _eveningStandings(sid, lid, league, matches, memberUids, todayET,
   console.log(`  [${lid}] posted standings_update (${confirmedToday.length} game(s) played today)`);
 
   // WhatsApp: evening standings
-  if (waEnabled) {
+  if (waEnabled && waPrefs.eveningStandings !== false) {
     const leagueName = league.name || lid;
     const medals = ['🥇', '🥈', '🥉'];
     let msg = `🏆 *${leagueName} standings — ${todayET}*\n`;

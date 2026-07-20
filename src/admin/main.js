@@ -133,8 +133,9 @@ const NAV_ITEMS = [
   { id: 'leagues',  label: 'Leagues',      icon: tableIcon() },
   { id: 'invites',  label: 'Invite Codes', icon: keyIcon() },
   { id: 'matches',  label: 'Matches',      icon: ballIcon() },
-  { id: 'bracket',  label: 'Bracket',      icon: bracketIcon() },
-  { id: 'settings', label: 'Settings',     icon: gearIcon() },
+  { id: 'bracket',   label: 'Bracket',   icon: bracketIcon() },
+  { id: 'whatsapp',  label: 'WhatsApp',  icon: whatsappIcon() },
+  { id: 'settings',  label: 'Settings',  icon: gearIcon() },
 ];
 
 function showAdminShell(app, adminCreds) {
@@ -238,8 +239,9 @@ async function _renderSection(id, el) {
     case 'leagues':  return renderLeagues(el);
     case 'invites':  return renderInvites(el);
     case 'matches':  return renderMatches(el);
-    case 'bracket':  return renderBracketAdmin(el);
-    case 'settings': return renderSettings(el);
+    case 'bracket':   return renderBracketAdmin(el);
+    case 'whatsapp':  return renderWhatsApp(el);
+    case 'settings':  return renderSettings(el);
   }
 }
 
@@ -2436,6 +2438,103 @@ async function renderSettings(el) {
 
 }
 
+// ─── WhatsApp ─────────────────────────────────────────────────────────────────
+
+async function renderWhatsApp(el) {
+  const [rawPrefs, rawBroadcast] = await Promise.all([
+    dbGet(dbRef('config/whatsappPrefs')),
+    dbGet(dbRef('config/whatsappBroadcast')),
+  ]);
+
+  const prefs = rawPrefs || {};
+  const defaultOn = key => prefs[key] !== false;
+
+  function prefRow(key, label, desc) {
+    return `
+      <label style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;
+        border-bottom:1px solid var(--border);cursor:pointer;">
+        <input type="checkbox" data-pref="${escHtml(key)}" ${defaultOn(key) ? 'checked' : ''}
+          style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;margin-top:2px;">
+        <div>
+          <div style="font-size:13px;font-weight:600;">${label}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${desc}</div>
+        </div>
+      </label>`;
+  }
+
+  let broadcastStatus = '';
+  if (rawBroadcast?.message) {
+    if (!rawBroadcast.sentAt) {
+      broadcastStatus = `<p style="font-size:12px;color:var(--text3);margin:8px 0 0;">
+        ⏳ Queued — will be sent within 5 minutes…</p>`;
+    } else {
+      const ts = new Date(rawBroadcast.sentAt).toLocaleString('en-US',
+        { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      broadcastStatus = `<p style="font-size:12px;color:var(--text3);margin:8px 0 0;">
+        Last sent ${ts}: <em>"${escHtml(rawBroadcast.message)}"</em></p>`;
+    }
+  }
+
+  el.innerHTML = `
+    <div class="section-header">
+      <div class="section-title">WhatsApp</div>
+    </div>
+
+    <div class="admin-form-panel">
+      <div class="admin-form-title">Notification preferences</div>
+      <p style="font-size:12px;color:var(--text3);margin:0 0 12px;">
+        Choose which events are posted to the league group.</p>
+      <div id="wa-prefs-list">
+        ${prefRow('challenged',      'Direct challenge',        'Posted when a player challenges another directly')}
+        ${prefRow('openChallenge',   'Open challenge',          'Posted when a player posts an open challenge')}
+        ${prefRow('confirmed',       'Match confirmed',         'Posted when a result is confirmed, with ELO deltas')}
+        ${prefRow('dailySchedule',   'Morning schedule (7 am)', 'Lists matches scheduled for today')}
+        ${prefRow('eveningStandings','Evening standings (9 pm)','Standings table after the day\'s results')}
+      </div>
+      <button class="btn-admin btn-primary" id="btn-save-wa-prefs" style="margin-top:16px;">
+        Save preferences
+      </button>
+    </div>
+
+    <div class="admin-form-panel">
+      <div class="admin-form-title">Broadcast message</div>
+      <p style="font-size:12px;color:var(--text3);margin:0 0 12px;">
+        Sends a custom message to the group (delivered within 5 minutes).</p>
+      <div class="admin-input-group">
+        <textarea id="wa-broadcast-input" class="admin-input" rows="3"
+          placeholder="Type your message…"
+          style="resize:vertical;font-family:inherit;"></textarea>
+      </div>
+      <button class="btn-admin btn-primary" id="btn-send-wa-broadcast">Send to group</button>
+      <div id="wa-broadcast-status">${broadcastStatus}</div>
+    </div>
+  `;
+
+  el.querySelector('#btn-save-wa-prefs').addEventListener('click', async () => {
+    const newPrefs = {};
+    el.querySelectorAll('[data-pref]').forEach(cb => {
+      newPrefs[cb.dataset.pref] = cb.checked;
+    });
+    await dbUpdate(dbRef('config'), { whatsappPrefs: newPrefs });
+    toast('WhatsApp preferences saved', 'success');
+  });
+
+  el.querySelector('#btn-send-wa-broadcast').addEventListener('click', async () => {
+    const msg = el.querySelector('#wa-broadcast-input').value.trim();
+    if (!msg) { toast('Message cannot be empty', 'error'); return; }
+    await dbSet(dbRef('config/whatsappBroadcast'), {
+      message:     msg,
+      requestedAt: Date.now(),
+      sentAt:      null,
+    });
+    el.querySelector('#wa-broadcast-input').value = '';
+    el.querySelector('#wa-broadcast-status').innerHTML =
+      `<p style="font-size:12px;color:var(--text3);margin:8px 0 0;">
+        ⏳ Queued — will be sent within 5 minutes…</p>`;
+    toast('Broadcast queued', 'success');
+  });
+}
+
 // ─── SVG icons ────────────────────────────────────────────────────────────────
 
 function _svg(path) {
@@ -2447,7 +2546,8 @@ function tableIcon()   { return _svg('<rect width="18" height="18" x="3" y="3" r
 function keyIcon()     { return _svg('<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>'); }
 function ballIcon()    { return _svg('<circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'); }
 function bracketIcon() { return _svg('<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>'); }
-function gearIcon()    { return _svg('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'); }
+function gearIcon()     { return _svg('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'); }
+function whatsappIcon() { return _svg('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'); }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 boot();

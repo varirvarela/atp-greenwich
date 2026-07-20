@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.1',
+    date:    '2026-07-20',
+    changes: [
+      'Admin: WhatsApp section — toggle which events are posted to the group and send broadcast messages',
+    ],
+  },
+  {
     version: '1.11.0',
     date:    '2026-07-20',
     changes: [
