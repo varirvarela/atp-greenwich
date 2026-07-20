@@ -492,12 +492,27 @@ function _activityCard(item, allPlayers, myLeagues) {
       icon = '📊';
       avatarUid = null;
       title = `End of day standings${league ? ' · ' + escHtml(league.name) : ''}`;
-      const rows = (item.standings || []).slice(0, 5)
-        .map((s, i) => `${i + 1}. ${playerName(s.uid)} ${s.wins}-${s.losses}`);
-      const played = item.matchesPlayedToday
-        ? `${item.matchesPlayedToday} match${item.matchesPlayedToday !== 1 ? 'es' : ''} played today`
-        : '';
-      sub = [...rows, played].filter(Boolean).join('<br>');
+      const medals  = ['🥇', '🥈', '🥉'];
+      const label   = s => `<span style="font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;">${s}</span>`;
+      const parts   = [];
+      const resultList = (item.results || []).filter(r => r.winner);
+      if (resultList.length) {
+        parts.push(label('Results'));
+        for (const r of resultList) {
+          const score = _formatSets(r);
+          parts.push(`✅ <b>${escHtml(playerName(r.winner))}</b> def. ${escHtml(playerName(r.loser))}${score && score !== '—' ? ' &nbsp;·&nbsp; ' + escHtml(score) : ''}`);
+        }
+      }
+      const standingList = (item.standings || []);
+      if (standingList.length) {
+        if (parts.length) parts.push('');
+        parts.push(label('Standings'));
+        standingList.forEach((s, i) => {
+          const elo = s.elo != null ? ` &nbsp;·&nbsp; ${s.elo}` : '';
+          parts.push(`${i + 1}. ${medals[i] || ''} <b>${escHtml(playerName(s.uid))}</b> — ${s.wins}W ${s.losses}L${elo}`);
+        });
+      }
+      sub = parts.join('<br>');
       break;
     }
     default:

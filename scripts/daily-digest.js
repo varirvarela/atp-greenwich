@@ -197,8 +197,21 @@ async function _eveningStandings(sid, lid, league, matches, memberUids, todayET,
   }
 
   const standings = memberUids
-    .map(uid => ({ uid, ...stats[uid] }))
+    .map(uid => ({
+      uid,
+      ...stats[uid],
+      elo: players[uid]?.eloRating != null ? Math.round(players[uid].eloRating) : null,
+    }))
     .sort((a, b) => b.wins - a.wins || b.played - a.played);
+
+  const results = confirmedToday
+    .filter(m => m.result?.winner)
+    .map(m => ({
+      winner: m.result.winner,
+      loser:  m.result.loser,
+      sets:   m.result.sets  || null,
+      score:  m.result.score || null,
+    }));
 
   await db.ref('activity').push().set({
     type: 'standings_update',
@@ -207,6 +220,7 @@ async function _eveningStandings(sid, lid, league, matches, memberUids, todayET,
     lid,
     dateET: todayET,
     matchesPlayedToday: confirmedToday.length,
+    results,
     standings,
   });
   await flagRef.set(true);

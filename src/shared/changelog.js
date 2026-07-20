@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.6',
+    date:    '2026-07-20',
+    changes: [
+      'Feed: end-of-day standings now show individual match results with scores and ELO ratings',
+    ],
+  },
+  {
     version: '1.11.5',
     date:    '2026-07-20',
     changes: [
