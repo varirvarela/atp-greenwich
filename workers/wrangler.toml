@@ -1,0 +1,10 @@
+name = "atp-greenwich"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[triggers]
+crons = [
+  "*/5 * * * *",  # push notifications + WhatsApp match events
+  "0 12 * * *",   # 7am EST — morning schedule digest
+  "0 2 * * *",    # 9pm EST — evening standings digest
+]

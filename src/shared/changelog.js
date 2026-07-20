@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.4',
+    date:    '2026-07-20',
+    changes: [
+      'Infrastructure: notifications now run on Cloudflare Workers for faster, more reliable scheduling',
+    ],
+  },
+  {
     version: '1.11.3',
     date:    '2026-07-20',
     changes: [
