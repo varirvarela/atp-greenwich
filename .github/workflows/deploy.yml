@@ -9,6 +9,16 @@ name: Deploy Player App
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'admin.html'
+      - 'companion.html'
+      - 'package.json'
+      - 'vite*.config.js'
+      - 'storage.rules'
+      - 'database.rules.json'
   workflow_dispatch:
 
 permissions:
