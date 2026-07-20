@@ -214,11 +214,16 @@ async function _eveningStandings(sid, lid, league, matches, memberUids, todayET,
   // WhatsApp: evening standings
   if (waEnabled && waPrefs.eveningStandings !== false) {
     const leagueName = league.name || lid;
-    const medals = ['🥇', '🥈', '🥉'];
-    let msg = `🏆 *${leagueName} standings — ${todayET}*\n`;
+    const medals     = ['🥇', '🥈', '🥉'];
+    const dateLabel  = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', month: 'short', day: 'numeric',
+    }).format(new Date());
+    let msg = `🏆 *${leagueName} — ${dateLabel}*\n`;
     standings.forEach(({ uid, wins, losses }, i) => {
-      const alias = players?.[uid]?.alias || players?.[uid]?.name || uid;
-      msg += `${i + 1}. ${medals[i] || ' '} *${alias}* — ${wins}W ${losses}L\n`;
+      const p     = players?.[uid] || {};
+      const alias = p.alias || p.name || uid;
+      const elo   = p.eloRating != null ? ` · ${Math.round(p.eloRating)} ELO` : '';
+      msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${wins}W ${losses}L${elo}\n`;
     });
     await sendWA(msg.trim());
   }

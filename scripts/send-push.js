@@ -9,7 +9,7 @@
 
 const admin   = require('firebase-admin');
 const webpush = require('web-push');
-const { sendWA, waEnabled } = require('./whatsapp.js');
+const { sendWA, sendWAPhoto, waEnabled } = require('./whatsapp.js');
 
 const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
@@ -154,16 +154,16 @@ async function run() {
           const winnerUid  = match.result?.winner;
           const loserUid   = match.result?.loser;
           if (winnerUid && loserUid && _wantsWA(waPrefs, 'confirmed')) {
-            const wName   = _playerName(players, winnerUid);
-            const lName   = _playerName(players, loserUid);
-            const deltas  = match.eloDeltas || {};
-            const dW      = deltas[winnerUid];
-            const dL      = deltas[loserUid];
-            let msg = `✅ *${wName}* def. *${lName}*`;
+            const wName  = _playerName(players, winnerUid);
+            const lName  = _playerName(players, loserUid);
+            const deltas = match.eloDeltas || {};
+            const dW     = deltas[winnerUid];
+            const dL     = deltas[loserUid];
+            let caption  = `✅ *${wName}* def. *${lName}*`;
             if (dW != null && dL != null) {
-              msg += `\nELO: ${wName} ${dW > 0 ? '+' : ''}${Math.round(dW)} · ${lName} ${Math.round(dL)}`;
+              caption += `\nELO: ${wName} ${dW > 0 ? '+' : ''}${Math.round(dW)} · ${lName} ${Math.round(dL)}`;
             }
-            await sendWA(msg);
+            await sendWAPhoto(match.photoUrl || null, caption);
           }
           await db.ref(`${base}/pushNotified/confirmed`).set(true);
         }

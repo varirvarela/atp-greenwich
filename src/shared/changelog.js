@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.2',
+    date:    '2026-07-20',
+    changes: [
+      'WhatsApp: match photo is now shared in the result message when one was uploaded',
+      'WhatsApp: standings now show ELO rating alongside W/L record',
+    ],
+  },
+  {
     version: '1.11.1',
     date:    '2026-07-20',
     changes: [
