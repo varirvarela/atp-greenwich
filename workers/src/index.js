@@ -10,7 +10,7 @@ export default {
     if (event.cron === '*/5 * * * *') {
       ctx.waitUntil(runSendPush(env));
     } else {
-      ctx.waitUntil(runDailyDigest(env));
+      ctx.waitUntil(runDailyDigest(env, event.cron));
     }
   },
 };

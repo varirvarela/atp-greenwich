@@ -12,22 +12,16 @@ function etDateStr(tsMs) {
   }).format(new Date(tsMs));
 }
 
-export async function runDailyDigest(env) {
+export async function runDailyDigest(env, cron) {
   const pushEnabled = !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY);
 
-  const now      = Date.now();
-  const todayET  = etDateStr(now);
-  const utcHour  = new Date(now).getUTCHours();
-  const isMorning = utcHour >= 10 && utcHour <= 14;
-  const isEvening = utcHour >= 23 || utcHour <= 5;
-
-  if (!isMorning && !isEvening) {
-    console.log(`UTC hour ${utcHour} — not a digest window; skipping.`);
-    return;
-  }
+  const now       = Date.now();
+  const todayET   = etDateStr(now);
+  const isMorning = cron === '0 12 * * *';
+  const isEvening = cron === '0 2 * * *';
 
   const mode = isMorning ? 'morning schedule' : 'evening standings';
-  console.log(`Daily digest — ${mode}, ET date: ${todayET}`);
+  console.log(`Daily digest — ${mode} (cron: ${cron}), ET date: ${todayET}`);
 
   const db = createFirebase(env);
 
