@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.3',
+    date:    '2026-07-20',
+    changes: [
+      'Fix: Daily Feed Digest job no longer hangs indefinitely after completing',
+    ],
+  },
+  {
     version: '1.11.2',
     date:    '2026-07-20',
     changes: [
