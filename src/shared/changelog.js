@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.11.0',
+    date:    '2026-07-20',
+    changes: [
+      'WhatsApp group notifications: challenges, match results, daily schedule, and standings posted to the league group',
+    ],
+  },
+  {
     version: '1.10.2',
     date:    '2026-07-19',
     changes: [

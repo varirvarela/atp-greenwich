@@ -1,21 +1,25 @@
-// scripts/send-push.js — Send push notifications for pending match events
+// scripts/send-push.js — Push + WhatsApp notifications for match events
 // Triggered by GitHub Actions on a 5-minute cron.
 //
-// Required secrets: FIREBASE_SERVICE_ACCOUNT, FIREBASE_DATABASE_URL,
-//                   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY
+// Required secrets: FIREBASE_SERVICE_ACCOUNT, FIREBASE_DATABASE_URL
+// Optional secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY  (push)
+//                   GREENAPI_INSTANCE_ID, GREENAPI_TOKEN, WHATSAPP_GROUP_ID  (WhatsApp)
 
 'use strict';
 
 const admin   = require('firebase-admin');
 const webpush = require('web-push');
+const { sendWA, waEnabled } = require('./whatsapp.js');
 
 const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY;
 const DB_URL        = process.env.FIREBASE_DATABASE_URL;
 const APP_URL       = 'https://varirvarela.github.io/atp-greenwich/';
 
-if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
-  console.log('VAPID keys not configured — skipping push notifications.');
+const pushEnabled = !!(VAPID_PUBLIC && VAPID_PRIVATE);
+
+if (!pushEnabled && !waEnabled) {
+  console.log('Neither push nor WhatsApp configured — exiting.');
   process.exit(0);
 }
 
@@ -28,7 +32,9 @@ const svcAccount = (() => {
 admin.initializeApp({ credential: admin.credential.cert(svcAccount), databaseURL: DB_URL });
 const db = admin.database();
 
-webpush.setVapidDetails('mailto:atp.greenwich.league@gmail.com', VAPID_PUBLIC, VAPID_PRIVATE);
+if (pushEnabled) {
+  webpush.setVapidDetails('mailto:atp.greenwich.league@gmail.com', VAPID_PUBLIC, VAPID_PRIVATE);
+}
 
 async function run() {
   const [playersSnap, seasonsSnap] = await Promise.all([
@@ -48,7 +54,7 @@ async function run() {
     if (player.status === 'onboarding' && !player.pushNotifiedAdmin) {
       const name = player.alias || player.name || 'A new player';
       for (const adminUid of adminUids) {
-        await _sendTo(players, adminUid, {
+        await _sendPush(players, adminUid, {
           title: 'Access request',
           body:  `${name} is requesting access to the league.`,
           tag:   `onboarding-${uid}`,
@@ -70,27 +76,29 @@ async function run() {
         const base     = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
         const notified = match.pushNotified || {};
 
-        // Direct match proposed — notify the challenged player
+        // ── Direct challenge ──────────────────────────────────────────────────
         if (match.status === 'scheduled' && match.playerB && !notified.proposed) {
+          const proposerName    = _playerName(players, match.playerA);
+          const challengedName  = _playerName(players, match.playerB);
           if (_wantsPush(players, match.playerB, 'challenged')) {
-            const proposerName = _playerName(players, match.playerA);
-            await _sendTo(players, match.playerB, {
+            await _sendPush(players, match.playerB, {
               title: 'New challenge',
               body:  `${proposerName} challenged you to a match.`,
               tag:   `propose-${mid}`,
               url:   APP_URL,
             });
           }
+          await sendWA(`🎾 *New challenge!*\n${proposerName} challenged ${challengedName} to a match.`);
           await db.ref(`${base}/pushNotified/proposed`).set(true);
         }
 
-        // Open challenge — notify all league members except the challenger
+        // ── Open challenge ────────────────────────────────────────────────────
         if (match.status === 'open_challenge' && !notified.open_challenge) {
           const challengerName = _playerName(players, match.playerA);
           const members = Object.keys(league.members || {}).filter(uid => uid !== match.playerA);
           for (const uid of members) {
             if (_wantsPush(players, uid, 'challenged')) {
-              await _sendTo(players, uid, {
+              await _sendPush(players, uid, {
                 title: 'Open challenge!',
                 body:  `${challengerName} posted an open challenge — be the first to accept.`,
                 tag:   `open-${mid}`,
@@ -98,16 +106,17 @@ async function run() {
               });
             }
           }
+          await sendWA(`🎾 *Open challenge from ${challengerName}!*\nFirst to accept in the app wins the spot.`);
           await db.ref(`${base}/pushNotified/open_challenge`).set(true);
         }
 
-        // Result entered — notify the player who needs to confirm
+        // ── Result pending confirmation ───────────────────────────────────────
         if (match.status === 'result_pending' && !notified.result && match.result?.enteredBy) {
-          const enteredBy   = match.result.enteredBy;
-          const confirmUid  = match.playerA === enteredBy ? match.playerB : match.playerA;
+          const enteredBy  = match.result.enteredBy;
+          const confirmUid = match.playerA === enteredBy ? match.playerB : match.playerA;
           if (_wantsPush(players, confirmUid, 'result')) {
             const entererName = _playerName(players, enteredBy);
-            await _sendTo(players, confirmUid, {
+            await _sendPush(players, confirmUid, {
               title: 'Confirm match result',
               body:  `${entererName} entered a result — confirm or dispute.`,
               tag:   `result-${mid}`,
@@ -117,12 +126,12 @@ async function run() {
           await db.ref(`${base}/pushNotified/result`).set(true);
         }
 
-        // Match confirmed — notify both players
+        // ── Match confirmed ───────────────────────────────────────────────────
         if (match.status === 'confirmed' && !notified.confirmed && match.playerB) {
           const pAName = _playerName(players, match.playerA);
           const pBName = _playerName(players, match.playerB);
           if (_wantsPush(players, match.playerA, 'confirmed')) {
-            await _sendTo(players, match.playerA, {
+            await _sendPush(players, match.playerA, {
               title: 'Match confirmed',
               body:  `Your match vs ${pBName} is now confirmed.`,
               tag:   `confirmed-${mid}-a`,
@@ -130,12 +139,27 @@ async function run() {
             });
           }
           if (_wantsPush(players, match.playerB, 'confirmed')) {
-            await _sendTo(players, match.playerB, {
+            await _sendPush(players, match.playerB, {
               title: 'Match confirmed',
               body:  `Your match vs ${pAName} is now confirmed.`,
               tag:   `confirmed-${mid}-b`,
               url:   APP_URL,
             });
+          }
+          // WhatsApp group: show who won with ELO delta
+          const winnerUid  = match.result?.winner;
+          const loserUid   = match.result?.loser;
+          if (winnerUid && loserUid) {
+            const wName   = _playerName(players, winnerUid);
+            const lName   = _playerName(players, loserUid);
+            const deltas  = match.eloDeltas || {};
+            const dW      = deltas[winnerUid];
+            const dL      = deltas[loserUid];
+            let msg = `✅ *${wName}* def. *${lName}*`;
+            if (dW != null && dL != null) {
+              msg += `\nELO: ${wName} ${dW > 0 ? '+' : ''}${Math.round(dW)} · ${lName} ${Math.round(dL)}`;
+            }
+            await sendWA(msg);
           }
           await db.ref(`${base}/pushNotified/confirmed`).set(true);
         }
@@ -143,7 +167,7 @@ async function run() {
     }
   }
 
-  console.log('Push notification pass complete.');
+  console.log('Notification pass complete.');
 }
 
 function _playerName(players, uid) {
@@ -151,28 +175,24 @@ function _playerName(players, uid) {
   return p.alias || p.name || 'Your opponent';
 }
 
-// Returns true if player hasn't opted out of this notification type.
-// Default is ON for all types except reminders.
 function _wantsPush(players, uid, type) {
   const prefs = players[uid]?.pushPrefs;
   if (!prefs) return type !== 'reminders';
   return prefs[type] !== false;
 }
 
-async function _sendTo(players, uid, payload) {
+async function _sendPush(players, uid, payload) {
+  if (!pushEnabled) return;
   const p = players[uid];
   if (!p || !p.pushSubscription) return;
-
   const sub = p.pushSubscription;
   if (!sub.endpoint || !sub.keys) return;
-
   try {
     await webpush.sendNotification(sub, JSON.stringify(payload));
     console.log(`Push sent to ${uid}: ${payload.title}`);
   } catch (err) {
     if (err.statusCode === 410 || err.statusCode === 404) {
       await admin.database().ref(`players/${uid}/pushSubscription`).remove();
-      // Null out in-memory so subsequent sends this run don't retry the dead subscription
       delete players[uid].pushSubscription;
       console.log(`Removed expired subscription for ${uid}`);
     } else {

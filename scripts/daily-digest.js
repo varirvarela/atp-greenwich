@@ -3,12 +3,14 @@
 // Evening run (2am UTC / 9pm EST): post end-of-day standings per league with play
 //
 // Required secrets: FIREBASE_SERVICE_ACCOUNT, FIREBASE_DATABASE_URL
-// Optional secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY (push reminders)
+// Optional secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY  (push reminders)
+//                   GREENAPI_INSTANCE_ID, GREENAPI_TOKEN, WHATSAPP_GROUP_ID  (WhatsApp)
 
 'use strict';
 
 const admin   = require('firebase-admin');
 const webpush = require('web-push');
+const { sendWA, waEnabled } = require('./whatsapp.js');
 
 const DB_URL        = process.env.FIREBASE_DATABASE_URL;
 const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY;
@@ -56,7 +58,7 @@ async function run() {
 
   const [seasonsSnap, playersSnap] = await Promise.all([
     db.ref('seasons').once('value'),
-    isMorning && pushEnabled ? db.ref('players').once('value') : Promise.resolve(null),
+    (isMorning && pushEnabled) || waEnabled ? db.ref('players').once('value') : Promise.resolve(null),
   ]);
   const seasons = seasonsSnap.val() || {};
   const players = playersSnap ? (playersSnap.val() || {}) : {};
@@ -69,9 +71,9 @@ async function run() {
       if (memberUids.length < 2) continue;
 
       if (isMorning) {
-        await _morningSchedule(sid, lid, matches, todayET, now, players);
+        await _morningSchedule(sid, lid, league, matches, todayET, now, players);
       } else {
-        await _eveningStandings(sid, lid, matches, memberUids, todayET, now);
+        await _eveningStandings(sid, lid, league, matches, memberUids, todayET, now, players);
       }
     }
   }
@@ -79,7 +81,7 @@ async function run() {
   console.log('Daily digest complete.');
 }
 
-async function _morningSchedule(sid, lid, matches, todayET, now, players) {
+async function _morningSchedule(sid, lid, league, matches, todayET, now, players) {
   const flagRef = db.ref(`config/dailyDigest/${todayET}/schedule/${lid}`);
   if ((await flagRef.once('value')).val()) {
     console.log(`  [${lid}] schedule already posted for ${todayET}`);
@@ -107,6 +109,24 @@ async function _morningSchedule(sid, lid, matches, todayET, now, players) {
   });
   await flagRef.set(true);
   console.log(`  [${lid}] posted daily_schedule with ${todayMatches.length} match(es)`);
+
+  // WhatsApp: morning schedule
+  if (waEnabled && players) {
+    const leagueName = league.name || lid;
+    const MEDALS = ['🥇', '🥈', '🥉'];
+    let msg = `📅 *Today's matches — ${leagueName}*\n`;
+    for (const { playerA, playerB, scheduledAt } of todayMatches) {
+      const pA = players[playerA]?.alias || players[playerA]?.name || playerA;
+      const pB = players[playerB]?.alias || players[playerB]?.name || playerB;
+      const timeStr = scheduledAt
+        ? new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true,
+          }).format(new Date(scheduledAt))
+        : null;
+      msg += timeStr ? `• ${pA} vs ${pB} at ${timeStr}\n` : `• ${pA} vs ${pB}\n`;
+    }
+    await sendWA(msg.trim());
+  }
 
   // Push reminders — players who opted in and have a match today
   if (pushEnabled && players && Object.keys(players).length > 0) {
@@ -145,7 +165,7 @@ async function _morningSchedule(sid, lid, matches, todayET, now, players) {
   }
 }
 
-async function _eveningStandings(sid, lid, matches, memberUids, todayET, now) {
+async function _eveningStandings(sid, lid, league, matches, memberUids, todayET, now, players) {
   const flagRef = db.ref(`config/dailyDigest/${todayET}/standings/${lid}`);
   if ((await flagRef.once('value')).val()) {
     console.log(`  [${lid}] standings already posted for ${todayET}`);
@@ -188,6 +208,18 @@ async function _eveningStandings(sid, lid, matches, memberUids, todayET, now) {
   });
   await flagRef.set(true);
   console.log(`  [${lid}] posted standings_update (${confirmedToday.length} game(s) played today)`);
+
+  // WhatsApp: evening standings
+  if (waEnabled) {
+    const leagueName = league.name || lid;
+    const medals = ['🥇', '🥈', '🥉'];
+    let msg = `🏆 *${leagueName} standings — ${todayET}*\n`;
+    standings.forEach(({ uid, wins, losses }, i) => {
+      const alias = players?.[uid]?.alias || players?.[uid]?.name || uid;
+      msg += `${i + 1}. ${medals[i] || ' '} *${alias}* — ${wins}W ${losses}L\n`;
+    });
+    await sendWA(msg.trim());
+  }
 }
 
 run().catch(err => { console.error(err); process.exit(1); });
