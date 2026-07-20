@@ -234,7 +234,7 @@ async function _sendPush(players, uid, payload) {
   const sub = p.pushSubscription;
   if (!sub.endpoint || !sub.keys) return;
   try {
-    await webpush.sendNotification(sub, JSON.stringify(payload));
+    await webpush.sendNotification(sub, JSON.stringify(payload), { urgency: 'high' });
     console.log(`Push sent to ${uid}: ${payload.title}`);
   } catch (err) {
     if (err.statusCode === 410 || err.statusCode === 404) {
