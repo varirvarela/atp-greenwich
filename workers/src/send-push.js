@@ -24,6 +24,11 @@ export async function runSendPush(env) {
     db.get('config/whatsappPrefs').then(v => v || {}),
   ]);
 
+  const playerCount  = Object.keys(players).length;
+  const seasonCount  = Object.keys(seasons).length;
+  console.log(`Loaded ${playerCount} players, ${seasonCount} season(s). push=${pushEnabled} wa=${waEnabled(env)}`);
+  console.log('WA prefs:', JSON.stringify(waPrefs));
+
   const adminUids = Object.entries(players)
     .filter(([, p]) => p.isAdmin === true)
     .map(([uid]) => uid);
@@ -48,10 +53,13 @@ export async function runSendPush(env) {
   for (const [sid, season] of Object.entries(seasons)) {
     const leagues = season.leagues || {};
     for (const [lid, league] of Object.entries(leagues)) {
-      const matches = league.matches || {};
+      const matches    = league.matches || {};
+      const matchCount = Object.keys(matches).length;
+      console.log(`[${lid}] scanning ${matchCount} match(es)`);
       for (const [mid, match] of Object.entries(matches)) {
         const base     = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
         const notified = match.pushNotified || {};
+        console.log(`  [${mid}] status=${match.status} notified=${JSON.stringify(notified)}`);
 
         // Direct challenge
         if (match.status === 'scheduled' && match.playerB && !notified.proposed) {

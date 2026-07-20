@@ -39,6 +39,9 @@ export async function runDailyDigest(env) {
     waEnabled(env) ? db.get('config/whatsappPrefs').then(v => v || {}) : Promise.resolve({}),
   ]);
 
+  console.log(`Seasons: ${Object.keys(seasons).length}  push=${pushEnabled}  wa=${waEnabled(env)}`);
+  console.log('WA prefs:', JSON.stringify(waPrefs));
+
   for (const [sid, season] of Object.entries(seasons)) {
     const leagues = season.leagues || {};
     for (const [lid, league] of Object.entries(leagues)) {
@@ -146,6 +149,7 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
   const confirmedToday = matchValues.filter(
     m => m.status === 'confirmed' && m.confirmedAt && m.confirmedAt >= cutoff
   );
+  console.log(`  [${lid}] ${matchValues.length} total matches, ${confirmedToday.length} confirmed in last 36h (cutoff=${new Date(cutoff).toISOString()})`);
 
   if (confirmedToday.length === 0) {
     console.log(`  [${lid}] no matches confirmed in last 36h`);
