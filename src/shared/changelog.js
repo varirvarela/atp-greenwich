@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.12.0',
+    date:    '2026-07-20',
+    changes: [],
+    adminChanges: [
+      'Player profile popup now shows activity stats: last seen, app mode (PWA/Browser), push status, matches played/won, challenges proposed, ELO change (all-time), and member since.',
+    ],
+  },
+  {
     version: '1.11.7',
     date:    '2026-07-20',
     changes: [

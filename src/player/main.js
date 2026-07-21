@@ -313,6 +313,9 @@ async function boot() {
     if (_testAppActive) return; // test helper already started the app
     initAnalytics(creds.uid);
     logAppOpen(isPWA() ? 'pwa' : 'browser');
+    // Refresh lastActive + pwaMode on every session restore (not just on login)
+    dbSet(pRef(creds.uid, 'lastActive'), Date.now()).catch(() => {});
+    dbSet(pRef(creds.uid, 'pwaMode'), isPWA()).catch(() => {});
     showApp(app, player, creds, onSignOut);
 
   } catch (err) {

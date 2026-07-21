@@ -268,6 +268,7 @@ async function renderPlayers(el) {
       Object.values(s.leagues || {}).flatMap(l => Object.keys(l.members || {}))
     )
   );
+  const allStats = _computeAllMatchStats(seasons);
 
   const pending    = players.filter(p => p.status === 'invited');
   const onboarding = players.filter(p => p.status === 'onboarding');
@@ -286,20 +287,20 @@ async function renderPlayers(el) {
 
     ${pending.length ? `
       <div class="section-group-label">Awaiting Approval (${pending.length})</div>
-      ${pending.map(p => _playerCard(p)).join('')}
+      ${pending.map(p => _playerCard(p, false, allStats[p.uid])).join('')}
     ` : ''}
 
     ${onboarding.length ? `
       <div class="section-group-label">Completing Onboarding (${onboarding.length})</div>
-      ${onboarding.map(p => _playerCard(p)).join('')}
+      ${onboarding.map(p => _playerCard(p, false, allStats[p.uid])).join('')}
     ` : ''}
 
     <div class="section-group-label">Active Players (${active.length})</div>
-    ${active.length ? active.map(p => _playerCard(p, !leagueMemberUids.has(p.uid))).join('') : `<div class="admin-empty">No active players yet.</div>`}
+    ${active.length ? active.map(p => _playerCard(p, !leagueMemberUids.has(p.uid), allStats[p.uid])).join('') : `<div class="admin-empty">No active players yet.</div>`}
 
     ${other.length ? `
       <div class="section-group-label">Other (${other.length})</div>
-      ${other.map(p => _playerCard(p)).join('')}
+      ${other.map(p => _playerCard(p, false, allStats[p.uid])).join('')}
     ` : ''}
   `;
 
@@ -367,9 +368,18 @@ async function renderPlayers(el) {
   });
 }
 
-function _playerCard(p, noLeague = false) {
+function _playerCard(p, noLeague = false, stats = null) {
   const statusClass = { invited: 'badge-red', onboarding: 'badge-orange', active: 'badge-green' }[p.status] || 'badge-muted';
   const displayName = escHtml(p.alias || p.name || p.uid);
+
+  const lastSeen  = p.lastActive ? timeAgo(p.lastActive) : 'never';
+  const appMode   = p.pwaMode === true ? 'PWA' : p.pwaMode === false ? 'browser' : '—';
+  const push      = p.pushSubscription ? '🔔' : '—';
+  const playedStr = stats ? `${stats.played}W/${stats.won}` : '0W';
+  const eloStr    = stats?.played > 0
+    ? `ELO ${(stats.eloChange >= 0 ? '+' : '') + stats.eloChange}`
+    : `ELO ${p.eloRating || '—'}`;
+
   return `
     <div class="admin-card" data-action="view-player" data-uid="${p.uid}"
       style="cursor:pointer;" title="View profile">
@@ -380,6 +390,9 @@ function _playerCard(p, noLeague = false) {
           ${p.alias ? `@${escHtml(p.alias)} &middot; ` : ''}
           ${p.email ? escHtml(p.email) + ' &middot; ' : ''}
           ELO ${p.eloRating || '—'}
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">
+          ${lastSeen} &middot; ${appMode} &middot; ${playedStr} &middot; ${eloStr} &middot; push ${push}
         </div>
       </div>
       <div class="admin-card-actions">
@@ -414,6 +427,33 @@ function _playerCard(p, noLeague = false) {
       </div>
     </div>
   `;
+}
+
+function _computeAllMatchStats(seasons) {
+  const map = {};
+  const get = uid => (map[uid] ??= { proposed: 0, played: 0, won: 0, eloChange: 0 });
+  for (const season of Object.values(seasons)) {
+    for (const league of Object.values(season.leagues || {})) {
+      for (const match of Object.values(league.matches || {})) {
+        const { playerA: a, playerB: b, status, result, eloDeltas } = match;
+        if (a) {
+          get(a).proposed++;
+          if (status === 'confirmed') {
+            get(a).played++;
+            if (result?.winner === a) get(a).won++;
+            if (eloDeltas?.[a] != null) get(a).eloChange += eloDeltas[a];
+          }
+        }
+        if (b && status === 'confirmed') {
+          get(b).played++;
+          if (result?.winner === b) get(b).won++;
+          if (eloDeltas?.[b] != null) get(b).eloChange += eloDeltas[b];
+        }
+      }
+    }
+  }
+  for (const s of Object.values(map)) s.eloChange = Math.round(s.eloChange);
+  return map;
 }
 
 async function _showPlayerProfileModal(player, onDone) {
@@ -451,6 +491,15 @@ async function _showPlayerProfileModal(player, onDone) {
     }
   }
 
+  const ms       = _computeMatchStats(player.uid, seasons);
+  const winPct   = ms.played > 0 ? ` (${Math.round(ms.won / ms.played * 100)}%)` : '';
+  const eloSign  = ms.eloChange >= 0 ? '+' : '';
+  const statBox  = (label, value) =>
+    `<div style="background:var(--bg);border-radius:8px;padding:8px 10px;">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">${label}</div>
+      <div style="font-size:13px;font-weight:600;">${value}</div>
+    </div>`;
+
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
@@ -485,6 +534,21 @@ async function _showPlayerProfileModal(player, onDone) {
             : '<span style="color:var(--text3);">⏳ Pending</span>'}</td></tr>
         ` : ''}
       </table>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--text3);
+          text-transform:uppercase;margin-bottom:8px;">Player Stats</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+          ${statBox('Last seen', player.lastActive ? timeAgo(player.lastActive) : 'Never')}
+          ${statBox('App mode', player.pwaMode === true ? 'PWA' : player.pwaMode === false ? 'Browser' : '—')}
+          ${statBox('Push', player.pushSubscription ? 'Enabled' : 'Not set')}
+          ${statBox('Played', String(ms.played))}
+          ${statBox('Won', ms.played > 0 ? `${ms.won}${winPct}` : '—')}
+          ${statBox('Proposed', String(ms.proposed))}
+          ${statBox('ELO change', ms.played > 0 ? `${eloSign}${ms.eloChange} pts` : '—')}
+          ${statBox('Member since', player.createdAt ? timeAgo(player.createdAt) : '—')}
+        </div>
+      </div>
 
       <div class="admin-input-group">
         <label class="admin-input-label">Set ELO Rating</label>

@@ -1237,8 +1237,9 @@ export function showLogin(container, onAuthenticated) {
       localStorage.setItem('atp_player_creds', JSON.stringify(creds));
       window.history.replaceState({}, '', window.location.pathname);
 
-      // Update lastActive
+      // Update lastActive and record whether player is in PWA mode
       dbSet(pRef(uid, 'lastActive'), Date.now()).catch(() => {});
+      dbSet(pRef(uid, 'pwaMode'), window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone).catch(() => {});
 
       initAnalytics(uid);
       logAppOpen(window.matchMedia('(display-mode: standalone)').matches ? 'pwa' : 'browser');
