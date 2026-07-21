@@ -437,14 +437,15 @@ function _computeAllMatchStats(seasons) {
   for (const season of Object.values(seasons)) {
     for (const league of Object.values(season.leagues || {})) {
       for (const match of Object.values(league.matches || {})) {
-        const { playerA: a, playerB: b, status, result, eloDeltas } = match;
-        if (a) {
-          get(a).proposed++;
-          if (status === 'confirmed') {
-            get(a).played++;
-            if (result?.winner === a) get(a).won++;
-            if (eloDeltas?.[a] != null) get(a).eloChange += eloDeltas[a];
-          }
+        const { playerA: a, playerB: b, status, result, eloDeltas, proposedBy } = match;
+        // Only count as proposed when a player actually initiated the challenge
+        // (admin-released group fixtures have proposedBy = 'admin')
+        const proposer = proposedBy && proposedBy !== 'admin' ? proposedBy : null;
+        if (proposer) get(proposer).proposed++;
+        if (a && status === 'confirmed') {
+          get(a).played++;
+          if (result?.winner === a) get(a).won++;
+          if (eloDeltas?.[a] != null) get(a).eloChange += eloDeltas[a];
         }
         if (b && status === 'confirmed') {
           get(b).played++;
@@ -466,18 +467,136 @@ async function renderStats(el) {
   const seasons  = seasonsRaw || {};
   const allStats = _computeAllMatchStats(seasons);
 
+  let view    = 'summary';
   let sortKey = 'played';
-  let sortAsc  = false;
+  let sortAsc = false;
 
+  // ── Shared helpers ────────────────────────────────────────────────────────────
+  const pct = (n, total) => total > 0 ? Math.round(n / total * 100) + '%' : '0%';
+
+  function statCard(title, value, sub = '') {
+    return `
+      <div style="background:var(--bg);border-radius:10px;padding:14px 16px;">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;
+          margin-bottom:6px;">${title}</div>
+        <div style="font-size:22px;font-weight:700;font-family:var(--font-mono);line-height:1;">
+          ${value}
+        </div>
+        ${sub ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;">${sub}</div>` : ''}
+      </div>`;
+  }
+
+  function barChart(title, items) {
+    const max = Math.max(...items.map(i => i.value), 1);
+    const rows = items.map(i => {
+      const w = Math.round(i.value / max * 100);
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+          <div style="width:80px;font-size:11px;color:var(--text2);text-align:right;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;">
+            ${escHtml(i.label)}
+          </div>
+          <div style="flex:1;background:var(--border);border-radius:3px;height:14px;overflow:hidden;">
+            <div style="height:100%;width:${w}%;background:var(--ace1);border-radius:3px;
+              min-width:${i.value > 0 ? 3 : 0}px;"></div>
+          </div>
+          <div style="width:24px;font-size:11px;color:var(--text3);text-align:right;flex-shrink:0;">
+            ${i.value}
+          </div>
+        </div>`;
+    }).join('');
+    return `
+      <div>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--text3);
+          text-transform:uppercase;margin-bottom:10px;">${title}</div>
+        ${rows}
+      </div>`;
+  }
+
+  // ── Summary view ──────────────────────────────────────────────────────────────
+  function renderSummary() {
+    const now  = Date.now();
+    const day  = 86400000;
+    const totalPlays = Object.values(allStats).reduce((s, v) => s + v.played, 0);
+    const totalMatches = Math.round(totalPlays / 2);
+    const avgPlayed    = players.length > 0 ? (totalPlays / players.length).toFixed(1) : '0';
+    const pwaCount     = players.filter(p => p.pwaMode === true).length;
+    const pushCount    = players.filter(p => !!p.pushSubscription).length;
+    const seenThisWeek = players.filter(p => p.lastActive && now - p.lastActive < 7 * day).length;
+
+    const buckets = { 'Today': 0, '1–7 days': 0, '7–30 days': 0, '> 30 days': 0 };
+    for (const p of players) {
+      if (!p.lastActive) { buckets['> 30 days']++; continue; }
+      const age = now - p.lastActive;
+      if (age < day)          buckets['Today']++;
+      else if (age < 7 * day)  buckets['1–7 days']++;
+      else if (age < 30 * day) buckets['7–30 days']++;
+      else                    buckets['> 30 days']++;
+    }
+
+    const matchItems = [...players]
+      .sort((a, b) => ((allStats[b.uid] || {}).played || 0) - ((allStats[a.uid] || {}).played || 0))
+      .slice(0, 10)
+      .map(p => ({ label: p.alias || p.name || p.uid, value: (allStats[p.uid] || {}).played || 0 }));
+
+    const eloItems = [...players]
+      .sort((a, b) => ((allStats[b.uid] || {}).eloChange || 0) - ((allStats[a.uid] || {}).eloChange || 0))
+      .slice(0, 10)
+      .map(p => {
+        const s = allStats[p.uid] || {};
+        const sign = s.eloChange > 0 ? '+' : '';
+        return { label: p.alias || p.name || p.uid, value: s.eloChange || 0, display: `${sign}${s.eloChange || 0}` };
+      });
+    const eloMax = Math.max(...eloItems.map(i => Math.abs(i.value)), 1);
+    const eloChartRows = eloItems.map(i => {
+      const w = Math.round(Math.abs(i.value) / eloMax * 100);
+      const color = i.value >= 0 ? 'var(--ace3)' : 'var(--danger)';
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+          <div style="width:80px;font-size:11px;color:var(--text2);text-align:right;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;">
+            ${escHtml(i.label)}
+          </div>
+          <div style="flex:1;background:var(--border);border-radius:3px;height:14px;overflow:hidden;">
+            <div style="height:100%;width:${w}%;background:${color};border-radius:3px;
+              min-width:${i.value !== 0 ? 3 : 0}px;"></div>
+          </div>
+          <div style="width:36px;font-size:11px;color:${color};text-align:right;flex-shrink:0;">
+            ${i.display}
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px;">
+        ${statCard('Active Players', players.length)}
+        ${statCard('Total Matches', totalMatches, 'confirmed games played')}
+        ${statCard('Avg per Player', avgPlayed, 'matches per active player')}
+        ${statCard('PWA Adoption', `${pwaCount}/${players.length}`, `${pct(pwaCount, players.length)} use the installed app`)}
+        ${statCard('Push Enabled', `${pushCount}/${players.length}`, `${pct(pushCount, players.length)} receive push notifications`)}
+        ${statCard('Active This Week', seenThisWeek, `${players.length - seenThisWeek} not seen in 7+ days`)}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px;">
+        ${barChart('Matches Played', matchItems)}
+        ${barChart('Last Seen', Object.entries(buckets).map(([label, value]) => ({ label, value })))}
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--text3);
+          text-transform:uppercase;margin-bottom:10px;">ELO Change (all time)</div>
+        ${eloChartRows}
+      </div>`;
+  }
+
+  // ── By Player table ───────────────────────────────────────────────────────────
   const COLS = [
-    { key: 'name',      label: 'Player',   sortable: true,  align: 'left'   },
+    { key: 'name',      label: 'Player',    sortable: true,  align: 'left'   },
     { key: 'lastSeen',  label: 'Last seen', sortable: true,  align: 'left'   },
-    { key: 'mode',      label: 'Mode',     sortable: false, align: 'center' },
-    { key: 'push',      label: 'Push',     sortable: false, align: 'center' },
-    { key: 'played',    label: 'Played',   sortable: true,  align: 'center' },
-    { key: 'winPct',    label: 'Won%',     sortable: true,  align: 'center' },
-    { key: 'proposed',  label: 'Proposed', sortable: true,  align: 'center' },
-    { key: 'eloChange', label: 'ELO Δ',   sortable: true,  align: 'center' },
+    { key: 'mode',      label: 'Mode',      sortable: false, align: 'center' },
+    { key: 'push',      label: 'Push',      sortable: false, align: 'center' },
+    { key: 'played',    label: 'Played',    sortable: true,  align: 'center' },
+    { key: 'winPct',    label: 'Won%',      sortable: true,  align: 'center' },
+    { key: 'proposed',  label: 'Proposed',  sortable: true,  align: 'center' },
+    { key: 'eloChange', label: 'ELO Δ',    sortable: true,  align: 'center' },
   ];
 
   function getSortVal(p, key) {
@@ -493,13 +612,10 @@ async function renderStats(el) {
     }
   }
 
-  function sorted() {
+  function sortedPlayers() {
     return [...players].sort((a, b) => {
-      const va = getSortVal(a, sortKey);
-      const vb = getSortVal(b, sortKey);
-      if (va < vb) return sortAsc ? -1 : 1;
-      if (va > vb) return sortAsc ? 1 : -1;
-      return 0;
+      const va = getSortVal(a, sortKey), vb = getSortVal(b, sortKey);
+      return va < vb ? (sortAsc ? -1 : 1) : va > vb ? (sortAsc ? 1 : -1) : 0;
     });
   }
 
@@ -518,7 +634,7 @@ async function renderStats(el) {
   }
 
   function renderRows() {
-    return sorted().map(p => {
+    return sortedPlayers().map(p => {
       const s       = allStats[p.uid] || { proposed: 0, played: 0, won: 0, eloChange: 0 };
       const winPct  = s.played > 0 ? Math.round(s.won / s.played * 100) + '%' : '—';
       const eloSign = s.eloChange > 0 ? '+' : '';
@@ -543,48 +659,85 @@ async function renderStats(el) {
           <td style="padding:8px 12px;font-size:12px;text-align:center;">${winPct}</td>
           <td style="padding:8px 12px;font-size:12px;text-align:center;">${s.proposed}</td>
           <td style="padding:8px 12px;font-size:12px;text-align:center;">${eloCol}</td>
-        </tr>
-      `;
+        </tr>`;
     }).join('');
   }
 
-  el.innerHTML = `
-    <div class="section-header">
-      <div class="section-title">Player Stats</div>
-      <div class="section-actions">
-        <span class="badge-admin badge-green">${players.length} active</span>
-      </div>
-    </div>
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;" id="stats-table">
-        <thead id="stats-thead">
-          <tr style="border-bottom:2px solid var(--border);background:var(--surface);">
-            ${renderHeaders()}
-          </tr>
-        </thead>
-        <tbody id="stats-tbody">
-          ${renderRows()}
-        </tbody>
-      </table>
-    </div>
-  `;
+  function renderTable() {
+    return `
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;" id="stats-table">
+          <thead id="stats-thead">
+            <tr style="border-bottom:2px solid var(--border);background:var(--surface);">
+              ${renderHeaders()}
+            </tr>
+          </thead>
+          <tbody id="stats-tbody">${renderRows()}</tbody>
+        </table>
+      </div>`;
+  }
 
-  el.querySelector('#stats-table').addEventListener('click', e => {
-    const th = e.target.closest('th[data-sort]');
-    if (th) {
-      const key = th.dataset.sort;
-      if (sortKey === key) sortAsc = !sortAsc;
-      else { sortKey = key; sortAsc = false; }
-      el.querySelector('#stats-thead tr').innerHTML = renderHeaders();
-      el.querySelector('#stats-tbody').innerHTML = renderRows();
-      return;
-    }
-    const row = e.target.closest('tr[data-uid]');
-    if (row) {
-      const p = players.find(q => q.uid === row.dataset.uid);
-      if (p) _showPlayerProfileModal(p, () => renderStats(el));
-    }
+  // ── Shell ─────────────────────────────────────────────────────────────────────
+  function toggleBtn(v, label) {
+    const active = view === v;
+    return `<button data-view="${v}" style="padding:4px 14px;border:none;border-radius:6px;
+      font-size:12px;cursor:pointer;font-weight:${active ? '600' : '400'};
+      background:${active ? 'var(--surface)' : 'transparent'};
+      color:${active ? 'var(--text)' : 'var(--text3)'};">${label}</button>`;
+  }
+
+  function renderShell() {
+    return `
+      <div class="section-header">
+        <div class="section-title">Player Stats</div>
+        <div class="section-actions">
+          <span class="badge-admin badge-green">${players.length} active</span>
+          <div id="stats-toggle" style="display:flex;gap:2px;background:var(--bg);
+            border-radius:8px;padding:3px;">
+            ${toggleBtn('summary', 'Summary')}
+            ${toggleBtn('players', 'By Player')}
+          </div>
+        </div>
+      </div>
+      <div id="stats-content">
+        ${view === 'summary' ? renderSummary() : renderTable()}
+      </div>`;
+  }
+
+  el.innerHTML = renderShell();
+
+  el.querySelector('#stats-toggle').addEventListener('click', e => {
+    const btn = e.target.closest('[data-view]');
+    if (!btn || btn.dataset.view === view) return;
+    view = btn.dataset.view;
+    // Update button styles in place (container div persists, listener stays valid)
+    el.querySelector('#stats-toggle').innerHTML =
+      toggleBtn('summary', 'Summary') + toggleBtn('players', 'By Player');
+    el.querySelector('#stats-content').innerHTML =
+      view === 'summary' ? renderSummary() : renderTable();
+    if (view === 'players') bindTableEvents();
   });
+
+  function bindTableEvents() {
+    const table = el.querySelector('#stats-table');
+    if (!table) return;
+    table.addEventListener('click', e => {
+      const th = e.target.closest('th[data-sort]');
+      if (th) {
+        const key = th.dataset.sort;
+        if (sortKey === key) sortAsc = !sortAsc;
+        else { sortKey = key; sortAsc = false; }
+        el.querySelector('#stats-thead tr').innerHTML = renderHeaders();
+        el.querySelector('#stats-tbody').innerHTML = renderRows();
+        return;
+      }
+      const row = e.target.closest('tr[data-uid]');
+      if (row) {
+        const p = players.find(q => q.uid === row.dataset.uid);
+        if (p) _showPlayerProfileModal(p, () => renderStats(el));
+      }
+    });
+  }
 }
 
 async function _showPlayerProfileModal(player, onDone) {
