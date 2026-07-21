@@ -521,6 +521,8 @@ async function renderStats(el) {
     const totalMatches = Math.round(totalPlays / 2);
     const avgPlayed    = players.length > 0 ? (totalPlays / players.length).toFixed(1) : '0';
     const pwaCount     = players.filter(p => p.pwaMode === true).length;
+    const browserCount = players.filter(p => p.pwaMode === false).length;
+    const unknownCount = players.filter(p => p.pwaMode == null).length;
     const pushCount    = players.filter(p => !!p.pushSubscription).length;
     const seenThisWeek = players.filter(p => p.lastActive && now - p.lastActive < 7 * day).length;
 
@@ -568,13 +570,26 @@ async function renderStats(el) {
     }).join('');
 
     return `
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:24px;">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">
         ${statCard('Active Players', players.length)}
         ${statCard('Total Matches', totalMatches, 'confirmed games played')}
         ${statCard('Avg per Player', avgPlayed, 'matches per active player')}
-        ${statCard('PWA Adoption', `${pwaCount}/${players.length}`, `${pct(pwaCount, players.length)} use the installed app`)}
         ${statCard('Push Enabled', `${pushCount}/${players.length}`, `${pct(pushCount, players.length)} receive push notifications`)}
         ${statCard('Active This Week', seenThisWeek, `${players.length - seenThisWeek} not seen in 7+ days`)}
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:14px 16px;margin-bottom:24px;">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;
+          margin-bottom:10px;">App Access — PWA vs Browser</div>
+        <div style="height:18px;border-radius:6px;overflow:hidden;display:flex;margin-bottom:8px;">
+          <div style="width:${pct(pwaCount, players.length)};background:var(--ace2);transition:width .3s;"></div>
+          <div style="width:${pct(browserCount, players.length)};background:var(--ace);transition:width .3s;"></div>
+          <div style="flex:1;background:var(--border);"></div>
+        </div>
+        <div style="display:flex;gap:16px;font-size:12px;flex-wrap:wrap;">
+          <span><span style="color:var(--ace2);font-weight:700;">■</span> PWA — ${pwaCount} players (${pct(pwaCount, players.length)})</span>
+          <span><span style="color:var(--ace);font-weight:700;">■</span> Browser only — ${browserCount} players (${pct(browserCount, players.length)})</span>
+          ${unknownCount > 0 ? `<span style="color:var(--text3);"><span style="font-weight:700;">■</span> Unknown — ${unknownCount}</span>` : ''}
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px;">
         ${barChart('Matches Played', matchItems)}

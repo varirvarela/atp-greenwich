@@ -315,7 +315,7 @@ async function boot() {
     logAppOpen(isPWA() ? 'pwa' : 'browser');
     // Refresh lastActive + pwaMode on every session restore (not just on login)
     dbSet(pRef(creds.uid, 'lastActive'), Date.now()).catch(() => {});
-    dbSet(pRef(creds.uid, 'pwaMode'), isPWA()).catch(() => {});
+    if (isPWA()) dbSet(pRef(creds.uid, 'pwaMode'), true).catch(() => {});
     showApp(app, player, creds, onSignOut);
 
   } catch (err) {

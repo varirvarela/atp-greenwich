@@ -1239,7 +1239,10 @@ export function showLogin(container, onAuthenticated) {
 
       // Update lastActive and record whether player is in PWA mode
       dbSet(pRef(uid, 'lastActive'), Date.now()).catch(() => {});
-      dbSet(pRef(uid, 'pwaMode'), window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone).catch(() => {});
+      // Only write pwaMode=true — never overwrite back to false if player has used PWA before
+      if (window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone) {
+        dbSet(pRef(uid, 'pwaMode'), true).catch(() => {});
+      }
 
       initAnalytics(uid);
       logAppOpen(window.matchMedia('(display-mode: standalone)').matches ? 'pwa' : 'browser');

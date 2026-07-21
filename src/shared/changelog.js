@@ -10,6 +10,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.12.1',
+    date:    '2026-07-21',
+    changes: [],
+    adminChanges: [
+      'Stats summary now shows a PWA vs Browser split bar with player counts and percentages.',
+      'PWA mode tracking no longer reverts: once a player opens the app in PWA, they stay marked as PWA user even if they later access via browser.',
+    ],
+  },
+  {
     version: '1.12.0',
     date:    '2026-07-20',
     changes: [],
