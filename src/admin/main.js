@@ -133,6 +133,7 @@ const NAV_ITEMS = [
   { id: 'leagues',  label: 'Leagues',      icon: tableIcon() },
   { id: 'invites',  label: 'Invite Codes', icon: keyIcon() },
   { id: 'matches',  label: 'Matches',      icon: ballIcon() },
+  { id: 'stats',    label: 'Stats',        icon: statsIcon() },
   { id: 'bracket',   label: 'Bracket',   icon: bracketIcon() },
   { id: 'whatsapp',  label: 'WhatsApp',  icon: whatsappIcon() },
   { id: 'settings',  label: 'Settings',  icon: gearIcon() },
@@ -239,6 +240,7 @@ async function _renderSection(id, el) {
     case 'leagues':  return renderLeagues(el);
     case 'invites':  return renderInvites(el);
     case 'matches':  return renderMatches(el);
+    case 'stats':    return renderStats(el);
     case 'bracket':   return renderBracketAdmin(el);
     case 'whatsapp':  return renderWhatsApp(el);
     case 'settings':  return renderSettings(el);
@@ -456,6 +458,135 @@ function _computeAllMatchStats(seasons) {
   return map;
 }
 
+async function renderStats(el) {
+  const [allObj, seasonsRaw] = await Promise.all([dbGet(pRef()), dbGet(dbRef('seasons'))]);
+  const players  = allObj
+    ? Object.entries(allObj).filter(([, p]) => p.status === 'active').map(([uid, p]) => ({ uid, ...p }))
+    : [];
+  const seasons  = seasonsRaw || {};
+  const allStats = _computeAllMatchStats(seasons);
+
+  let sortKey = 'played';
+  let sortAsc  = false;
+
+  const COLS = [
+    { key: 'name',      label: 'Player',   sortable: true,  align: 'left'   },
+    { key: 'lastSeen',  label: 'Last seen', sortable: true,  align: 'left'   },
+    { key: 'mode',      label: 'Mode',     sortable: false, align: 'center' },
+    { key: 'push',      label: 'Push',     sortable: false, align: 'center' },
+    { key: 'played',    label: 'Played',   sortable: true,  align: 'center' },
+    { key: 'winPct',    label: 'Won%',     sortable: true,  align: 'center' },
+    { key: 'proposed',  label: 'Proposed', sortable: true,  align: 'center' },
+    { key: 'eloChange', label: 'ELO Δ',   sortable: true,  align: 'center' },
+  ];
+
+  function getSortVal(p, key) {
+    const s = allStats[p.uid] || {};
+    switch (key) {
+      case 'name':      return (p.alias || p.name || '').toLowerCase();
+      case 'lastSeen':  return p.lastActive || 0;
+      case 'played':    return s.played || 0;
+      case 'winPct':    return s.played ? s.won / s.played : -1;
+      case 'proposed':  return s.proposed || 0;
+      case 'eloChange': return s.eloChange || 0;
+      default:          return 0;
+    }
+  }
+
+  function sorted() {
+    return [...players].sort((a, b) => {
+      const va = getSortVal(a, sortKey);
+      const vb = getSortVal(b, sortKey);
+      if (va < vb) return sortAsc ? -1 : 1;
+      if (va > vb) return sortAsc ? 1 : -1;
+      return 0;
+    });
+  }
+
+  function renderHeaders() {
+    return COLS.map(c => {
+      const active = sortKey === c.key;
+      const arrow  = active ? (sortAsc ? ' ▲' : ' ▼') : '';
+      return `<th ${c.sortable ? `data-sort="${c.key}"` : ''}
+        style="padding:8px 12px;font-size:11px;font-weight:600;letter-spacing:.05em;
+          text-transform:uppercase;text-align:${c.align};white-space:nowrap;
+          color:${active ? 'var(--ace1)' : 'var(--text3)'};
+          ${c.sortable ? 'cursor:pointer;user-select:none;' : ''}">
+        ${c.label}${arrow}
+      </th>`;
+    }).join('');
+  }
+
+  function renderRows() {
+    return sorted().map(p => {
+      const s       = allStats[p.uid] || { proposed: 0, played: 0, won: 0, eloChange: 0 };
+      const winPct  = s.played > 0 ? Math.round(s.won / s.played * 100) + '%' : '—';
+      const eloSign = s.eloChange > 0 ? '+' : '';
+      const eloCol  = s.played > 0
+        ? `<span style="color:${s.eloChange >= 0 ? 'var(--ace3)' : 'var(--danger)'}">${eloSign}${s.eloChange}</span>`
+        : '—';
+      return `
+        <tr style="border-bottom:1px solid var(--border);cursor:pointer;" data-uid="${p.uid}">
+          <td style="padding:8px 12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${avatarToSvg(p.avatarId || null, 24)}
+              <div>
+                <div style="font-weight:600;font-size:13px;">${escHtml(p.alias || p.name || p.uid)}</div>
+                <div style="font-size:11px;color:var(--text3);">ELO ${p.eloRating || '—'}</div>
+              </div>
+            </div>
+          </td>
+          <td style="padding:8px 12px;font-size:12px;">${p.lastActive ? timeAgo(p.lastActive) : '—'}</td>
+          <td style="padding:8px 12px;font-size:12px;text-align:center;">${p.pwaMode === true ? 'PWA' : p.pwaMode === false ? 'Browser' : '—'}</td>
+          <td style="padding:8px 12px;font-size:12px;text-align:center;">${p.pushSubscription ? '✓' : '—'}</td>
+          <td style="padding:8px 12px;font-size:12px;text-align:center;">${s.played}</td>
+          <td style="padding:8px 12px;font-size:12px;text-align:center;">${winPct}</td>
+          <td style="padding:8px 12px;font-size:12px;text-align:center;">${s.proposed}</td>
+          <td style="padding:8px 12px;font-size:12px;text-align:center;">${eloCol}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  el.innerHTML = `
+    <div class="section-header">
+      <div class="section-title">Player Stats</div>
+      <div class="section-actions">
+        <span class="badge-admin badge-green">${players.length} active</span>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;" id="stats-table">
+        <thead id="stats-thead">
+          <tr style="border-bottom:2px solid var(--border);background:var(--surface);">
+            ${renderHeaders()}
+          </tr>
+        </thead>
+        <tbody id="stats-tbody">
+          ${renderRows()}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  el.querySelector('#stats-table').addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]');
+    if (th) {
+      const key = th.dataset.sort;
+      if (sortKey === key) sortAsc = !sortAsc;
+      else { sortKey = key; sortAsc = false; }
+      el.querySelector('#stats-thead tr').innerHTML = renderHeaders();
+      el.querySelector('#stats-tbody').innerHTML = renderRows();
+      return;
+    }
+    const row = e.target.closest('tr[data-uid]');
+    if (row) {
+      const p = players.find(q => q.uid === row.dataset.uid);
+      if (p) _showPlayerProfileModal(p, () => renderStats(el));
+    }
+  });
+}
+
 async function _showPlayerProfileModal(player, onDone) {
   // Fetch all seasons to find which league this player belongs to
   const allSeasonsRaw = await dbGet(dbRef('seasons'));
@@ -491,7 +622,7 @@ async function _showPlayerProfileModal(player, onDone) {
     }
   }
 
-  const ms       = _computeMatchStats(player.uid, seasons);
+  const ms       = _computeAllMatchStats(seasons)[player.uid] || { proposed: 0, played: 0, won: 0, eloChange: 0 };
   const winPct   = ms.played > 0 ? ` (${Math.round(ms.won / ms.played * 100)}%)` : '';
   const eloSign  = ms.eloChange >= 0 ? '+' : '';
   const statBox  = (label, value) =>
@@ -2633,6 +2764,7 @@ function _svg(path) {
   return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 }
+function statsIcon()   { return _svg('<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>'); }
 function userIcon()    { return _svg('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'); }
 function tableIcon()   { return _svg('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>'); }
 function keyIcon()     { return _svg('<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>'); }
