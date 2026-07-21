@@ -146,11 +146,13 @@ async function _sendActivationNudge(db, env, todayET, now) {
     console.log('Activation nudge already sent today — skipping');
     return;
   }
-  const idx     = Math.floor(now / 86400000) % ACTIVATION_MESSAGES.length;
-  const message = ACTIVATION_MESSAGES[idx];
-  await sendWA(message, env);
+  const idx            = Math.floor(now / 86400000) % ACTIVATION_MESSAGES.length;
+  const { text, spice } = ACTIVATION_MESSAGES[idx];
+  const spiceLabel      = ['', 'Suave 🌶', 'Medio 🌶🌶', 'Picante 🌶🌶🌶'][spice] || '🌶';
+  const full            = `${text}\n\n_🤖 Generado por IA  ·  ${spiceLabel}_`;
+  await sendWA(full, env);
   await db.set(flagPath, true);
-  console.log(`Sent activation nudge #${idx}: "${message.slice(0, 60)}…"`);
+  console.log(`Sent activation nudge #${idx} (spice ${spice}): "${text.slice(0, 60)}…"`);
 }
 
 async function _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs) {
