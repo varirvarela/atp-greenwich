@@ -1,9 +1,10 @@
 // Daily feed digests — morning schedule (12:00 UTC) + evening standings (02:00 UTC)
 // Port of scripts/daily-digest.js for Cloudflare Workers
 
-import { createFirebase }    from './firebase.js';
-import { sendWebPush }       from './vapid.js';
-import { waEnabled, sendWA } from './whatsapp.js';
+import { createFirebase }         from './firebase.js';
+import { sendWebPush }            from './vapid.js';
+import { waEnabled, sendWA }      from './whatsapp.js';
+import { ACTIVATION_MESSAGES }    from './activation-messages.js';
 
 function etDateStr(tsMs) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -36,6 +37,7 @@ export async function runDailyDigest(env, cron) {
   console.log(`Seasons: ${Object.keys(seasons).length}  push=${pushEnabled}  wa=${waEnabled(env)}`);
   console.log('WA prefs:', JSON.stringify(waPrefs));
 
+  let anyMatchesToday = false;
   for (const [sid, season] of Object.entries(seasons)) {
     const leagues = season.leagues || {};
     for (const [lid, league] of Object.entries(leagues)) {
@@ -44,11 +46,16 @@ export async function runDailyDigest(env, cron) {
       if (memberUids.length < 2) continue;
 
       if (isMorning) {
-        await _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled);
+        const had = await _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled);
+        if (had) anyMatchesToday = true;
       } else {
         await _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs);
       }
     }
+  }
+
+  if (isMorning && !anyMatchesToday && waEnabled(env)) {
+    await _sendActivationNudge(db, env, todayET, now);
   }
 
   console.log('Daily digest complete.');
@@ -58,7 +65,7 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
   const flagPath = `config/dailyDigest/${todayET}/schedule/${lid}`;
   if (await db.get(flagPath)) {
     console.log(`  [${lid}] schedule already posted for ${todayET}`);
-    return;
+    return true; // matches existed; don't trigger activation nudge on re-run
   }
 
   const todayMatches = Object.entries(matches)
@@ -69,7 +76,7 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
 
   if (todayMatches.length === 0) {
     console.log(`  [${lid}] no matches scheduled for ${todayET}`);
-    return;
+    return false;
   }
 
   await db.push('activity', {
@@ -77,6 +84,7 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
   });
   await db.set(flagPath, true);
   console.log(`  [${lid}] posted daily_schedule with ${todayMatches.length} match(es)`);
+  // Return true so the caller knows at least one league had matches today
 
   // WhatsApp morning schedule
   if (waEnabled(env) && waPrefs.dailySchedule !== false) {
@@ -129,6 +137,20 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
       }
     }
   }
+  return true;
+}
+
+async function _sendActivationNudge(db, env, todayET, now) {
+  const flagPath = `config/dailyDigest/${todayET}/activation`;
+  if (await db.get(flagPath)) {
+    console.log('Activation nudge already sent today — skipping');
+    return;
+  }
+  const idx     = Math.floor(now / 86400000) % ACTIVATION_MESSAGES.length;
+  const message = ACTIVATION_MESSAGES[idx];
+  await sendWA(message, env);
+  await db.set(flagPath, true);
+  console.log(`Sent activation nudge #${idx}: "${message.slice(0, 60)}…"`);
 }
 
 async function _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs) {

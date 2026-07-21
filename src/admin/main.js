@@ -497,7 +497,7 @@ async function renderStats(el) {
             ${escHtml(i.label)}
           </div>
           <div style="flex:1;background:var(--border);border-radius:3px;height:14px;overflow:hidden;">
-            <div style="height:100%;width:${w}%;background:var(--ace1);border-radius:3px;
+            <div style="height:100%;width:${w}%;background:var(--ace);border-radius:3px;
               min-width:${i.value > 0 ? 3 : 0}px;"></div>
           </div>
           <div style="width:24px;font-size:11px;color:var(--text3);text-align:right;flex-shrink:0;">
@@ -550,7 +550,7 @@ async function renderStats(el) {
     const eloMax = Math.max(...eloItems.map(i => Math.abs(i.value)), 1);
     const eloChartRows = eloItems.map(i => {
       const w = Math.round(Math.abs(i.value) / eloMax * 100);
-      const color = i.value >= 0 ? 'var(--ace3)' : 'var(--danger)';
+      const color = i.value >= 0 ? 'var(--ace2)' : 'var(--ace3)';
       return `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
           <div style="width:80px;font-size:11px;color:var(--text2);text-align:right;
@@ -626,7 +626,7 @@ async function renderStats(el) {
       return `<th ${c.sortable ? `data-sort="${c.key}"` : ''}
         style="padding:8px 12px;font-size:11px;font-weight:600;letter-spacing:.05em;
           text-transform:uppercase;text-align:${c.align};white-space:nowrap;
-          color:${active ? 'var(--ace1)' : 'var(--text3)'};
+          color:${active ? 'var(--ace)' : 'var(--text3)'};
           ${c.sortable ? 'cursor:pointer;user-select:none;' : ''}">
         ${c.label}${arrow}
       </th>`;
@@ -639,7 +639,7 @@ async function renderStats(el) {
       const winPct  = s.played > 0 ? Math.round(s.won / s.played * 100) + '%' : '—';
       const eloSign = s.eloChange > 0 ? '+' : '';
       const eloCol  = s.played > 0
-        ? `<span style="color:${s.eloChange >= 0 ? 'var(--ace3)' : 'var(--danger)'}">${eloSign}${s.eloChange}</span>`
+        ? `<span style="color:${s.eloChange >= 0 ? 'var(--ace2)' : 'var(--ace3)'}">${eloSign}${s.eloChange}</span>`
         : '—';
       return `
         <tr style="border-bottom:1px solid var(--border);cursor:pointer;" data-uid="${p.uid}">
