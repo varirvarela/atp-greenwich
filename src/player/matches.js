@@ -1954,6 +1954,9 @@ function _showEditProposalModal(match, myUid, sid, lid) {
           value="${current}"
           min="${tsToLocalInput(Date.now() + 60000)}"
           style="font-size:14px;">
+        ${current ? `<button id="btn-remove-date" style="display:block;margin-top:8px;
+          background:none;border:none;padding:0;font-size:12px;color:var(--text3);
+          cursor:pointer;text-decoration:underline;">Remove scheduled date</button>` : ''}
       </div>
       <button class="btn btn-primary" id="btn-save-time">Save</button>
     </div>
@@ -1986,6 +1989,25 @@ function _showEditProposalModal(match, myUid, sid, lid) {
       btn.disabled = false; btn.textContent = 'Save';
     }
   });
+
+  overlay.querySelector('#btn-remove-date')?.addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-remove-date');
+    btn.disabled = true; btn.textContent = 'Removing…';
+    try {
+      await dbMultiUpdate({
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/scheduledAt`]: null,
+      });
+      writeActivity('match_rescheduled', {
+        sid, lid, mid: match.mid, changedBy: myUid,
+        playerA: match.playerA, playerB: match.playerB,
+        oldScheduledAt: match.scheduledAt || null, newScheduledAt: null,
+      });
+      overlay.remove();
+    } catch (err) {
+      console.error('Remove date error:', err);
+      btn.disabled = false; btn.textContent = 'Remove scheduled date';
+    }
+  });
 }
 
 function _showEditOpenChallengeModal(match, myUid, allPlayers, memberUids, sid, lid) {
@@ -2012,6 +2034,9 @@ function _showEditOpenChallengeModal(match, myUid, allPlayers, memberUids, sid, 
           value="${current}"
           min="${tsToLocalInput(Date.now() + 60000)}"
           style="font-size:14px;">
+        ${current ? `<button id="btn-remove-date" style="display:block;margin-top:8px;
+          background:none;border:none;padding:0;font-size:12px;color:var(--text3);
+          cursor:pointer;text-decoration:underline;">Remove scheduled date</button>` : ''}
       </div>
       <div style="margin-bottom:20px;">
         <div class="t-label t-muted" style="margin-bottom:8px;">Opponent</div>
@@ -2049,6 +2074,20 @@ function _showEditOpenChallengeModal(match, myUid, allPlayers, memberUids, sid, 
     } catch (err) {
       console.error('Edit open challenge error:', err);
       btn.disabled = false; btn.textContent = 'Save';
+    }
+  });
+
+  overlay.querySelector('#btn-remove-date')?.addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-remove-date');
+    btn.disabled = true; btn.textContent = 'Removing…';
+    try {
+      await dbMultiUpdate({
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/scheduledAt`]: null,
+      });
+      overlay.remove();
+    } catch (err) {
+      console.error('Remove date error:', err);
+      btn.disabled = false; btn.textContent = 'Remove scheduled date';
     }
   });
 }

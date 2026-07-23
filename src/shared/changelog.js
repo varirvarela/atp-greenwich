@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.12.2',
+    date:    '2026-07-23',
+    changes: [
+      'Reschedule modal now shows a "Remove scheduled date" link to unset a match date set by mistake.',
+    ],
+    adminChanges: [
+      'Changing the group stage deadline now backfills all unconfirmed group match records, so match cards reflect the new date immediately.',
+    ],
+  },
+  {
     version: '1.12.1',
     date:    '2026-07-21',
     changes: [],

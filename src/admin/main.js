@@ -1204,13 +1204,20 @@ async function renderLeagues(el) {
       const league = seasons[sid]?.leagues?.[lid] || {};
       const currentStatus = league.groupStageConfig?.status || 'pending';
 
-      await dbMultiUpdate({
+      const updates = {
         [`seasons/${sid}/leagues/${lid}/groupStageConfig/matchesPerPlayer`]: mpp,
         [`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyPoints`]:    qp,
         [`seasons/${sid}/leagues/${lid}/groupStageConfig/deadline`]:         dl,
         [`seasons/${sid}/leagues/${lid}/groupStageConfig/status`]:           currentStatus,
         [`seasons/${sid}/leagues/${lid}/pointsConfig`]:                      pointsConfig,
-      });
+      };
+      // Backfill deadline on all unconfirmed group matches so match cards stay in sync
+      for (const [mid, m] of Object.entries(league.matches || {})) {
+        if (m.groupMatch && m.status !== 'confirmed') {
+          updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/deadline`] = dl || null;
+        }
+      }
+      await dbMultiUpdate(updates);
       toast('Group stage configuration saved', 'success');
       renderLeagues(el);
     });
