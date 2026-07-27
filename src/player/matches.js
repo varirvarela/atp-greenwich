@@ -1081,6 +1081,18 @@ function _wireSetRowEvents(overlay, num) {
   // Auto-show/hide tiebreak based on score inputs
   const row = container.querySelector(`[data-set-row="${num}"]`);
   if (row) {
+    // Detect pre-filled manual tiebreak (TB visible but score isn't 7-6)
+    const tbRowInit = row.querySelector(`[data-tb-row="${num}"]`);
+    if (tbRowInit && tbRowInit.style.display !== 'none') {
+      const meInit = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
+      const opInit = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
+      if (!_needsTiebreak(meInit, opInit)) {
+        row.dataset.manualTb = '1';
+        const removeTbBtnInit = tbRowInit.querySelector(`[data-remove-tb="${num}"]`);
+        if (removeTbBtnInit) removeTbBtnInit.style.display = '';
+      }
+    }
+
     // Ensure hint element exists
     let hintEl = overlay.querySelector(`[data-hint-set="${num}"]`);
     if (!hintEl) {
@@ -1093,23 +1105,29 @@ function _wireSetRowEvents(overlay, num) {
     }
 
     const updateTb = () => {
-      const me    = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
-      const op    = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
-      const tbRow = row.querySelector(`[data-tb-row="${num}"]`);
+      const me       = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
+      const op       = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
+      const tbRow    = row.querySelector(`[data-tb-row="${num}"]`);
+      const addWrap  = row.querySelector(`[data-add-tb-wrap="${num}"]`);
+      const isManual = row.dataset.manualTb === '1';
       if (tbRow) {
         const needs = _needsTiebreak(me, op);
-        if (needs && tbRow.style.display === 'none') {
+        if ((needs || isManual) && tbRow.style.display === 'none') {
           tbRow.style.display = 'flex';
-        } else if (!needs && tbRow.style.display !== 'none') {
+          if (addWrap) addWrap.style.display = 'none';
+        } else if (!needs && !isManual && tbRow.style.display !== 'none') {
           tbRow.style.display = 'none';
           tbRow.querySelectorAll('input').forEach(i => { i.value = ''; });
+          if (addWrap) addWrap.style.display = '';
         }
+        const removeTbBtn = tbRow.querySelector(`[data-remove-tb="${num}"]`);
+        if (removeTbBtn) removeTbBtn.style.display = isManual ? '' : 'none';
       }
-      // Invalid score hint
+      // Invalid score hint — suppress when tiebreak manually added
       const meVal = row.querySelector('[data-score="me"]')?.value ?? '';
       const opVal = row.querySelector('[data-score="op"]')?.value ?? '';
       const bothFilled = meVal !== '' && opVal !== '';
-      if (bothFilled && !_isValidTennisSet(me, op)) {
+      if (bothFilled && !isManual && !_isValidTennisSet(me, op)) {
         hintEl.style.display = '';
       } else {
         hintEl.style.display = 'none';
@@ -1120,6 +1138,55 @@ function _wireSetRowEvents(overlay, num) {
       }
     };
     row.querySelectorAll('[data-score]').forEach(input => input.addEventListener('input', updateTb));
+
+    // Helper: trigger validation via the sets-container input listener (carries correct isPro10/isAdjust)
+    const _triggerValidation = () =>
+      overlay.querySelector('#sets-container')?.dispatchEvent(new Event('input'));
+
+    // Add tiebreak button
+    const addTbBtn = row.querySelector(`[data-add-tb="${num}"]`);
+    if (addTbBtn) {
+      addTbBtn.addEventListener('click', () => {
+        row.dataset.manualTb = '1';
+        const tbRow   = row.querySelector(`[data-tb-row="${num}"]`);
+        const addWrap = row.querySelector(`[data-add-tb-wrap="${num}"]`);
+        if (tbRow) {
+          tbRow.style.display = 'flex';
+          const removeTbBtnEl = tbRow.querySelector(`[data-remove-tb="${num}"]`);
+          if (removeTbBtnEl) removeTbBtnEl.style.display = '';
+        }
+        if (addWrap) addWrap.style.display = 'none';
+        hintEl.style.display = 'none';
+        _triggerValidation();
+      });
+    }
+
+    // Remove tiebreak button (manual only)
+    const removeTbBtnEl = row.querySelector(`[data-remove-tb="${num}"]`);
+    if (removeTbBtnEl) {
+      removeTbBtnEl.addEventListener('click', () => {
+        delete row.dataset.manualTb;
+        const tbRow   = row.querySelector(`[data-tb-row="${num}"]`);
+        const addWrap = row.querySelector(`[data-add-tb-wrap="${num}"]`);
+        if (tbRow) {
+          tbRow.style.display = 'none';
+          tbRow.querySelectorAll('input').forEach(i => { i.value = ''; });
+          removeTbBtnEl.style.display = 'none';
+        }
+        if (addWrap) addWrap.style.display = '';
+        // re-evaluate invalid-score hint
+        const me    = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
+        const op    = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
+        const meVal = row.querySelector('[data-score="me"]')?.value ?? '';
+        const opVal = row.querySelector('[data-score="op"]')?.value ?? '';
+        if (meVal !== '' && opVal !== '' && !_isValidTennisSet(me, op)) {
+          hintEl.style.display = '';
+        } else {
+          hintEl.style.display = 'none';
+        }
+        _triggerValidation();
+      });
+    }
 
     // Wire tiebreak hint
     const tbRow = row.querySelector(`[data-tb-row="${num}"]`);
@@ -1202,11 +1269,11 @@ function _setRow(num, removable = false, prefill = null) {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">
         <span class="t-label t-muted" style="width:48px;flex-shrink:0;">Set ${num}</span>
         <input type="number" class="input" data-score="me"
-          min="0" max="7" inputmode="numeric" placeholder="You" value="${escHtml(String(me))}"
+          min="0" max="99" inputmode="numeric" placeholder="You" value="${escHtml(String(me))}"
           style="flex:1;text-align:center;height:44px;padding:8px 4px;">
         <span style="color:var(--text3);font-size:16px;">–</span>
         <input type="number" class="input" data-score="op"
-          min="0" max="7" inputmode="numeric" placeholder="Opp" value="${escHtml(String(op))}"
+          min="0" max="99" inputmode="numeric" placeholder="Opp" value="${escHtml(String(op))}"
           style="flex:1;text-align:center;height:44px;padding:8px 4px;">
         ${removable
           ? `<button type="button" data-remove-set="${num}" aria-label="Remove set 3"
@@ -1219,6 +1286,13 @@ function _setRow(num, removable = false, prefill = null) {
              </button>`
           : '<div style="width:24px;flex-shrink:0;"></div>'}
       </div>
+      <div data-add-tb-wrap="${num}" style="display:${showTb ? 'none' : ''};margin:0 0 2px 58px;">
+        <button type="button" data-add-tb="${num}"
+          style="background:none;border:none;padding:0;font-size:11px;color:var(--text3);
+            cursor:pointer;text-decoration:underline;">
+          + Tiebreak
+        </button>
+      </div>
       <div data-tb-row="${num}" style="display:${showTb ? 'flex' : 'none'};
         align-items:center;gap:10px;padding:4px 0 8px;margin-left:58px;">
         <span class="t-label t-muted" style="width:24px;flex-shrink:0;font-size:10px;">TB</span>
@@ -1229,7 +1303,11 @@ function _setRow(num, removable = false, prefill = null) {
         <input type="number" class="input" data-tb="op"
           min="0" inputmode="numeric" placeholder="Opp" value="${escHtml(String(tbOp))}"
           style="flex:1;text-align:center;height:38px;padding:6px 4px;font-size:15px;">
-        <div style="width:24px;flex-shrink:0;"></div>
+        <button type="button" data-remove-tb="${num}"
+          style="background:none;border:none;padding:0;font-size:11px;color:var(--text3);
+            cursor:pointer;text-decoration:underline;flex-shrink:0;display:none;">
+          Quitar
+        </button>
       </div>
     </div>
   `;
@@ -1249,13 +1327,25 @@ function _deriveWinner(overlay, isPro10) {
   if (!rows.length) return null;
   let meWins = 0, opWins = 0;
   for (const row of rows) {
-    const me = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
-    const op = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
-    if (isNaN(me) || isNaN(op)) return null;
-    if (!_isValidTennisSet(me, op)) return null;
-    if (me > op) meWins++;
-    else if (op > me) opWins++;
-    else return null;
+    const me       = parseInt(row.querySelector('[data-score="me"]')?.value ?? '', 10);
+    const op       = parseInt(row.querySelector('[data-score="op"]')?.value ?? '', 10);
+    const isManual = row.dataset.manualTb === '1';
+    if (isNaN(me) || isNaN(op) || me < 0 || op < 0) return null;
+    if (isManual) {
+      // Winner is decided by tiebreak score
+      const tbRow = row.querySelector('[data-tb-row]');
+      if (!tbRow || tbRow.style.display === 'none') return null;
+      const tbMe = parseInt(tbRow.querySelector('[data-tb="me"]')?.value ?? '', 10);
+      const tbOp = parseInt(tbRow.querySelector('[data-tb="op"]')?.value ?? '', 10);
+      if (isNaN(tbMe) || isNaN(tbOp) || !_isValidTiebreak(tbMe, tbOp)) return null;
+      if (tbMe > tbOp) meWins++;
+      else opWins++;
+    } else {
+      if (!_isValidTennisSet(me, op)) return null;
+      if (me > op) meWins++;
+      else if (op > me) opWins++;
+      else return null;
+    }
   }
   if (meWins === opWins) return null;
   return meWins > opWins ? 'me' : 'op';
@@ -1306,11 +1396,13 @@ function _collectSets(overlay, count) {
   const c    = overlay.querySelector('#section-bo3') || overlay;
   const sets = [];
   for (let i = 1; i <= count; i++) {
-    const row = c.querySelector(`[data-set-row="${i}"]`);
+    const row      = c.querySelector(`[data-set-row="${i}"]`);
     if (!row) break;
-    const me = parseInt(row.querySelector('[data-score="me"]').value, 10);
-    const op = parseInt(row.querySelector('[data-score="op"]').value, 10);
-    if (isNaN(me) || isNaN(op) || !_isValidTennisSet(me, op)) return null;
+    const me       = parseInt(row.querySelector('[data-score="me"]').value, 10);
+    const op       = parseInt(row.querySelector('[data-score="op"]').value, 10);
+    const isManual = row.dataset.manualTb === '1';
+    if (isNaN(me) || isNaN(op) || me < 0 || op < 0) return null;
+    if (!isManual && !_isValidTennisSet(me, op)) return null;
     const entry = { me, op, tbMe: null, tbOp: null };
     const tbRow = row.querySelector(`[data-tb-row="${i}"]`);
     if (tbRow && tbRow.style.display !== 'none') {
@@ -1318,6 +1410,8 @@ function _collectSets(overlay, count) {
       const tbOp = parseInt(tbRow.querySelector('[data-tb="op"]')?.value ?? '', 10);
       if (!isNaN(tbMe) && !isNaN(tbOp)) { entry.tbMe = tbMe; entry.tbOp = tbOp; }
       else return null; // tiebreak shown but incomplete
+    } else if (isManual) {
+      return null; // manual tiebreak must be filled
     }
     sets.push(entry);
   }

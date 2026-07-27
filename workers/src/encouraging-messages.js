@@ -1,0 +1,36 @@
+// Encouraging messages sent via WhatsApp on days with matches scheduled.
+// Selected by day index (epoch days % length) — deterministic, cycles through messages.
+// spice: 1 = suave, 2 = medio, 3 = picante
+
+export const ENCOURAGING_MESSAGES = [
+  { spice: 1, text: '¡Hoy hay partidos! La cancha te espera. Andá con todo.' },
+  { spice: 2, text: '¡Se juega hoy! Ojalá alguien recuerde cómo se agarra la raqueta.' },
+  { spice: 1, text: '¡Día de tenis en la ATP Greenwich! A calentar la muñeca y darlo todo.' },
+  { spice: 2, text: '¡Hoy hay acción! Que la pelota decida lo que el orgullo no puede.' },
+  { spice: 1, text: '¡Hay partidos hoy! La liga está viva. Que empiece el show. 🎾' },
+  { spice: 3, text: '¡Se juega hoy! Si perdés no te preocupes — igual todos lo van a recordar por siempre.' },
+  { spice: 1, text: '¡Hoy hay tenis! Un día más para escribir historia en la ATP Greenwich. O al menos intentarlo.' },
+  { spice: 2, text: '¡Hay cancha hoy! Y ya sabemos quién tiene más presión en este grupo. Suerte.' },
+  { spice: 2, text: '¡Se viene el partido! Recordá: el asado del ganador sabe mejor. Mucha suerte o mucho talento, lo que tengas.' },
+  { spice: 3, text: '¡Hoy se juega! Si tenés miedo, es normal. Si no, fingilo para impresionar al rival.' },
+  { spice: 1, text: '¡Partidos hoy en la ATP Greenwich! La cancha no miente. Los jugadores a veces sí. Suerte a todos. 😄' },
+  { spice: 2, text: '¡Hoy hay acción! El ranking se mueve. El orgullo también. A darlo todo en la cancha.' },
+  { spice: 1, text: '¡Día de partido! Calentá bien, jugá con inteligencia, y sobre todo: disfrutalo. La parrilla espera al ganador.' },
+  { spice: 3, text: '¡Se juega hoy! Perder con clase también es un arte, pero mejor no practicarlo hoy.' },
+  { spice: 2, text: '¡Hoy hay tenis! El que entrena en secreto lleva ventaja. El que no entrena, creatividad. Suerte a ambos.' },
+  { spice: 1, text: '¡Partidos programados para hoy! Que cada punto cuente y cada golpe tenga intención. ¡Mucha suerte!' },
+  { spice: 2, text: '¡Hoy se decide algo en la ATP Greenwich! No sabemos exactamente qué, pero suena importante. 🎾' },
+  { spice: 3, text: '¡Día de partido! Ojo con la presión: en el tenis, como en el asado, el que se apura quema la carne.' },
+  { spice: 1, text: '¡Hoy hay cancha! A concentrarse, a competir y a recordar por qué se juega: por la gloria y el asado posterior.' },
+  { spice: 2, text: '¡Se juega hoy! El ranking no miente. La pelota tampoco. Igual, suerte — la van a necesitar.' },
+  { spice: 1, text: '¡Hay partidos hoy! Momento de demostrar de qué pasta está hecho cada uno. O de improvisar bien, también vale.' },
+  { spice: 3, text: '¡Hoy se juega! El que no deja todo en la cancha, que no se queje después en el grupo. ¡A fondo!' },
+  { spice: 2, text: '¡Partido hoy en la ATP Greenwich! Que el mejor gane. O el más suertudo. O el que durmió mejor. Suerte.' },
+  { spice: 1, text: '¡Se viene el tenis! Concentración, actitud y una buena entrada en calor. El resto lo hace la raqueta.' },
+  { spice: 2, text: '¡Hoy hay acción! Ya anotate mentalmente la excusa por si las cosas no salen bien. O no, y ganás. 🎾' },
+  { spice: 3, text: '¡Hoy se juega! Recordá: el rival también está nervioso. A menos que no esté, en cuyo caso rezá un poco.' },
+  { spice: 1, text: '¡Partidos hoy! La ATP Greenwich en modo encendido. Que salgan los mejores golpes — y el mejor asado.' },
+  { spice: 2, text: '¡Hoy hay tenis! ¿Ya te mentalicaste? ¿Ya te estiraste? ¿Ya te convenciste de que podés ganarlo? Bien. A jugar.' },
+  { spice: 1, text: '¡Se juega hoy en la ATP Greenwich! Cada punto importa. Cada juego importa. Cada set importa. No te relajés.' },
+  { spice: 3, text: '¡Hoy hay partido! Y en este grupo todos saben que el que menos lo dice es el que más ganas tiene de ganar.' },
+];

@@ -5,6 +5,7 @@ import { createFirebase }         from './firebase.js';
 import { sendWebPush }            from './vapid.js';
 import { waEnabled, sendWA }      from './whatsapp.js';
 import { ACTIVATION_MESSAGES }    from './activation-messages.js';
+import { ENCOURAGING_MESSAGES }   from './encouraging-messages.js';
 
 function etDateStr(tsMs) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -61,6 +62,43 @@ export async function runDailyDigest(env, cron) {
   console.log('Daily digest complete.');
 }
 
+function _calcGroupPoints(matches, uid, pointsConfig) {
+  const {
+    played        = 1,
+    wonBonus      = 2,
+    missed        = -1,
+    forfeitLoser  = -1,
+    forfeitWinner = 2,
+  } = pointsConfig || {};
+  let points = 0;
+  for (const match of Object.values(matches || {})) {
+    const isA = match.playerA === uid;
+    const isB = match.playerB === uid;
+    if (!isA && !isB) continue;
+    if (match.forfeited) {
+      points += (match.forfeited === uid) ? forfeitLoser : forfeitWinner;
+      continue;
+    }
+    if (match.deadlinePenaltyApplied) { points += missed; continue; }
+    if (match.status === 'confirmed') {
+      points += played;
+      if (match.result?.winner === uid) points += wonBonus;
+    }
+  }
+  return points;
+}
+
+function _fmtMatchScore(result) {
+  if (!result) return '';
+  if (result.score) return `${result.score.a}–${result.score.b}`;
+  if (!result.sets?.length) return '';
+  return result.sets.map(s => {
+    const base = `${s.a}-${s.b}`;
+    if (s.tb) return `${base}(${s.tb.a}-${s.tb.b})`;
+    return base;
+  }).join(' ');
+}
+
 async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled) {
   const flagPath = `config/dailyDigest/${todayET}/schedule/${lid}`;
   if (await db.get(flagPath)) {
@@ -100,6 +138,9 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
         : null;
       msg += timeStr ? `• ${pA} vs ${pB} at ${timeStr}\n` : `• ${pA} vs ${pB}\n`;
     }
+    const encIdx = Math.floor(now / 86400000) % ENCOURAGING_MESSAGES.length;
+    const { text: encText } = ENCOURAGING_MESSAGES[encIdx];
+    msg += `\n_${encText}_`;
     await sendWA(msg.trim(), env);
   }
 
@@ -183,13 +224,15 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
     if (l && stats[l]) { stats[l].losses++; stats[l].played++; }
   }
 
+  const pointsCfg = league.pointsConfig || {};
   const standings = memberUids
     .map(uid => ({
       uid,
       ...stats[uid],
-      elo: players[uid]?.eloRating != null ? Math.round(players[uid].eloRating) : null,
+      elo:         players[uid]?.eloRating != null ? Math.round(players[uid].eloRating) : null,
+      groupPoints: _calcGroupPoints(matches, uid, pointsCfg),
     }))
-    .sort((a, b) => b.wins - a.wins || b.played - a.played);
+    .sort((a, b) => b.groupPoints - a.groupPoints || b.wins - a.wins || b.played - a.played);
 
   const results = confirmedToday
     .filter(m => m.result?.winner)
@@ -217,11 +260,24 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
       timeZone: 'America/New_York', month: 'short', day: 'numeric',
     }).format(new Date());
     let msg = `🏆 *${leagueName} — ${dateLabel}*\n`;
-    standings.forEach(({ uid, wins, losses }, i) => {
-      const p     = players?.[uid] || {};
-      const alias = p.alias || p.name || uid;
-      const elo   = p.eloRating != null ? ` · ${Math.round(p.eloRating)} ELO` : '';
-      msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${wins}W ${losses}L${elo}\n`;
+
+    // Match results with scores
+    const todayResults = confirmedToday.filter(m => m.result?.winner);
+    if (todayResults.length > 0) {
+      msg += '\n';
+      for (const m of todayResults) {
+        const wAlias = players[m.result.winner]?.alias || players[m.result.winner]?.name || m.result.winner;
+        const lAlias = m.result.loser ? (players[m.result.loser]?.alias || players[m.result.loser]?.name || m.result.loser) : '?';
+        const scoreStr = _fmtMatchScore(m.result);
+        msg += `🎾 *${wAlias}* def. *${lAlias}*${scoreStr ? ` ${scoreStr}` : ''}\n`;
+      }
+    }
+
+    // Standings sorted by points
+    msg += '\n';
+    standings.forEach(({ uid, wins, losses, groupPoints }, i) => {
+      const alias = players?.[uid]?.alias || players?.[uid]?.name || uid;
+      msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${groupPoints}pts (${wins}W ${losses}L)\n`;
     });
     await sendWA(msg.trim(), env);
   }

@@ -10,6 +10,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.13.0',
+    date:    '2026-07-26',
+    changes: [
+      'Match result entry now lets you add a tiebreak to any set — tap "+ Tiebreak" on any set row, not just when the score reaches 7-6.',
+    ],
+    adminChanges: [
+      'WhatsApp evening standings now show individual match scores and are sorted by league points.',
+      'WhatsApp morning schedule now appends a daily encouraging message.',
+    ],
+  },
+  {
     version: '1.12.2',
     date:    '2026-07-23',
     changes: [
