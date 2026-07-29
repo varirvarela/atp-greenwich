@@ -13,7 +13,8 @@ ATP Greenwich is a mobile-first progressive web app (PWA) for running a private 
 | Auth | Custom password hash stored in RTDB — no Firebase Auth |
 | Hosting | GitHub Pages (player app at `/`, admin at `/admin/`) |
 | CI/CD | GitHub Actions: E2E tests (Playwright), deploy on push to `main` |
-| Scheduled jobs | GitHub Actions cron: push notifications (every 5 min), email (every 5 min), deadline check (daily), daily feed digest (7am + 9pm EST) |
+| Scheduled jobs | **Cloudflare Worker** (`workers/src/`) — push notifications, daily digest, deadline check (replaces GitHub Actions crons) |
+| WhatsApp | Cloudflare Worker sends group messages via WhatsApp Business API (`workers/src/whatsapp.js`) |
 
 There are two separate Vite builds:
 - **Player app** (`src/player/`) — the main PWA players install
@@ -27,7 +28,8 @@ Shared code lives in `src/shared/` (scoring logic, Firebase helpers, activity fe
 
 ```
 players/
-  {uid}: { name, alias, eloRating, status, avatarId, isAdmin, pushSubscription, ... }
+  {uid}: { name, alias, eloRating, status, avatarId, isAdmin,
+           pushSubscription, lastActive, pwaMode, ... }
 
 seasons/
   {sid}/
@@ -35,11 +37,13 @@ seasons/
     leagues/
       {lid}/
         name, members/{uid}: true
-        groupStageConfig: { status, deadline, pointsConfig, qualifyPoints }
+        pointsConfig: { played, wonBonus, missed, forfeitLoser, forfeitWinner }
+        groupStageConfig: { status, deadline, matchesPerPlayer, qualifyPoints }
         matches/
           {mid}: { playerA, playerB, proposedBy, proposedAt, scheduledAt,
                    status, groupMatch, deadline, result, photoUrl,
-                   eloDeltas, confirmedAt, forfeited, pushNotified }
+                   eloDeltas, confirmedAt, forfeited, pushNotified,
+                   deadlinePenaltyApplied }
         bracket/
           rounds/: [ [{playerA, playerB, winner}] ]
 
@@ -48,8 +52,10 @@ activity/           ← global feed events (all seasons)
 
 config/
   defaultSeason: sid
-  dailyDigest/{dateET}/schedule/{lid}: true   ← dedup flag
-  dailyDigest/{dateET}/standings/{lid}: true  ← dedup flag
+  dailyDigest/{dateET}/schedule/{lid}: true    ← dedup flag
+  dailyDigest/{dateET}/standings/{lid}: true   ← dedup flag
+  dailyDigest/{dateET}/activation: true        ← dedup flag (WA nudge)
+  whatsappPrefs: { dailySchedule, eveningStandings }
 
 inviteCodes/
   {code}: { used, usedBy }
@@ -67,12 +73,12 @@ Storage bucket path: `match-photos/{matchId}.{ext}` (prod), `_dev/match-photos/.
 | Tab | File | What it does |
 |---|---|---|
 | Feed | `src/player/feed.js` | Confirmed results, activity cards (challenges, joins, rescheduling, daily digest), emoji reactions |
-| Matches | `src/player/matches.js` | Propose/accept/decline challenges, enter results + photo, confirm or dispute, reschedule, forfeit group matches |
-| Standings | `src/player/standings.js` | League table sorted by W/L/GD; group-points mode during group stage; click any player for profile modal |
+| Matches | `src/player/matches.js` | Propose/accept/decline challenges, enter results + photo, confirm or dispute, reschedule/remove date, forfeit group matches |
+| Standings | `src/player/standings.js` | League table sorted by group points during group stage, W/L/GD otherwise; click any player for profile modal |
 | Bracket | `src/player/bracket.js` | Knockout draw; group-points qualification tracker |
 | Profile | `src/player/app.js` | Avatar/alias edit, ELO tier, stats, push-notification opt-in, install PWA, walkthrough |
 
-Clicking any player name or avatar anywhere in the app opens **`showPlayerModal`** (`src/player/player-modal.js`) — a unified profile sheet showing 6 stat tiles (Played / Won / Lost / Missed / Forfeit / Opp.Forfeit), ELO + tier badge, and the last 20 confirmed matches with ELO deltas.
+Clicking any player name or avatar anywhere in the app opens **`showPlayerModal`** (`src/player/player-modal.js`) — a unified profile sheet showing stat tiles (Played / Won / Lost / Missed / Forfeit / Opp.Forfeit), ELO + tier badge, and the last 20 confirmed matches with ELO deltas.
 
 ---
 
@@ -92,9 +98,9 @@ open_challenge  ──accept──►  scheduled
                 (either player may adjust-result → recalc ELO)
 ```
 
-Group-stage matches have a `deadline` (forfeit if not played) and `groupMatch: true`. The admin can forfeit or apply deadline penalties server-side.
+Group-stage matches have a `deadline` (forfeit if not played by admin action) and `groupMatch: true`. The admin can apply deadline penalties or forfeit server-side.
 
-Match formats: **Best-of-3** (sets with optional tiebreak) or **Pro 10** (single score 0–10).
+Match formats: **Best-of-3** (sets with optional tiebreak — tiebreak can be manually added to any set, not just at 6-6) or **Pro 10** (single score 0–10).
 
 ELO is recalculated on every confirm/adjust via `calculateElo()` in `src/shared/elo.js` (standard K-factor formula).
 
@@ -112,8 +118,8 @@ ELO is recalculated on every confirm/adjust via `calculateElo()` in `src/shared/
 | `bracket_advance` | admin advancing bracket | "X advanced in the bracket" |
 | `profile_change` | player editing avatar/alias | "X updated their avatar/alias" |
 | `new_player` | (seeded in tests only) | "X joined the tournament" |
-| `daily_schedule` | `scripts/daily-digest.js` at 7am EST | "Today's matches · Liga A — A vs B at 7pm" |
-| `standings_update` | `scripts/daily-digest.js` at 9pm EST | "End of day standings · Liga A — 1. X 4-1 …" |
+| `daily_schedule` | Cloudflare Worker at 8am ET | "Today's matches · Liga A — A vs B at 7pm" |
+| `standings_update` | Cloudflare Worker at 10pm ET | "End of day standings · Liga A — 1. X 9pts …" |
 
 ---
 
@@ -121,24 +127,28 @@ ELO is recalculated on every confirm/adjust via `calculateElo()` in `src/shared/
 
 | Section | What it does |
 |---|---|
-| Players | Approve/reject registrations; edit ELO; assign leagues; grant admin; delete players |
+| Players | Approve/reject registrations; edit ELO; assign leagues; grant admin; delete players; view per-player stats (matches proposed/played/won, ELO change, last active, PWA usage) |
 | Matches | Filter + view all matches across seasons; override results |
-| Leagues | Create leagues; assign members; configure + release group-stage fixtures (round-robin scheduler with validation preview); close group stage |
+| Leagues | Create leagues; assign members; configure + release group-stage fixtures (round-robin scheduler with validation preview); close group stage; set group stage deadline (auto-backfills all open match records) |
 | Bracket | Publish knockout draw; advance winners; handle BYEs |
+| Stats | Summary cards (active players, match counts, ELO spread) with bar charts; per-player sortable table; PWA vs browser usage split |
 | Settings | View app version; manage push VAPID config |
 
 ---
 
-## Scheduled GitHub Actions
+## Cloudflare Worker (scheduled jobs)
 
-| Workflow | Schedule | Script |
-|---|---|---|
-| `send-push.yml` | every 5 min | `scripts/send-push.js` — push notifications for new challenges, results, confirmations |
-| `send-email.yml` | every 5 min | `scripts/send-email.js` — email for same events + league assignments |
-| `deadline-check.yml` | 8am UTC daily | `scripts/deadline-check.js` — apply missed-deadline penalties |
-| `daily-digest.yml` | 12pm UTC (7am EST) + 2am UTC (9pm EST) | `scripts/daily-digest.js` — post schedule preview / end-of-day standings to feed |
-| `backup.yml` | 3am UTC daily | `scripts/backup.js` — snapshot RTDB to GitHub Actions artifact (30-day retention) |
-| `deploy.yml` | push to `main` | Build + deploy to GitHub Pages + push Firebase database & storage rules |
+All background jobs run in a single Cloudflare Worker (`workers/src/`) triggered by cron expressions. The worker handles Firebase via REST (`workers/src/firebase.js`) and does not use the Firebase Admin SDK.
+
+| Cron | What it does |
+|---|---|
+| `*/5 * * * *` | Send push notifications for pending match events (`workers/src/send-push.js`) |
+| `0 12 * * *` | Morning schedule digest (8am ET): posts today's matches to the feed + WA group, appends a daily encouraging message; sends push reminders to players with matches today |
+| `0 2 * * *` | Evening standings digest (10pm ET): posts standings sorted by league points to the feed + WA group, including individual match scores |
+| `0 12 * * *` | If no matches today: sends a daily WhatsApp activation nudge (Argentine Spanish, 60-message pool, Low/Medium/High spice, with AI disclaimer) |
+| `0 8 * * *` | Deadline check: applies missed-deadline penalties to overdue group matches |
+
+WhatsApp messages are sent via `workers/src/whatsapp.js`. Enabled/disabled per league via `config/whatsappPrefs`.
 
 ---
 
@@ -148,7 +158,7 @@ ELO is recalculated on every confirm/adjust via `calculateElo()` in `src/shared/
 npm install
 npm run dev          # player app on :5173 (DEV_ROOT = '_dev/' — isolated from prod data)
 npm run dev:admin    # admin app on :5174
-npm run test         # vitest unit tests (scoring, ELO, fixtures)
+npm run test         # vitest unit tests (scoring, ELO, fixtures, group points)
 npm run test:e2e     # Playwright E2E (requires Firebase emulator running on :9000)
 firebase emulators:start --only database --project atp-greenwich
 ```
@@ -161,10 +171,12 @@ The `DEV_ROOT = '_dev/'` prefix is applied to all Firebase RTDB paths in dev mod
 
 | File | Purpose |
 |---|---|
-| `src/shared/scoring.js` | ELO, standings table, group points, fixture generation (`generateFixtures` / `validateFixtures`) |
+| `src/shared/scoring.js` | ELO standings table, group points (`calculateGroupPoints`), fixture generation (`generateFixtures` / `validateFixtures`) |
 | `src/shared/activity.js` | `writeActivity(type, payload)` — single function all feed writes go through |
 | `src/shared/firebase.js` | Firebase init, all DB/storage helpers, `DEV_ROOT` prefix logic |
 | `src/shared/tz.js` | `fmtTime(ts)` — always formats in America/New_York (Eastern Time) |
 | `src/player/player-modal.js` | `showPlayerModal()` — unified player profile popup used everywhere |
-| `scripts/send-push.js` | Reference pattern for all server-side scripts (firebase-admin, CommonJS) |
+| `workers/src/daily-digest.js` | Morning schedule + evening standings + activation nudge logic |
+| `workers/src/activation-messages.js` | 60 no-match-day WhatsApp nudges (Argentine Spanish) |
+| `workers/src/encouraging-messages.js` | 30 match-day WhatsApp messages (Argentine Spanish) |
 | `e2e/helpers.js` | `seedData`, `clearData`, `freshStart`, `adminWrite`, `adminRead` — test utilities |

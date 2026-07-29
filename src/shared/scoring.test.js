@@ -6,6 +6,7 @@ import {
   getQualifiedPlayers,
   matchCountBetween,
   canPlayAgainst,
+  calculateGroupPoints,
   generateFixtures,
   validateFixtures,
 } from './scoring.js';
@@ -442,6 +443,94 @@ describe('validateFixtures', () => {
     const players = uids(20);
     const fixtures = generateFixtures(players, 5);
     expect(validateFixtures(fixtures, players, 5).ok).toBe(true);
+  });
+});
+
+// ─── calculateGroupPoints ─────────────────────────────────────────────────────
+
+describe('calculateGroupPoints', () => {
+  const cfg = { played: 1, wonBonus: 2, missed: -1, forfeitLoser: -1, forfeitWinner: 2 };
+
+  it('win: played + wonBonus', () => {
+    const matches = {
+      m1: { status: 'confirmed', playerA: A, playerB: B, result: { winner: A } },
+    };
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(3); // 1 + 2
+  });
+
+  it('loss: played only', () => {
+    const matches = {
+      m1: { status: 'confirmed', playerA: A, playerB: B, result: { winner: B } },
+    };
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(1);
+  });
+
+  it('forfeit loss: forfeitLoser points', () => {
+    const matches = {
+      m1: { playerA: A, playerB: B, forfeited: A },
+    };
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(-1);
+  });
+
+  it('forfeit win: forfeitWinner points', () => {
+    const matches = {
+      m1: { playerA: A, playerB: B, forfeited: B },
+    };
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(2);
+  });
+
+  it('deadline penalty: missed points', () => {
+    const matches = {
+      m1: { playerA: A, playerB: B, deadlinePenaltyApplied: true },
+    };
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(-1);
+  });
+
+  it('pending match: 0 points', () => {
+    const matches = {
+      m1: { status: 'result_pending', playerA: A, playerB: B, result: null },
+    };
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(0);
+  });
+
+  it('match not involving uid: ignored', () => {
+    const matches = {
+      m1: { status: 'confirmed', playerA: B, playerB: C, result: { winner: B } },
+    };
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(0);
+  });
+
+  it('multiple matches accumulate correctly', () => {
+    const matches = {
+      m1: { status: 'confirmed', playerA: A, playerB: B, result: { winner: A } }, // +3
+      m2: { status: 'confirmed', playerA: A, playerB: C, result: { winner: C } }, // +1
+      m3: { playerA: A, playerB: D, forfeited: A },                               // -1
+    };
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(3); // 3 + 1 - 1
+  });
+
+  it('uses default config when none supplied', () => {
+    const matches = {
+      m1: { status: 'confirmed', playerA: A, playerB: B, result: { winner: A } },
+    };
+    // defaults: played=1, wonBonus=2 → 3
+    expect(calculateGroupPoints(matches, A, null)).toBe(3);
+  });
+
+  it('empty match map: 0 points', () => {
+    expect(calculateGroupPoints({}, A, cfg)).toBe(0);
+  });
+
+  it('null match map: 0 points', () => {
+    expect(calculateGroupPoints(null, A, cfg)).toBe(0);
+  });
+
+  it('forfeit takes priority over deadlinePenaltyApplied', () => {
+    const matches = {
+      m1: { playerA: A, playerB: B, forfeited: A, deadlinePenaltyApplied: true },
+    };
+    // forfeit branch hits first (continue), so we get forfeitLoser, not missed
+    expect(calculateGroupPoints(matches, A, cfg)).toBe(-1);
   });
 });
 
