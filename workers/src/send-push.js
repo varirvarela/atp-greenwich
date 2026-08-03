@@ -159,6 +159,24 @@ export async function runSendPush(env) {
           }
           await db.set(`${base}/pushNotified/confirmed`, true);
         }
+
+        // Forfeit
+        if (match.forfeited && !notified.forfeited) {
+          const forfeitUid = match.forfeited;
+          const opUid = match.playerA === forfeitUid ? match.playerB : match.playerA;
+          const forfeitName = _name(players, forfeitUid);
+          const opName = _name(players, opUid);
+          if (_wantsPush(players, opUid, 'confirmed'))
+            await _sendPush(players, opUid, {
+              title: 'Opponent forfeited',
+              body:  `${forfeitName} forfeited your group match.`,
+              tag:   `forfeit-${mid}`,
+              url:   APP_URL,
+            });
+          if (_wantsWA(waPrefs, 'confirmed'))
+            await sendWA(`🏳️ *${forfeitName}* forfeited their group match vs *${opName}*.`, env);
+          await db.set(`${base}/pushNotified/forfeited`, true);
+        }
       }
     }
   }

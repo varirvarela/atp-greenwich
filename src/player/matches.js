@@ -1867,6 +1867,7 @@ function _showForfeitModal(match, myUid, allPlayers, sid, lid) {
       await dbMultiUpdate({
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/forfeited`]: myUid,
       });
+      writeActivity('match_forfeited', { sid, lid, mid: match.mid, forfeitedBy: myUid, opponentId: opUid });
       overlay.remove();
     } catch {
       btn.disabled = false;

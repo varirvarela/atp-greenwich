@@ -461,6 +461,17 @@ function _activityCard(item, allPlayers, myLeagues) {
       sub = item.what === 'alias' && item.newVal ? `→ "${escHtml(item.newVal)}"` : '';
       break;
     }
+    case 'match_forfeited': {
+      const league = myLeagues?.find(l => l.lid === item.lid);
+      icon = '🏳️';
+      avatarUid = item.forfeitedBy;
+      title = `${playerName(item.forfeitedBy)} forfeited a match`;
+      sub = [
+        item.opponentId ? `vs ${playerName(item.opponentId)}` : '',
+        league ? escHtml(league.name) : '',
+      ].filter(Boolean).join(' · ');
+      break;
+    }
     case 'match_rescheduled': {
       const league = myLeagues?.find(l => l.lid === item.lid);
       const other = item.changedBy === item.playerA ? item.playerB : item.playerA;

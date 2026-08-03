@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.13.2',
+    date:    '2026-08-03',
+    changes: [
+      'Forfeit events now appear in the activity feed.',
+    ],
+    adminChanges: [
+      'Forfeit events now trigger a WhatsApp message and a push notification to the opponent.',
+    ],
+  },
+  {
     version: '1.13.1',
     date:    '2026-08-02',
     adminChanges: [
