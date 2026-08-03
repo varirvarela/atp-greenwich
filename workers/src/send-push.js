@@ -7,6 +7,16 @@ import { waEnabled, sendWA, sendWAPhoto }   from './whatsapp.js';
 
 const APP_URL = 'https://varirvarela.github.io/atp-greenwich/';
 
+function _fmtMatchScore(result) {
+  if (!result) return '';
+  if (result.score) return `${result.score.a}–${result.score.b}`;
+  if (!result.sets?.length) return '';
+  return result.sets.map(s => {
+    const base = `${s.a}-${s.b}`;
+    return s.tb ? `${base}(${s.tb.a}-${s.tb.b})` : base;
+  }).join(' ');
+}
+
 export async function runSendPush(env) {
   const pushEnabled = !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY);
 
@@ -140,7 +150,8 @@ export async function runSendPush(env) {
             const deltas = match.eloDeltas || {};
             const dW     = deltas[winnerUid];
             const dL     = deltas[loserUid];
-            let caption  = `✅ *${wName}* def. *${lName}*`;
+            const scoreStr = _fmtMatchScore(match.result);
+            let caption  = `✅ *${wName}* def. *${lName}*${scoreStr ? ` ${scoreStr}` : ''}`;
             if (dW != null && dL != null) {
               caption += `\nELO: ${wName} ${dW > 0 ? '+' : ''}${Math.round(dW)} · ${lName} ${Math.round(dL)}`;
             }

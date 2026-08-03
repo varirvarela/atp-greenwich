@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.13.1',
+    date:    '2026-08-02',
+    adminChanges: [
+      'WhatsApp match confirmation message now includes the match score.',
+    ],
+  },
+  {
     version: '1.13.0',
     date:    '2026-07-26',
     changes: [
