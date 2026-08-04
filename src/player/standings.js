@@ -39,6 +39,7 @@ export function renderStandingsTab(el, player, creds) {
     const leaguesMap = allSeasons[sid]?.leagues || {};
     const leagueList = Object.entries(leaguesMap).map(([lid, l]) => ({
       lid, name: l.name || lid,
+      leagueMode:       l.leagueMode      || 'singles',
       groupStageConfig: l.groupStageConfig || {},
       pointsConfig:     l.pointsConfig     || {},
     }));
@@ -85,7 +86,7 @@ export function renderStandingsTab(el, player, creds) {
         }
         const mount = el.querySelector('#standings-mount');
         if (!mount) return;
-        _renderLeagueTable(mount, table, allPlayers, allMatches, creds.uid, ctx.name, ctx.groupStageConfig, ctx.pointsConfig);
+        _renderLeagueTable(mount, table, allPlayers, allMatches, creds.uid, ctx.name, ctx.groupStageConfig, ctx.pointsConfig, ctx.leagueMode);
         mount.querySelectorAll('[data-view-player]').forEach(row =>
           row.addEventListener('click', () =>
             showPlayerModal(row.dataset.viewPlayer, allPlayers, allMatches, creds.uid)
@@ -123,7 +124,7 @@ export function renderStandingsTab(el, player, creds) {
 
 // ─── League table ─────────────────────────────────────────────────────────────
 
-function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName, gs, pointsCfg) {
+function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName, gs, pointsCfg, leagueMode = 'singles') {
   if (!table || table.length === 0) {
     el.innerHTML = `
       <div style="text-align:center;padding:24px 0;">
@@ -162,7 +163,10 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
       const s         = row.standing;
       const gp        = row.groupPoints ?? null;
       const qualifies = gp !== null && gp >= qualifyPts;
-      const elo       = allPlayers[row.uid]?.eloRating;
+      const isDoublesMd = leagueMode !== 'singles';
+      const elo         = isDoublesMd
+        ? (allPlayers[row.uid]?.doublesEloRating || 1000)
+        : allPlayers[row.uid]?.eloRating;
       const wl        = `${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L`;
       const stats     = _computePlayerStats(allMatches, row.uid);
       return `
@@ -185,8 +189,9 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
             <span style="font-family:var(--font-mono);font-size:10px;color:var(--ace3);
               flex-shrink:0;" title="Missed + forfeited matches">${stats.missed + stats.forfeited}M</span>
           ` : ''}
-          ${elo ? `
-            <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;
+          ${(elo && (!isDoublesMd || elo !== 1000)) ? `
+            <span title="${isDoublesMd ? 'Doubles ELO' : 'ELO'}"
+              style="font-family:var(--font-mono);font-size:13px;font-weight:700;
               color:${isMe ? 'var(--ace)' : 'var(--text)'};flex-shrink:0;">${elo}</span>
           ` : `<div style="width:30px;flex-shrink:0;"></div>`}
           ${showGsPts ? `

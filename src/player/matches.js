@@ -6,7 +6,8 @@
 import { dbGet, dbRef, dbMultiUpdate, dbListen, dbPush, pRef, sRef, uploadMatchPhoto } from '@shared/firebase.js';
 import { escHtml } from '@shared/utils.js';
 import { fmtTime, tsToLocalInput, localInputToTs } from '@shared/tz.js';
-import { calculateElo } from '@shared/elo.js';
+import { calculateElo, calculateDoublesElo } from '@shared/elo.js';
+import { isValidSuperTb } from '@shared/scoring.js';
 import { avatarToSvg } from '@player/avatars.js';
 import { showPlayerModal } from '@player/player-modal.js';
 import { writeActivity } from '@shared/activity.js';
@@ -55,16 +56,18 @@ export function renderMatchesTab(el, player, creds) {
     if (!ctx) { _renderNoLeague(el); return; }
 
     const { sid, lid, leagueName } = ctx;
-    const [membersObj, allPlayers] = await Promise.all([
+    const [membersObj, allPlayers, leagueRaw] = await Promise.all([
       dbGet(sRef(sid, lid, 'members')),
       dbGet(pRef()),
+      dbGet(sRef(sid, lid)),
     ]);
     if (cancelled) return;
 
     const memberUids = Object.keys(membersObj || {});
+    const league     = leagueRaw || {};
 
     unsubscribe = dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
-      _renderMatchList(el, matchesObj || {}, creds.uid, allPlayers || {}, memberUids, sid, lid, leagueName);
+      _renderMatchList(el, matchesObj || {}, creds.uid, allPlayers || {}, memberUids, sid, lid, leagueName, league);
     });
   })().catch(() => _renderError(el));
 
@@ -124,7 +127,7 @@ function _compressPhoto(file, maxPx = 1280, quality = 0.82) {
 
 // ─── Match list render ────────────────────────────────────────────────────────
 
-function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName) {
+function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName, league = {}) {
   const matches = Object.entries(matchesObj).map(([mid, m]) => ({ mid, ...m }));
   const mine    = matches.filter(m => m.playerA === myUid || m.playerB === myUid);
 
@@ -224,14 +227,14 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
   el.querySelectorAll('[data-filter]').forEach(btn => {
     btn.addEventListener('click', () => {
       _matchFilter = btn.dataset.filter;
-      _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName);
+      _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName, league);
     });
   });
 
   // Search input
   el.querySelector('#opponent-search')?.addEventListener('input', e => {
     _matchSearch = e.target.value;
-    _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName);
+    _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName, league);
   });
 
   // Action buttons (mine + open challenges)
@@ -240,10 +243,10 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
       const { action, mid } = btn.dataset;
       const match = matches.find(m => m.mid === mid);
       if (!match) return;
-      if (action === 'enter-result')      _showEnterResultModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'enter-result')      _showEnterResultModal(match, myUid, allPlayers, sid, lid, league);
       if (action === 'confirm-result')    _showConfirmResultModal(match, myUid, allPlayers, sid, lid);
       if (action === 'upload-photo')      _showUploadPhotoModal(match, myUid, allPlayers, sid, lid);
-      if (action === 'adjust-result')     _showAdjustResultModal(match, myUid, allPlayers, sid, lid);
+      if (action === 'adjust-result')     _showAdjustResultModal(match, myUid, allPlayers, sid, lid, league);
       if (action === 'forfeit')           _showForfeitModal(match, myUid, allPlayers, sid, lid);
       if (action === 'accept-challenge')  _showAcceptChallengeModal(match, myUid, allPlayers, matchesObj, sid, lid);
       if (action === 'cancel-challenge')  _showCancelProposalModal(match, myUid, sid, lid);
@@ -274,7 +277,7 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
   });
 
   el.querySelector('#btn-propose')?.addEventListener('click', () => {
-    _showProposeModal(myUid, allPlayers, memberUids, matchesObj, sid, lid);
+    _showProposeModal(myUid, allPlayers, memberUids, matchesObj, sid, lid, league);
   });
 }
 
@@ -356,13 +359,28 @@ function _matchCard(match, myUid, allPlayers) {
 
   const hasAnyAction = action || canForfeit || mgmtBtns;
 
+  // Doubles partner info
+  const isDoubles = !!(match.partnerA || match.teamAId);
+  const myPartnerUid = isDoubles
+    ? (isMeA ? match.partnerA : match.partnerB) || null
+    : null;
+  const opPartnerUid = isDoubles
+    ? (isMeA ? match.partnerB : match.partnerA) || null
+    : null;
+  const myPartner = myPartnerUid ? (allPlayers[myPartnerUid] || { alias: myPartnerUid }) : null;
+  const opPartner = opPartnerUid ? (allPlayers[opPartnerUid] || { alias: opPartnerUid }) : null;
+
   const opDisplay = opUid
     ? `<span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
         text-overflow:ellipsis;text-align:right;cursor:pointer;"
         data-view-player="${escHtml(opUid)}">
-        ${escHtml(op.alias || op.name)}
+        ${opPartner ? escHtml((opPartner.alias || opPartner.name) + ' &amp; ' + (op.alias || op.name)) : escHtml(op.alias || op.name)}
       </span>`
     : `<span class="t-small t-muted" style="font-style:italic;">Any challenger</span>`;
+
+  const meLabel = myPartner
+    ? `You &amp; ${escHtml(myPartner.alias || myPartner.name || myPartnerUid)}`
+    : 'You';
 
   return `
     <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;
@@ -372,7 +390,7 @@ function _matchCard(match, myUid, allPlayers) {
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
           <span data-view-player="${escHtml(myUid)}" style="cursor:pointer;flex-shrink:0;display:inline-flex;">${meAv}</span>
           <span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
-            text-overflow:ellipsis;cursor:pointer;" data-view-player="${escHtml(myUid)}">You</span>
+            text-overflow:ellipsis;cursor:pointer;" data-view-player="${escHtml(myUid)}">${meLabel}</span>
         </div>
         <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);
           flex-shrink:0;text-align:center;min-width:48px;">
@@ -535,7 +553,11 @@ function _formatScore(result, isMeA) {
 
 // ─── Propose match modal ──────────────────────────────────────────────────────
 
-function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, lid) {
+function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, lid, league = {}) {
+  const leagueMode = league.leagueMode || 'singles';
+  const isPickup   = leagueMode === 'doubles_pickup';
+  const isTeam     = leagueMode === 'doubles_team';
+
   const opponents = memberUids
     .filter(uid => uid !== myUid)
     .map(uid => allPlayers[uid] ? { ...allPlayers[uid], uid } : null)
@@ -543,9 +565,142 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
 
   const minDate = tsToLocalInput(Date.now() + 60000);
 
+  // Helper: render a member tap-card (used for opponent/partner selection)
+  function _memberCard(p, dataAttr) {
+    return `
+      <div class="tap-card" ${dataAttr}="${escHtml(p.uid)}">
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${p.avatarId ? avatarToSvg(p.avatarId, 36) : _defaultAv(36)}
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;
+              text-overflow:ellipsis;">${escHtml(p.name || p.alias)}</div>
+            <div class="t-small t-muted">@${escHtml(p.alias || p.username || '')}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Helper: render a team tap-card (doubles_team mode)
+  function _teamCard(teamId, team) {
+    const pA = allPlayers[team.playerA] || {};
+    const pB = allPlayers[team.playerB] || {};
+    return `
+      <div class="tap-card" data-team-id="${escHtml(teamId)}">
+        <div style="font-weight:700;font-size:14px;margin-bottom:2px;">${escHtml(team.name || teamId)}</div>
+        <div class="t-small t-muted">
+          ${escHtml(pA.alias || pA.name || team.playerA)} &amp;
+          ${escHtml(pB.alias || pB.name || team.playerB)}
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Direct section HTML ──────────────────────────────────────────────────────
+  let directSectionHtml = '';
+  if (isTeam) {
+    const teams   = league.teams || {};
+    const teamArr = Object.entries(teams);
+    // Find which teams include myUid
+    const myTeams  = teamArr.filter(([, t]) => t.playerA === myUid || t.playerB === myUid);
+    const oppTeams = teamArr.filter(([, t]) => t.playerA !== myUid && t.playerB !== myUid);
+
+    directSectionHtml = myTeams.length === 0 ? `
+      <p class="t-small t-muted" style="text-align:center;padding:24px 0;">
+        You are not assigned to any team yet. Ask your admin to create a team for you.
+      </p>
+    ` : `
+      <p class="t-small t-muted" style="margin-bottom:8px;">Your team:</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        ${myTeams.map(([teamId, team]) => _teamCard(teamId, team).replace('data-team-id=', 'data-my-team-id=')).join('')}
+      </div>
+      ${oppTeams.length === 0 ? `
+        <p class="t-small t-muted" style="text-align:center;padding:8px 0;">
+          No opposing teams available.
+        </p>
+      ` : `
+        <p class="t-small t-muted" style="margin-bottom:8px;">Opposing team:</p>
+        <div id="opp-teams-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+          ${oppTeams.map(([teamId, team]) => _teamCard(teamId, team)).join('')}
+        </div>
+      `}
+      <div style="margin-bottom:20px;">
+        <div class="t-label t-muted" style="margin-bottom:8px;">
+          Suggested date &amp; time <span style="font-weight:400;opacity:.6;">(optional)</span>
+        </div>
+        <input class="input" id="propose-date-direct" type="datetime-local"
+          style="font-size:14px;" min="${minDate}">
+      </div>
+      <button class="btn btn-primary" id="btn-confirm-direct" disabled>
+        Propose Match
+      </button>
+    `;
+  } else {
+    directSectionHtml = opponents.length === 0 ? `
+      <p class="t-small t-muted" style="text-align:center;padding:24px 0;">
+        No other players in your league yet.
+      </p>
+    ` : `
+      <p class="t-small t-muted" style="margin-bottom:12px;">Select your opponent:</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        ${opponents.map(op => {
+          const matchCount = Object.values(existingMatches || {}).filter(m => {
+            const involves = (m.playerA === myUid && m.playerB === op.uid)
+                          || (m.playerA === op.uid && m.playerB === myUid);
+            return involves && ['scheduled','result_pending','photo_pending','confirmed']
+              .includes(m.status);
+          }).length;
+          const atCap = matchCount >= 2;
+          return `
+            <div class="tap-card" data-uid="${escHtml(op.uid)}"
+              style="${atCap ? 'opacity:.4;pointer-events:none;' : ''}">
+              <div style="display:flex;align-items:center;gap:10px;">
+                ${op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36)}
+                <div style="flex:1;min-width:0;">
+                  <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;
+                    text-overflow:ellipsis;">${escHtml(op.name || op.alias)}</div>
+                  <div class="t-small t-muted">@${escHtml(op.alias || op.username || '')}</div>
+                </div>
+                ${atCap
+                  ? `<span class="badge badge-muted" style="flex-shrink:0;">2/2</span>`
+                  : matchCount === 1
+                    ? `<span class="badge badge-muted" style="flex-shrink:0;">1/2</span>`
+                    : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      ${isPickup ? `
+        <div id="pickup-partner-a" style="margin-bottom:12px;">
+          <p class="t-small t-muted" style="margin-bottom:8px;">Your partner <span style="opacity:.6;">(optional)</span>:</p>
+          <div id="partner-a-list" style="display:flex;flex-direction:column;gap:8px;">
+            ${opponents.map(p => _memberCard(p, 'data-partner-a')).join('')}
+          </div>
+        </div>
+        <div id="pickup-partner-b" style="margin-bottom:16px;display:none;">
+          <p class="t-small t-muted" style="margin-bottom:8px;">Opponent's partner <span style="opacity:.6;">(optional)</span>:</p>
+          <div id="partner-b-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+        </div>
+      ` : ''}
+
+      <div style="margin-bottom:20px;">
+        <div class="t-label t-muted" style="margin-bottom:8px;">
+          Suggested date &amp; time <span style="font-weight:400;opacity:.6;">(optional)</span>
+        </div>
+        <input class="input" id="propose-date-direct" type="datetime-local"
+          style="font-size:14px;" min="${minDate}">
+      </div>
+      <button class="btn btn-primary" id="btn-confirm-direct" disabled>
+        Propose Match
+      </button>
+    `;
+  }
+
   const overlay = _createOverlay();
   overlay.innerHTML = `
-    <div class="modal-sheet">
+    <div class="modal-sheet" style="max-height:92dvh;overflow-y:auto;">
       <div class="modal-handle"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
         <div style="font-size:16px;font-weight:700;">Propose a Match</div>
@@ -569,52 +724,7 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
       </div>
 
       <div id="section-direct">
-        ${opponents.length === 0 ? `
-          <p class="t-small t-muted" style="text-align:center;padding:24px 0;">
-            No other players in your league yet.
-          </p>
-        ` : `
-          <p class="t-small t-muted" style="margin-bottom:12px;">Select your opponent:</p>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
-            ${opponents.map(op => {
-              const matchCount = Object.values(existingMatches || {}).filter(m => {
-                const involves = (m.playerA === myUid && m.playerB === op.uid)
-                              || (m.playerA === op.uid && m.playerB === myUid);
-                return involves && ['scheduled','result_pending','photo_pending','confirmed']
-                  .includes(m.status);
-              }).length;
-              const atCap = matchCount >= 2;
-              return `
-                <div class="tap-card" data-uid="${escHtml(op.uid)}"
-                  style="${atCap ? 'opacity:.4;pointer-events:none;' : ''}">
-                  <div style="display:flex;align-items:center;gap:10px;">
-                    ${op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36)}
-                    <div style="flex:1;min-width:0;">
-                      <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;
-                        text-overflow:ellipsis;">${escHtml(op.name || op.alias)}</div>
-                      <div class="t-small t-muted">@${escHtml(op.alias || op.username || '')}</div>
-                    </div>
-                    ${atCap
-                      ? `<span class="badge badge-muted" style="flex-shrink:0;">2/2</span>`
-                      : matchCount === 1
-                        ? `<span class="badge badge-muted" style="flex-shrink:0;">1/2</span>`
-                        : ''}
-                  </div>
-                </div>
-              `;
-            }).join('')}
-          </div>
-          <div style="margin-bottom:20px;">
-            <div class="t-label t-muted" style="margin-bottom:8px;">
-              Suggested date &amp; time <span style="font-weight:400;opacity:.6;">(optional)</span>
-            </div>
-            <input class="input" id="propose-date-direct" type="datetime-local"
-              style="font-size:14px;" min="${minDate}">
-          </div>
-          <button class="btn btn-primary" id="btn-confirm-direct" disabled>
-            Propose Match
-          </button>
-        `}
+        ${directSectionHtml}
       </div>
 
       <div id="section-open" style="display:none;">
@@ -662,32 +772,191 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
   modeDirect.addEventListener('click', () => setMode('direct'));
   modeOpen.addEventListener('click',   () => setMode('open'));
 
-  // Opponent selection
-  let selectedUid = null;
-  overlay.querySelectorAll('.tap-card[data-uid]').forEach(card => {
-    card.addEventListener('click', () => {
-      selectedUid = card.dataset.uid;
-      overlay.querySelectorAll('.tap-card[data-uid]').forEach(c => c.classList.remove('selected'));
-      card.classList.add('selected');
-      const btn = overlay.querySelector('#btn-confirm-direct');
-      if (btn) btn.disabled = false;
+  // ── Selection state ──────────────────────────────────────────────────────────
+  let selectedUid    = null; // singles/pickup: opponent uid
+  let partnerAUid    = null; // pickup: my partner
+  let partnerBUid    = null; // pickup: opponent's partner
+  let selectedTeamAId = null; // team mode: my team id
+  let selectedTeamBId = null; // team mode: opposing team id
+
+  const confirmBtn = overlay.querySelector('#btn-confirm-direct');
+
+  function _updateConfirmBtn() {
+    if (!confirmBtn) return;
+    if (isTeam) {
+      confirmBtn.disabled = !(selectedTeamAId && selectedTeamBId);
+    } else {
+      confirmBtn.disabled = !selectedUid;
+    }
+  }
+
+  if (isTeam) {
+    // My-team cards (data-my-team-id) — pre-select if only one team
+    overlay.querySelectorAll('[data-my-team-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        selectedTeamAId = card.dataset.myTeamId;
+        overlay.querySelectorAll('[data-my-team-id]').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        _updateConfirmBtn();
+      });
+      // Auto-select if only one option
+      const myTeamIds = [...overlay.querySelectorAll('[data-my-team-id]')];
+      if (myTeamIds.length === 1) {
+        card.classList.add('selected');
+        selectedTeamAId = card.dataset.myTeamId;
+        _updateConfirmBtn();
+      }
     });
-  });
+
+    // Opposing team cards (data-team-id inside #opp-teams-list)
+    overlay.querySelectorAll('#opp-teams-list .tap-card[data-team-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        selectedTeamBId = card.dataset.teamId;
+        overlay.querySelectorAll('#opp-teams-list .tap-card[data-team-id]').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        _updateConfirmBtn();
+      });
+    });
+  } else {
+    // Opponent selection (singles / pickup)
+    overlay.querySelectorAll('.tap-card[data-uid]').forEach(card => {
+      card.addEventListener('click', () => {
+        const clickedUid = card.dataset.uid;
+        // Only process if it's an opponent card (not partner)
+        if (card.closest('#partner-a-list') || card.closest('#partner-b-list')) return;
+        selectedUid = clickedUid;
+        partnerAUid = null;
+        partnerBUid = null;
+        overlay.querySelectorAll('.tap-card[data-uid]').forEach(c => {
+          if (!c.closest('#partner-a-list') && !c.closest('#partner-b-list')) {
+            c.classList.remove('selected');
+          }
+        });
+        card.classList.add('selected');
+        _updateConfirmBtn();
+
+        if (isPickup) {
+          // Refresh partner sections now that opponent is selected
+          _rebuildPartnerLists();
+        }
+      });
+    });
+
+    if (isPickup) {
+      // Partner A selection
+      overlay.addEventListener('click', e => {
+        const card = e.target.closest('[data-partner-a]');
+        if (!card) return;
+        const uid = card.dataset.partnerA;
+        if (partnerAUid === uid) {
+          // deselect
+          partnerAUid = null;
+          card.classList.remove('selected');
+        } else {
+          partnerAUid = uid;
+          overlay.querySelectorAll('[data-partner-a]').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+        }
+        _rebuildPartnerBList();
+      });
+
+      // Partner B selection
+      overlay.addEventListener('click', e => {
+        const card = e.target.closest('[data-partner-b]');
+        if (!card) return;
+        const uid = card.dataset.partnerB;
+        if (partnerBUid === uid) {
+          partnerBUid = null;
+          card.classList.remove('selected');
+        } else {
+          partnerBUid = uid;
+          overlay.querySelectorAll('[data-partner-b]').forEach(c => c.classList.remove('selected'));
+          card.classList.add('selected');
+        }
+      });
+    }
+  }
+
+  function _rebuildPartnerLists() {
+    if (!isPickup) return;
+    const partnerASection = overlay.querySelector('#pickup-partner-a');
+    const partnerBSection = overlay.querySelector('#pickup-partner-b');
+    if (!partnerASection) return;
+    // Re-render partner A list: all members except self and selected opponent
+    const paList = overlay.querySelector('#partner-a-list');
+    if (paList) {
+      paList.innerHTML = opponents
+        .filter(p => p.uid !== selectedUid)
+        .map(p => _memberCard(p, 'data-partner-a'))
+        .join('');
+    }
+    // Re-show partner B section once opponent is selected
+    if (partnerBSection && selectedUid) {
+      partnerBSection.style.display = '';
+    }
+    _rebuildPartnerBList();
+  }
+
+  function _rebuildPartnerBList() {
+    if (!isPickup) return;
+    const pbList = overlay.querySelector('#partner-b-list');
+    if (!pbList) return;
+    pbList.innerHTML = opponents
+      .filter(p => p.uid !== selectedUid && p.uid !== partnerAUid)
+      .map(p => _memberCard(p, 'data-partner-b'))
+      .join('');
+    // Re-apply selection if still valid
+    if (partnerBUid) {
+      const card = pbList.querySelector(`[data-partner-b="${CSS.escape(partnerBUid)}"]`);
+      if (card) card.classList.add('selected');
+      else partnerBUid = null;
+    }
+  }
 
   // Direct confirm
   overlay.querySelector('#btn-confirm-direct')?.addEventListener('click', async () => {
-    if (!selectedUid) return;
     const btn = overlay.querySelector('#btn-confirm-direct');
     btn.disabled = true; btn.textContent = 'Proposing…';
     try {
       const val = overlay.querySelector('#propose-date-direct')?.value;
       const scheduledAt = localInputToTs(val);
-      const _newMatchRef = await dbPush(sRef(sid, lid, 'matches'), {
-        playerA: myUid, playerB: selectedUid, proposedBy: myUid,
-        proposedAt: Date.now(), scheduledAt, status: 'scheduled',
-        result: null, photoUrl: null, eloDeltas: null, confirmedAt: null,
+
+      let matchData;
+      if (isTeam) {
+        const teams = league.teams || {};
+        const teamA = teams[selectedTeamAId] || {};
+        const teamB = teams[selectedTeamBId] || {};
+        matchData = {
+          playerA: teamA.playerA, playerB: teamB.playerA,
+          partnerA: teamA.playerB || null, partnerB: teamB.playerB || null,
+          teamAId: selectedTeamAId, teamBId: selectedTeamBId,
+          proposedBy: myUid, proposedAt: Date.now(), scheduledAt,
+          status: 'scheduled', result: null, photoUrl: null,
+          eloDeltas: null, confirmedAt: null,
+        };
+      } else if (isPickup) {
+        matchData = {
+          playerA: myUid, playerB: selectedUid,
+          partnerA: partnerAUid || null, partnerB: partnerBUid || null,
+          proposedBy: myUid, proposedAt: Date.now(), scheduledAt,
+          status: 'scheduled', result: null, photoUrl: null,
+          eloDeltas: null, confirmedAt: null,
+        };
+      } else {
+        matchData = {
+          playerA: myUid, playerB: selectedUid, proposedBy: myUid,
+          proposedAt: Date.now(), scheduledAt, status: 'scheduled',
+          result: null, photoUrl: null, eloDeltas: null, confirmedAt: null,
+        };
+      }
+
+      const _newMatchRef = await dbPush(sRef(sid, lid, 'matches'), matchData);
+      writeActivity('match_proposed', {
+        sid, lid, mid: _newMatchRef.key,
+        challengerId: myUid,
+        opponentId: matchData.playerB || null,
+        scheduledAt,
       });
-      writeActivity('match_proposed', { sid, lid, mid: _newMatchRef.key, challengerId: myUid, opponentId: selectedUid || null, scheduledAt });
       overlay.remove();
     } catch (err) {
       console.error('Propose error:', err);
@@ -718,25 +987,32 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
 
 // ─── Enter result modal ───────────────────────────────────────────────────────
 
-function _showEnterResultModal(match, myUid, allPlayers, sid, lid) {
-  _showResultEntryModal(match, myUid, allPlayers, sid, lid, false);
+function _showEnterResultModal(match, myUid, allPlayers, sid, lid, league = {}) {
+  _showResultEntryModal(match, myUid, allPlayers, sid, lid, false, league);
 }
 
-function _showAdjustResultModal(match, myUid, allPlayers, sid, lid) {
-  _showResultEntryModal(match, myUid, allPlayers, sid, lid, true);
+function _showAdjustResultModal(match, myUid, allPlayers, sid, lid, league = {}) {
+  _showResultEntryModal(match, myUid, allPlayers, sid, lid, true, league);
 }
 
-function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
-  let isPro10 = match.format === 'pro10';
+function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust, league = {}) {
+  const isPadel = (league.sport === 'padel');
+  let isPro10   = !isPadel && (match.format === 'pro10');
+  let isSupertb = isPadel ? (match.format === 'supertb' || !match.format) : (match.format === 'supertb');
+  // In padel leagues, default to supertb; if format already set respect it
+  if (isPadel && match.format === 'bo3') isSupertb = false;
+  if (isPadel && !match.format) isSupertb = true;
+
   const opUid  = match.playerA === myUid ? match.playerB : match.playerA;
   const op     = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
   const opName = op.alias || op.name;
   const isMeA  = match.playerA === myUid;
   const prev   = isAdjust ? match.result : null;
 
-  // When adjusting and format was already set, restore pro10 choice from prev score shape
+  // When adjusting and format was already set, restore choice from prev score shape
   if (isAdjust && !match.format) {
-    isPro10 = !!(prev?.score);
+    isPro10   = !isPadel && !!(prev?.score);
+    isSupertb = isPadel && !isPro10;
   }
 
   const overlay = _createOverlay();
@@ -760,16 +1036,24 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         <div style="margin-bottom:16px;">
           <div class="t-label t-muted" style="margin-bottom:8px;">Match format</div>
           <div style="display:flex;gap:8px;">
-            <div class="tap-card ${!isPro10 ? 'selected' : ''}" data-format="bo3"
+            <div class="tap-card ${!isPro10 && !isSupertb ? 'selected' : ''}" data-format="bo3"
               style="flex:1;text-align:center;padding:10px 8px;">
               <div style="font-weight:700;font-size:13px;">Best of 3</div>
               <div class="t-small t-muted">Sets</div>
             </div>
-            <div class="tap-card ${isPro10 ? 'selected' : ''}" data-format="pro10"
-              style="flex:1;text-align:center;padding:10px 8px;">
-              <div style="font-weight:700;font-size:13px;">Pro 10</div>
-              <div class="t-small t-muted">0–10 games</div>
-            </div>
+            ${isPadel ? `
+              <div class="tap-card ${isSupertb ? 'selected' : ''}" data-format="supertb"
+                style="flex:1;text-align:center;padding:10px 8px;">
+                <div style="font-weight:700;font-size:13px;">Super Tie</div>
+                <div class="t-small t-muted">Bo3 + 10-pt TB</div>
+              </div>
+            ` : `
+              <div class="tap-card ${isPro10 ? 'selected' : ''}" data-format="pro10"
+                style="flex:1;text-align:center;padding:10px 8px;">
+                <div style="font-weight:700;font-size:13px;">Pro 10</div>
+                <div class="t-small t-muted">0–10 games</div>
+              </div>
+            `}
           </div>
         </div>
       ` : ''}
@@ -810,12 +1094,38 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
           <div id="sets-container" style="display:flex;flex-direction:column;">
             ${_setRowWithPrefill(1, false, prev, isMeA)}
             ${_setRowWithPrefill(2, false, prev, isMeA)}
-            ${prev?.sets?.length >= 3 ? _setRowWithPrefill(3, true, prev, isMeA) : ''}
+            ${(!isSupertb && prev?.sets?.length >= 3) ? _setRowWithPrefill(3, true, prev, isMeA) : ''}
           </div>
           <button class="btn btn-ghost btn-sm" id="btn-add-set"
-            style="margin-top:8px;width:auto;${prev?.sets?.length >= 3 ? 'display:none;' : ''}">
+            style="margin-top:8px;width:auto;${(isSupertb || prev?.sets?.length >= 3) ? 'display:none;' : ''}">
             + Add 3rd set
           </button>
+        </div>
+      </div>
+
+      <!-- Super tiebreak section (supertb format only) -->
+      <div id="section-supertb" style="display:${isSupertb ? '' : 'none'};margin-bottom:16px;">
+        <div class="t-label t-muted" style="margin-bottom:8px;">Super Tiebreak (first to 10, win by 2)</div>
+        <div style="display:flex;align-items:flex-end;gap:12px;justify-content:center;">
+          <div style="text-align:center;">
+            <div class="t-small t-muted" style="margin-bottom:6px;">You</div>
+            <input type="number" class="input" id="supertb-me"
+              min="0" inputmode="numeric" placeholder="–"
+              value="${prev?.superTb ? (isMeA ? prev.superTb.a : prev.superTb.b) : ''}"
+              style="width:76px;text-align:center;height:56px;font-size:24px;padding:8px 4px;">
+          </div>
+          <span style="font-size:24px;color:var(--text3);padding-bottom:10px;">–</span>
+          <div style="text-align:center;">
+            <div class="t-small t-muted" style="margin-bottom:6px;">${escHtml(opName)}</div>
+            <input type="number" class="input" id="supertb-op"
+              min="0" inputmode="numeric" placeholder="–"
+              value="${prev?.superTb ? (isMeA ? prev.superTb.b : prev.superTb.a) : ''}"
+              style="width:76px;text-align:center;height:56px;font-size:24px;padding:8px 4px;">
+          </div>
+        </div>
+        <div id="hint-supertb" style="display:none;font-size:11px;color:var(--ace3);
+          text-align:center;margin-top:6px;">
+          Invalid · first to 10, win by 2 (e.g. 10-7, 11-9)
         </div>
       </div>
 
@@ -911,7 +1221,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
       overlay.dataset.incompleteWinner = '';
       overlay.querySelectorAll('[data-incomplete-winner]').forEach(c => c.classList.remove('selected'));
     }
-    _checkResultReady(overlay, isPro10, isAdjust);
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb);
   });
 
   overlay.querySelectorAll('[data-incomplete-winner]').forEach(card => {
@@ -920,7 +1230,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
       overlay.dataset.incompleteWinner = incompleteWinner;
       overlay.querySelectorAll('[data-incomplete-winner]').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
-      _checkResultReady(overlay, isPro10, isAdjust);
+      _checkResultReady(overlay, isPro10, isAdjust, isSupertb);
     });
   });
 
@@ -932,28 +1242,37 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     overlay.querySelectorAll('[data-format]').forEach(card => {
       card.addEventListener('click', () => {
         const fmt = card.dataset.format;
-        isPro10 = fmt === 'pro10';
+        isPro10   = fmt === 'pro10';
+        isSupertb = fmt === 'supertb';
         overlay.querySelectorAll('[data-format]').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
-        overlay.querySelector('#section-pro10').style.display = isPro10 ? '' : 'none';
-        overlay.querySelector('#section-bo3').style.display   = !isPro10 ? '' : 'none';
-        _checkResultReady(overlay, isPro10, isAdjust);
+        overlay.querySelector('#section-pro10').style.display  = isPro10 ? '' : 'none';
+        overlay.querySelector('#section-bo3').style.display    = !isPro10 ? '' : 'none';
+        const stbSec = overlay.querySelector('#section-supertb');
+        if (stbSec) stbSec.style.display = isSupertb ? '' : 'none';
+        const addSetBtn = overlay.querySelector('#btn-add-set');
+        if (addSetBtn) addSetBtn.style.display = isSupertb ? 'none' : '';
+        _checkResultReady(overlay, isPro10, isAdjust, isSupertb);
       });
     });
   }
 
   overlay.addEventListener('third-set-removed', () => {
     thirdSetAdded = false;
-    _checkResultReady(overlay, isPro10, isAdjust);
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb);
   });
 
-  // Wire all score inputs — use current isPro10 from closure at call time
+  // Wire all score inputs — use current isPro10/isSupertb from closure at call time
   overlay.querySelector('#score-me')?.addEventListener('input', () =>
-    _checkResultReady(overlay, isPro10, isAdjust));
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb));
   overlay.querySelector('#score-op')?.addEventListener('input', () =>
-    _checkResultReady(overlay, isPro10, isAdjust));
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb));
   overlay.querySelector('#sets-container')?.addEventListener('input', () =>
-    _checkResultReady(overlay, isPro10, isAdjust));
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb));
+  overlay.querySelector('#supertb-me')?.addEventListener('input', () =>
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb));
+  overlay.querySelector('#supertb-op')?.addEventListener('input', () =>
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb));
 
   overlay.querySelector('#btn-add-set')?.addEventListener('click', () => {
     if (thirdSetAdded) return;
@@ -961,11 +1280,27 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     overlay.querySelector('#sets-container').insertAdjacentHTML('beforeend', _setRow(3, true));
     overlay.querySelector('#btn-add-set').style.display = 'none';
     _wireSetRowEvents(overlay, 3);
-    _checkResultReady(overlay, isPro10, isAdjust);
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb);
   });
 
   [1, 2].forEach(n => _wireSetRowEvents(overlay, n));
   if (thirdSetAdded) _wireSetRowEvents(overlay, 3);
+
+  // Wire supertb hint
+  function _updateSupertbHint() {
+    const hintEl = overlay.querySelector('#hint-supertb');
+    if (!hintEl) return;
+    const meVal = overlay.querySelector('#supertb-me')?.value ?? '';
+    const opVal = overlay.querySelector('#supertb-op')?.value ?? '';
+    if (meVal !== '' && opVal !== '') {
+      const a = parseInt(meVal, 10), b = parseInt(opVal, 10);
+      hintEl.style.display = isValidSuperTb(a, b) ? 'none' : '';
+    } else {
+      hintEl.style.display = 'none';
+    }
+  }
+  overlay.querySelector('#supertb-me')?.addEventListener('input', _updateSupertbHint);
+  overlay.querySelector('#supertb-op')?.addEventListener('input', _updateSupertbHint);
 
   // Photo — shared handler for both camera and gallery inputs
   function _onPhotoChosen(file) {
@@ -974,7 +1309,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     overlay.dataset.hasPhoto = '1';
     overlay.querySelector('#photo-img').src = URL.createObjectURL(file);
     overlay.querySelector('#photo-preview').style.display = 'block';
-    _checkResultReady(overlay, isPro10, isAdjust);
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb);
   }
   overlay.querySelector('#photo-camera').addEventListener('change', e => _onPhotoChosen(e.target.files?.[0]));
   overlay.querySelector('#photo-gallery').addEventListener('change', e => _onPhotoChosen(e.target.files?.[0]));
@@ -985,15 +1320,15 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
     overlay.querySelector('#photo-camera').value = '';
     overlay.querySelector('#photo-gallery').value = '';
     overlay.querySelector('#photo-preview').style.display = 'none';
-    _checkResultReady(overlay, isPro10, isAdjust);
+    _checkResultReady(overlay, isPro10, isAdjust, isSupertb);
   });
 
-  _checkResultReady(overlay, isPro10, isAdjust);
+  _checkResultReady(overlay, isPro10, isAdjust, isSupertb);
 
   // Submit
   overlay.querySelector('#btn-submit-result').addEventListener('click', async () => {
     const incompleteWinner = overlay.dataset.incompleteWinner;
-    const derivedWinner = incompleteWinner || _deriveWinner(overlay, isPro10);
+    const derivedWinner = incompleteWinner || _deriveWinner(overlay, isPro10, isSupertb);
     if (!derivedWinner) return;
     if (!isAdjust && !selectedFile && !incompleteWinner) return;
 
@@ -1015,22 +1350,39 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         enteredBy: myUid, enteredAt: Date.now(),
       };
     } else {
-      const setCount = thirdSetAdded ? 3 : 2;
+      const setCount = isSupertb ? 2 : (thirdSetAdded ? 3 : 2);
       const sets = incompleteWinner ? (_collectSets(overlay, setCount) || []) : _collectSets(overlay, setCount);
       if (!incompleteWinner && !sets) {
         btn.disabled = false;
         overlay.querySelector('#submit-status').style.display = 'none';
         return;
       }
+      const mappedSets = (sets || []).map(s => {
+        const base = isMeA ? { a: s.me, b: s.op } : { a: s.op, b: s.me };
+        if (s.tbMe !== null && s.tbOp !== null) {
+          base.tb = isMeA ? { a: s.tbMe, b: s.tbOp } : { a: s.tbOp, b: s.tbMe };
+        }
+        return base;
+      });
+
+      // Super tiebreak data (only when isSupertb and sets are 1-1)
+      let superTb = null;
+      if (isSupertb) {
+        const stbMeVal = overlay.querySelector('#supertb-me')?.value ?? '';
+        const stbOpVal = overlay.querySelector('#supertb-op')?.value ?? '';
+        if (stbMeVal !== '' && stbOpVal !== '') {
+          const stbMe = parseInt(stbMeVal, 10);
+          const stbOp = parseInt(stbOpVal, 10);
+          if (isValidSuperTb(stbMe, stbOp)) {
+            superTb = isMeA ? { a: stbMe, b: stbOp } : { a: stbOp, b: stbMe };
+          }
+        }
+      }
+
       resultData = {
         winner: winnerUid, loser: loserUid,
-        sets: (sets || []).map(s => {
-          const base = isMeA ? { a: s.me, b: s.op } : { a: s.op, b: s.me };
-          if (s.tbMe !== null && s.tbOp !== null) {
-            base.tb = isMeA ? { a: s.tbMe, b: s.tbOp } : { a: s.tbOp, b: s.tbMe };
-          }
-          return base;
-        }),
+        sets: mappedSets,
+        ...(superTb ? { superTb } : {}),
         enteredBy: myUid, enteredAt: Date.now(),
         ...(incompleteWinner ? { incomplete: true } : {}),
       };
@@ -1060,7 +1412,7 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust) {
         }
       }
       const prevEloDeltas = isAdjust ? (match.eloDeltas || null) : null;
-      const resultFormat  = isPro10 ? 'pro10' : 'bo3';
+      const resultFormat  = isPro10 ? 'pro10' : isSupertb ? 'supertb' : 'bo3';
       try {
         await _finalizeResult(match, resultData, photoUrl, resultFormat, sid, lid, allPlayers, prevEloDeltas);
       } catch (dbErr) {
@@ -1313,7 +1665,7 @@ function _setRow(num, removable = false, prefill = null) {
   `;
 }
 
-function _deriveWinner(overlay, isPro10) {
+function _deriveWinner(overlay, isPro10, isSupertb = false) {
   if (isPro10) {
     const c  = overlay.querySelector('#section-pro10') || overlay;
     const me = parseInt(c.querySelector('#score-me')?.value ?? '', 10);
@@ -1332,7 +1684,6 @@ function _deriveWinner(overlay, isPro10) {
     const isManual = row.dataset.manualTb === '1';
     if (isNaN(me) || isNaN(op) || me < 0 || op < 0) return null;
     if (isManual) {
-      // Winner is decided by tiebreak score
       const tbRow = row.querySelector('[data-tb-row]');
       if (!tbRow || tbRow.style.display === 'none') return null;
       const tbMe = parseInt(tbRow.querySelector('[data-tb="me"]')?.value ?? '', 10);
@@ -1347,13 +1698,20 @@ function _deriveWinner(overlay, isPro10) {
       else return null;
     }
   }
+  // supertb: if sets are split 1-1, require valid super tiebreak
+  if (isSupertb && meWins === 1 && opWins === 1) {
+    const stbMe = parseInt(overlay.querySelector('#supertb-me')?.value ?? '', 10);
+    const stbOp = parseInt(overlay.querySelector('#supertb-op')?.value ?? '', 10);
+    if (isNaN(stbMe) || isNaN(stbOp) || !isValidSuperTb(stbMe, stbOp)) return null;
+    return stbMe > stbOp ? 'me' : 'op';
+  }
   if (meWins === opWins) return null;
   return meWins > opWins ? 'me' : 'op';
 }
 
-function _checkResultReady(overlay, isPro10, isAdjust) {
+function _checkResultReady(overlay, isPro10, isAdjust, isSupertb = false) {
   const hasPhoto = isAdjust || !!overlay.dataset.hasPhoto;
-  const winner   = _deriveWinner(overlay, isPro10);
+  const winner   = _deriveWinner(overlay, isPro10, isSupertb);
   const incompleteWinner = overlay.dataset.incompleteWinner;
   const effectiveWinner = winner || (incompleteWinner ? incompleteWinner : null);
 
@@ -1653,51 +2011,123 @@ function _setUploadingState(overlay, loading) {
 async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, allPlayers, prevEloDeltas) {
   const uidA = match.playerA;
   const uidB = match.playerB;
-
-  const [ratingA, ratingB, histA, histB] = await Promise.all([
-    dbGet(pRef(uidA, 'eloRating')),
-    dbGet(pRef(uidB, 'eloRating')),
-    dbGet(pRef(uidA, 'eloHistory')),
-    dbGet(pRef(uidB, 'eloHistory')),
-  ]);
-
-  // Start from current ratings, reverting old deltas if this is an adjustment
-  let ra = ratingA || 1000;
-  let rb = ratingB || 1000;
-  if (prevEloDeltas) {
-    ra -= (prevEloDeltas[uidA] || 0);
-    rb -= (prevEloDeltas[uidB] || 0);
-  }
-
-  const winner  = resultData.winner === uidA ? 'a' : 'b';
-  const elo     = calculateElo(ra, rb, winner, 32);
-  const now     = Date.now();
+  const now  = Date.now();
 
   // Normalise history to an array — Firebase can return an object if keys aren't sequential
   const _toArr = v => Array.isArray(v) ? v : (v ? Object.values(v) : []);
 
-  // ELO history: remove old entry for this match (if adjusting), append new
-  const newHistA = [..._toArr(histA).filter(h => h.match !== match.mid),
-    { delta: elo.deltaA, match: match.mid, ts: now }];
-  const newHistB = [..._toArr(histB).filter(h => h.match !== match.mid),
-    { delta: elo.deltaB, match: match.mid, ts: now }];
+  const isDoubles = !!(match.partnerA || match.teamAId);
 
-  await dbMultiUpdate({
-    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
-    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
-    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
-    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:      format || match.format || null,
-    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
-    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
-    [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:   {
-      [uidA]: elo.deltaA,
-      [uidB]: elo.deltaB,
-    },
-    [`players/${uidA}/eloRating`]:  elo.newRatingA,
-    [`players/${uidB}/eloRating`]:  elo.newRatingB,
-    [`players/${uidA}/eloHistory`]: newHistA,
-    [`players/${uidB}/eloHistory`]: newHistB,
-  });
+  if (isDoubles) {
+    // ── Doubles ELO ────────────────────────────────────────────────────────────
+    const uidA1 = uidA;
+    const uidA2 = match.partnerA || null;
+    const uidB1 = uidB;
+    const uidB2 = match.partnerB || null;
+
+    const uids = [uidA1, uidA2, uidB1, uidB2].filter(Boolean);
+    const [rA1raw, rA2raw, rB1raw, rB2raw, hA1raw, hA2raw, hB1raw, hB2raw] = await Promise.all([
+      dbGet(pRef(uidA1, 'doublesEloRating')),
+      uidA2 ? dbGet(pRef(uidA2, 'doublesEloRating')) : Promise.resolve(null),
+      dbGet(pRef(uidB1, 'doublesEloRating')),
+      uidB2 ? dbGet(pRef(uidB2, 'doublesEloRating')) : Promise.resolve(null),
+      dbGet(pRef(uidA1, 'doublesEloHistory')),
+      uidA2 ? dbGet(pRef(uidA2, 'doublesEloHistory')) : Promise.resolve(null),
+      dbGet(pRef(uidB1, 'doublesEloHistory')),
+      uidB2 ? dbGet(pRef(uidB2, 'doublesEloHistory')) : Promise.resolve(null),
+    ]);
+
+    let rA1 = rA1raw || 1000;
+    let rA2 = rA2raw || 1000;
+    let rB1 = rB1raw || 1000;
+    let rB2 = rB2raw || 1000;
+
+    if (prevEloDeltas) {
+      rA1 -= (prevEloDeltas[uidA1] || 0);
+      if (uidA2) rA2 -= (prevEloDeltas[uidA2] || 0);
+      rB1 -= (prevEloDeltas[uidB1] || 0);
+      if (uidB2) rB2 -= (prevEloDeltas[uidB2] || 0);
+    }
+
+    const winner = resultData.winner === uidA1 ? 'a' : 'b';
+    const dElo   = calculateDoublesElo(rA1, rA2, rB1, rB2, winner, 24);
+
+    const hA1 = [..._toArr(hA1raw).filter(h => h.match !== match.mid), { delta: dElo.deltaA1, match: match.mid, ts: now }];
+    const hA2 = uidA2 ? [..._toArr(hA2raw).filter(h => h.match !== match.mid), { delta: dElo.deltaA2, match: match.mid, ts: now }] : null;
+    const hB1 = [..._toArr(hB1raw).filter(h => h.match !== match.mid), { delta: dElo.deltaB1, match: match.mid, ts: now }];
+    const hB2 = uidB2 ? [..._toArr(hB2raw).filter(h => h.match !== match.mid), { delta: dElo.deltaB2, match: match.mid, ts: now }] : null;
+
+    const eloDeltas = {
+      [uidA1]: dElo.deltaA1,
+      [uidB1]: dElo.deltaB1,
+      ...(uidA2 ? { [uidA2]: dElo.deltaA2 } : {}),
+      ...(uidB2 ? { [uidB2]: dElo.deltaB2 } : {}),
+    };
+
+    const updates = {
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:      format || match.format || null,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:   eloDeltas,
+      [`players/${uidA1}/doublesEloRating`]:  rA1 + dElo.deltaA1,
+      [`players/${uidA1}/doublesEloHistory`]: hA1,
+      [`players/${uidB1}/doublesEloRating`]:  rB1 + dElo.deltaB1,
+      [`players/${uidB1}/doublesEloHistory`]: hB1,
+    };
+    if (uidA2) {
+      updates[`players/${uidA2}/doublesEloRating`]  = rA2 + dElo.deltaA2;
+      updates[`players/${uidA2}/doublesEloHistory`] = hA2;
+    }
+    if (uidB2) {
+      updates[`players/${uidB2}/doublesEloRating`]  = rB2 + dElo.deltaB2;
+      updates[`players/${uidB2}/doublesEloHistory`] = hB2;
+    }
+    await dbMultiUpdate(updates);
+  } else {
+    // ── Singles ELO ────────────────────────────────────────────────────────────
+    const [ratingA, ratingB, histA, histB] = await Promise.all([
+      dbGet(pRef(uidA, 'eloRating')),
+      dbGet(pRef(uidB, 'eloRating')),
+      dbGet(pRef(uidA, 'eloHistory')),
+      dbGet(pRef(uidB, 'eloHistory')),
+    ]);
+
+    let ra = ratingA || 1000;
+    let rb = ratingB || 1000;
+    if (prevEloDeltas) {
+      ra -= (prevEloDeltas[uidA] || 0);
+      rb -= (prevEloDeltas[uidB] || 0);
+    }
+
+    const winner  = resultData.winner === uidA ? 'a' : 'b';
+    const elo     = calculateElo(ra, rb, winner, 32);
+
+    const newHistA = [..._toArr(histA).filter(h => h.match !== match.mid),
+      { delta: elo.deltaA, match: match.mid, ts: now }];
+    const newHistB = [..._toArr(histB).filter(h => h.match !== match.mid),
+      { delta: elo.deltaB, match: match.mid, ts: now }];
+
+    await dbMultiUpdate({
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:      format || match.format || null,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:   {
+        [uidA]: elo.deltaA,
+        [uidB]: elo.deltaB,
+      },
+      [`players/${uidA}/eloRating`]:  elo.newRatingA,
+      [`players/${uidB}/eloRating`]:  elo.newRatingB,
+      [`players/${uidA}/eloHistory`]: newHistA,
+      [`players/${uidB}/eloHistory`]: newHistB,
+    });
+  }
+
   writeActivity('match_confirmed', { sid, lid, mid: match.mid, playerA: uidA, playerB: uidB, winnerId: resultData.winner });
 }
 

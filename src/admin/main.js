@@ -1111,6 +1111,16 @@ async function renderLeagues(el) {
     });
   });
 
+  el.querySelectorAll('[data-action="delete-league"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid, lid, name } = btn.dataset;
+      if (!confirm(`Delete league "${name}"? All matches and data within it will be permanently deleted.`)) return;
+      await dbRemove(sRef(sid, lid));
+      toast('League deleted', 'success');
+      renderLeagues(el);
+    });
+  });
+
   // Wire "Add League" buttons
   el.querySelectorAll('[data-action="add-league"]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1122,13 +1132,19 @@ async function renderLeagues(el) {
 
   el.querySelectorAll('[data-action="create-league"]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const sid    = btn.dataset.sid;
-      const nameEl = el.querySelector(`#league-name-input-${sid}`);
-      const name   = nameEl ? nameEl.value.trim() : '';
+      const sid     = btn.dataset.sid;
+      const nameEl  = el.querySelector(`#league-name-input-${sid}`);
+      const sportEl = el.querySelector(`#league-sport-input-${sid}`);
+      const modeEl  = el.querySelector(`#league-mode-input-${sid}`);
+      const name    = nameEl ? nameEl.value.trim() : '';
       if (!name) { toast('Enter a league name', 'error'); return; }
+      const sport      = sportEl?.value || 'tennis';
+      const leagueMode = modeEl?.value  || 'singles';
       const lid = 'league_' + Date.now().toString(36);
       await dbSet(sRef(sid, lid), {
         name,
+        sport,
+        leagueMode,
         division:      name.split(' ')[0],
         createdAt:     Date.now(),
         scoringConfig: { minMatches: 6, minWins: 4, bracketSize: 4 },
@@ -1162,6 +1178,39 @@ async function renderLeagues(el) {
       if (!confirm('Remove this player from the league?')) return;
       await dbRemove(sRef(sid, lid, 'members/' + uid));
       toast('Player removed', 'success');
+      renderLeagues(el);
+    });
+  });
+
+  // Wire "Create Team" buttons
+  el.querySelectorAll('[data-action="create-team"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid, lid } = btn.dataset;
+      const nameEl = el.querySelector(`#team-name-input-${lid}`);
+      const paEl   = el.querySelector(`#team-pa-input-${lid}`);
+      const pbEl   = el.querySelector(`#team-pb-input-${lid}`);
+      const name   = nameEl?.value.trim() || '';
+      const pA     = paEl?.value || '';
+      const pB     = pbEl?.value || '';
+      if (!name) { toast('Enter a team name', 'error'); return; }
+      if (!pA || !pB) { toast('Select both players', 'error'); return; }
+      if (pA === pB) { toast('Players must be different', 'error'); return; }
+      const teamId = 'team_' + Date.now().toString(36);
+      await dbSet(sRef(sid, lid, 'teams/' + teamId), {
+        playerA: pA, playerB: pB, name, createdAt: Date.now(),
+      });
+      toast('Team created', 'success');
+      renderLeagues(el);
+    });
+  });
+
+  // Wire "Delete Team" buttons
+  el.querySelectorAll('[data-action="delete-team"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { sid, lid, teamId } = btn.dataset;
+      if (!confirm('Delete this team?')) return;
+      await dbRemove(sRef(sid, lid, 'teams/' + teamId));
+      toast('Team deleted', 'success');
       renderLeagues(el);
     });
   });
@@ -1562,12 +1611,29 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
       </div>
 
       <div id="add-league-form-${sid}" style="display:none;margin-bottom:14px;">
-        <div class="admin-form-row">
-          <div class="admin-input-group" style="flex:1;">
+        <div class="admin-form-row" style="flex-wrap:wrap;gap:8px;">
+          <div class="admin-input-group" style="flex:2;min-width:120px;">
             <label class="admin-input-label">League Name</label>
             <input id="league-name-input-${sid}" class="admin-input" placeholder="e.g. A Division"/>
           </div>
-          <button class="btn-admin btn-teal" data-action="create-league" data-sid="${sid}">Create</button>
+          <div class="admin-input-group" style="flex:1;min-width:100px;">
+            <label class="admin-input-label">Sport</label>
+            <select id="league-sport-input-${sid}" class="admin-input">
+              <option value="tennis">Tennis</option>
+              <option value="padel">Padel</option>
+            </select>
+          </div>
+          <div class="admin-input-group" style="flex:1;min-width:130px;">
+            <label class="admin-input-label">Mode</label>
+            <select id="league-mode-input-${sid}" class="admin-input">
+              <option value="singles">Singles</option>
+              <option value="doubles_pickup">Doubles – Pickup</option>
+              <option value="doubles_team">Doubles – Team</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:8px;">
+          <button class="btn-admin btn-teal" data-action="create-league" data-sid="${sid}">Create League</button>
         </div>
       </div>
 
@@ -1604,11 +1670,24 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
             padding:12px;margin-bottom:8px;">
 
             <!-- League header -->
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
               <div style="font-weight:700;font-size:13px;flex:1;">
                 ${escHtml(league.name || lid)}
               </div>
               <span class="badge-admin badge-muted">${memberUids.length} members</span>
+              ${league.sport === 'padel' ? `
+                <span class="badge-admin" style="background:var(--ace2);color:#fff;">Padel</span>
+              ` : ''}
+              ${league.leagueMode && league.leagueMode !== 'singles' ? `
+                <span class="badge-admin badge-muted">${
+                  league.leagueMode === 'doubles_pickup' ? 'Doubles (Pickup)' : 'Doubles (Team)'
+                }</span>
+              ` : ''}
+              <button class="btn-admin btn-ghost" style="color:var(--ace3);font-size:11px;"
+                data-action="delete-league" data-sid="${sid}" data-lid="${lid}"
+                data-name="${escHtml(league.name || lid)}">
+                Delete
+              </button>
             </div>
 
             <!-- Members list -->
@@ -1660,6 +1739,59 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
                 </select>
                 <button class="btn-admin btn-teal" data-action="add-member"
                   data-sid="${sid}" data-lid="${lid}">Add</button>
+              </div>
+            ` : ''}
+
+            <!-- Teams section (doubles_team only) -->
+            ${league.leagueMode === 'doubles_team' ? `
+              <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+                <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">Teams</div>
+                ${Object.entries(league.teams || {}).map(([teamId, team]) => {
+                  const pA = allPlayers[team.playerA] || {};
+                  const pB = allPlayers[team.playerB] || {};
+                  return `
+                    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;
+                      border-bottom:1px solid var(--border);">
+                      <span style="flex:1;font-size:13px;">
+                        <strong>${escHtml(team.name || teamId)}</strong>
+                        &mdash; ${escHtml(pA.alias || pA.name || team.playerA)}
+                        &amp; ${escHtml(pB.alias || pB.name || team.playerB)}
+                      </span>
+                      <button class="btn-admin btn-ghost" style="color:var(--ace3);font-size:11px;"
+                        data-action="delete-team" data-sid="${sid}" data-lid="${lid}"
+                        data-team-id="${escHtml(teamId)}">
+                        Delete
+                      </button>
+                    </div>
+                  `;
+                }).join('')}
+                ${Object.keys(league.teams || {}).length === 0 ? `
+                  <div style="font-size:12px;color:var(--text3);padding:4px 0;">No teams yet.</div>
+                ` : ''}
+                <div style="margin-top:10px;">
+                  <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
+                    letter-spacing:.5px;margin-bottom:6px;">Create Team</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <input id="team-name-input-${lid}" class="admin-input"
+                      placeholder="Team name" style="flex:1;min-width:100px;"/>
+                    <select id="team-pa-input-${lid}" class="admin-input" style="flex:1;min-width:120px;">
+                      <option value="">Player A…</option>
+                      ${memberUids.map(uid => {
+                        const p = allPlayers[uid] || {};
+                        return `<option value="${uid}">${escHtml(p.alias || p.name || uid)}</option>`;
+                      }).join('')}
+                    </select>
+                    <select id="team-pb-input-${lid}" class="admin-input" style="flex:1;min-width:120px;">
+                      <option value="">Player B…</option>
+                      ${memberUids.map(uid => {
+                        const p = allPlayers[uid] || {};
+                        return `<option value="${uid}">${escHtml(p.alias || p.name || uid)}</option>`;
+                      }).join('')}
+                    </select>
+                    <button class="btn-admin btn-teal" data-action="create-team"
+                      data-sid="${sid}" data-lid="${lid}">Create</button>
+                  </div>
+                </div>
               </div>
             ` : ''}
 

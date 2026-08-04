@@ -10,6 +10,20 @@
 
 export const CHANGELOG = [
   {
+    version: '1.14.0',
+    date:    '2026-08-04',
+    changes: [
+      'Doubles matches: propose a match with a partner (Doubles – Pickup mode).',
+      'Padel leagues: score entry now offers a Super Tiebreak (first to 10) as the match decider.',
+      'Doubles ELO tracked separately from singles ELO — your singles ranking is unaffected by doubles results.',
+    ],
+    adminChanges: [
+      'New league options: Sport (Tennis / Padel) and Mode (Singles / Doubles Pickup / Doubles Team).',
+      'Doubles Team leagues: create and manage registered pairs from the league card.',
+      'Delete league button added to each league card.',
+    ],
+  },
+  {
     version: '1.13.3',
     date:    '2026-08-04',
     adminChanges: [
