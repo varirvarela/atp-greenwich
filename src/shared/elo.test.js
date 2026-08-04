@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateElo,
+  calculateDoublesElo,
   expectedScore,
   getStartingElo,
   eloTrend,
@@ -86,6 +87,99 @@ describe('calculateElo', () => {
       const r = calculateElo(1400, 1000, 'a', 32);
       expect(r.expectedA).toBeGreaterThan(0.5);
     });
+  });
+});
+
+// ─── calculateDoublesElo ──────────────────────────────────────────────────────
+
+describe('calculateDoublesElo', () => {
+  describe('equal pairs (1200/1200 vs 1200/1200), A wins', () => {
+    const r = calculateDoublesElo(1200, 1200, 1200, 1200, 'a');
+
+    it('both A players gain 12 (K=24, equal teams)', () => {
+      expect(r.deltaA1).toBe(12);
+      expect(r.deltaA2).toBe(12);
+    });
+    it('both B players lose 12', () => {
+      expect(r.deltaB1).toBe(-12);
+      expect(r.deltaB2).toBe(-12);
+    });
+    it('team ratings are 1200', () => {
+      expect(r.teamRatingA).toBe(1200);
+      expect(r.teamRatingB).toBe(1200);
+    });
+    it('expectedA is 0.5', () => expect(r.expectedA).toBe(0.5));
+  });
+
+  describe('both partners get the same delta', () => {
+    const r = calculateDoublesElo(1400, 1000, 1300, 1300, 'a');
+
+    it('deltaA1 === deltaA2', () => expect(r.deltaA1).toBe(r.deltaA2));
+    it('deltaB1 === deltaB2', () => expect(r.deltaB1).toBe(r.deltaB2));
+  });
+
+  describe('team rating is average of individual ratings', () => {
+    const r = calculateDoublesElo(1400, 1000, 1300, 1300, 'a');
+
+    it('teamRatingA = (1400+1000)/2 = 1200', () => expect(r.teamRatingA).toBe(1200));
+    it('teamRatingB = (1300+1300)/2 = 1300', () => expect(r.teamRatingB).toBe(1300));
+  });
+
+  describe('underdog pair wins (team 1200 vs team 1300), A wins', () => {
+    const r = calculateDoublesElo(1400, 1000, 1300, 1300, 'a');
+
+    it('underdog A partners gain more than 12', () => expect(r.deltaA1).toBeGreaterThan(12));
+    it('favoured B partners lose more than 12', () => expect(r.deltaB1).toBeLessThan(-12));
+  });
+
+  describe('favoured pair wins (team 1300 vs team 1200), A wins', () => {
+    const r = calculateDoublesElo(1300, 1300, 1400, 1000, 'a');
+
+    it('favoured A partners gain less than 12', () => expect(r.deltaA1).toBeLessThan(12));
+    it('underdog B partners lose less than 12', () => {
+      expect(r.deltaB1).toBeGreaterThan(-12);
+      expect(r.deltaB1).toBeLessThan(0);
+    });
+  });
+
+  describe('B wins', () => {
+    const r = calculateDoublesElo(1200, 1200, 1200, 1200, 'b');
+
+    it('B players gain 12', () => {
+      expect(r.deltaB1).toBe(12);
+      expect(r.deltaB2).toBe(12);
+    });
+    it('A players lose 12', () => {
+      expect(r.deltaA1).toBe(-12);
+      expect(r.deltaA2).toBe(-12);
+    });
+  });
+
+  describe('ELO conservation', () => {
+    it('sum of all 4 deltas is zero (equal pairs)', () => {
+      const r = calculateDoublesElo(1200, 1200, 1200, 1200, 'a');
+      expect(r.deltaA1 + r.deltaA2 + r.deltaB1 + r.deltaB2).toBe(0);
+    });
+
+    it('sum of all 4 deltas is zero (asymmetric pairs)', () => {
+      const r = calculateDoublesElo(1500, 900, 1100, 1300, 'b');
+      expect(r.deltaA1 + r.deltaA2 + r.deltaB1 + r.deltaB2).toBe(0);
+    });
+  });
+
+  describe('custom K-factor', () => {
+    const r = calculateDoublesElo(1200, 1200, 1200, 1200, 'a', 32);
+
+    it('K=32 equal pairs — each winner gains 16', () => expect(r.deltaA1).toBe(16));
+    it('K=32 equal pairs — each loser loses 16', () => expect(r.deltaB1).toBe(-16));
+  });
+
+  describe('default K is 24, not 32', () => {
+    const singles = calculateElo(1200, 1200, 'a');         // K=32 → +16
+    const doubles = calculateDoublesElo(1200, 1200, 1200, 1200, 'a'); // K=24 → +12
+
+    it('doubles delta is smaller than singles delta at equal ratings', () =>
+      expect(doubles.deltaA1).toBeLessThan(singles.deltaA));
   });
 });
 

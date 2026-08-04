@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.13.3',
+    date:    '2026-08-04',
+    adminChanges: [
+      'Groundwork: doubles ELO function (calculateDoublesElo, K=24) and super tiebreak validator added with full test coverage.',
+    ],
+  },
+  {
     version: '1.13.2',
     date:    '2026-08-03',
     changes: [

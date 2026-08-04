@@ -49,6 +49,39 @@ function calculateElo(ratingA, ratingB, winner, kFactor) {
   };
 }
 
+// ─── Doubles ELO ─────────────────────────────────────────────────────────────
+
+// Calculate ELO deltas for a doubles match.
+// Team rating = average of the two partners' individual ratings.
+// Both partners on the winning side gain the same delta; both on the losing side lose it.
+// Default K=24 (lower than singles K=32 — partner variance makes each result noisier).
+//
+// Returns: {
+//   deltaA1, deltaA2: number,  // deltas for pair A
+//   deltaB1, deltaB2: number,  // deltas for pair B
+//   teamRatingA, teamRatingB: number,
+//   expectedA: number
+// }
+function calculateDoublesElo(ratingA1, ratingA2, ratingB1, ratingB2, winner, kFactor) {
+  const k     = kFactor || 24;
+  const teamA = (ratingA1 + ratingA2) / 2;
+  const teamB = (ratingB1 + ratingB2) / 2;
+  const ea    = expectedScore(teamA, teamB);
+  const sa    = winner === 'a' ? 1 : 0;
+  const sb    = winner === 'b' ? 1 : 0;
+  const deltaA = Math.round(k * (sa - ea));
+  const deltaB = Math.round(k * (sb - (1 - ea)));
+  return {
+    deltaA1: deltaA,
+    deltaA2: deltaA,
+    deltaB1: deltaB,
+    deltaB2: deltaB,
+    teamRatingA: Math.round(teamA),
+    teamRatingB: Math.round(teamB),
+    expectedA: Math.round(ea * 100) / 100,
+  };
+}
+
 // ─── Self-assessment ELO seeding ─────────────────────────────────────────────
 // Maps onboarding self-assessment answer to starting ELO.
 
@@ -173,6 +206,7 @@ function runEloTests() {
 // ─── Exports ─────────────────────────────────────────────────────────────────
 export {
   calculateElo,
+  calculateDoublesElo,
   expectedScore,
   getStartingElo,
   eloTrend,

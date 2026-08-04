@@ -9,6 +9,7 @@ import {
   calculateGroupPoints,
   generateFixtures,
   validateFixtures,
+  isValidSuperTb,
 } from './scoring.js';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
@@ -559,4 +560,21 @@ describe('canPlayAgainst', () => {
     };
     expect(canPlayAgainst(m, A, C)).toBe(true);
   });
+});
+
+// ─── isValidSuperTb ───────────────────────────────────────────────────────────
+
+describe('isValidSuperTb', () => {
+  it('10-0 is valid',    () => expect(isValidSuperTb(10, 0)).toBe(true));
+  it('0-10 is valid',   () => expect(isValidSuperTb(0, 10)).toBe(true));
+  it('10-8 is valid',   () => expect(isValidSuperTb(10, 8)).toBe(true));
+  it('12-10 is valid',  () => expect(isValidSuperTb(12, 10)).toBe(true));
+  it('15-13 is valid',  () => expect(isValidSuperTb(15, 13)).toBe(true));
+
+  it('9-0 is invalid — neither reached 10',  () => expect(isValidSuperTb(9, 0)).toBe(false));
+  it('10-9 is invalid — win by 1 only',      () => expect(isValidSuperTb(10, 9)).toBe(false));
+  it('11-10 is invalid — win by 1 only',     () => expect(isValidSuperTb(11, 10)).toBe(false));
+  it('10-10 is invalid — tied',              () => expect(isValidSuperTb(10, 10)).toBe(false));
+  it('negative scores invalid',              () => expect(isValidSuperTb(-1, 10)).toBe(false));
+  it('non-integer invalid',                  () => expect(isValidSuperTb(10.5, 0)).toBe(false));
 });

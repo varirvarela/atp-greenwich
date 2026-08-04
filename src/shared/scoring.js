@@ -310,6 +310,20 @@ export function calculateGroupPoints(allMatches, uid, pointsConfig) {
   return points;
 }
 
+// ─── Super tiebreak validation ────────────────────────────────────────────────
+
+// Validates a super tiebreak score (used as the decider in padel / supertb format).
+// Rules: first to 10, win by 2. No upper bound.
+export function isValidSuperTb(a, b) {
+  if (!Number.isInteger(a) || !Number.isInteger(b)) return false;
+  if (a < 0 || b < 0) return false;
+  if (a === b) return false;
+  const high = Math.max(a, b);
+  const low  = Math.min(a, b);
+  if (high < 10) return false;
+  return high - low >= 2;
+}
+
 // Generate group-stage fixtures using the circle-method round-robin scheduler.
 // For even n: guaranteed exactly matchesPerPlayer matches per player (as long as mpp ≤ n-1).
 // For odd n: best-effort across rounds (one player per round gets a bye).
