@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.1',
+    date:    '2026-08-05',
+    adminChanges: [
+      'Player list now has a tournament filter — select a season to see only its members.',
+    ],
+  },
+  {
     version: '1.15.0',
     date:    '2026-08-05',
     changes: [

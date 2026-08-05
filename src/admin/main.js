@@ -260,30 +260,58 @@ function toast(msg, type = '') {
 // ─── Players ──────────────────────────────────────────────────────────────────
 
 async function renderPlayers(el) {
+  // Persist season filter across re-renders
+  const filteredSid = el.querySelector('#player-season-filter')?.value || '';
+
   const [allObj, seasonsRaw] = await Promise.all([dbGet(pRef()), dbGet(dbRef('seasons'))]);
   const players = allObj
     ? Object.entries(allObj).map(([uid, p]) => ({ uid, ...p }))
     : [];
   const seasons = seasonsRaw || {};
-  const leagueMemberUids = new Set(
+
+  const seasonEntries = Object.entries(seasons)
+    .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+
+  const allLeagueMemberUids = new Set(
     Object.values(seasons).flatMap(s =>
       Object.values(s.leagues || {}).flatMap(l => Object.keys(l.members || {}))
     )
   );
+
+  const seasonMemberUids = filteredSid
+    ? new Set(
+        Object.values(seasons[filteredSid]?.leagues || {})
+          .flatMap(l => Object.keys(l.members || {}))
+      )
+    : null;
+
   const allStats = _computeAllMatchStats(seasons);
 
   const pending    = players.filter(p => p.status === 'invited');
   const onboarding = players.filter(p => p.status === 'onboarding');
-  const active     = players.filter(p => p.status === 'active');
+  const allActive  = players.filter(p => p.status === 'active');
   const other      = players.filter(p => !['invited','onboarding','active'].includes(p.status));
+
+  const active = seasonMemberUids
+    ? allActive.filter(p => seasonMemberUids.has(p.uid))
+    : allActive;
 
   el.innerHTML = `
     <div class="section-header">
       <div class="section-title">Players</div>
       <div class="section-actions">
+        <select id="player-season-filter" class="admin-input"
+          style="font-size:12px;padding:4px 8px;height:auto;">
+          <option value="">All tournaments</option>
+          ${seasonEntries.map(([sid, s]) => `
+            <option value="${sid}" ${filteredSid === sid ? 'selected' : ''}>
+              ${escHtml(s.name || sid)}
+            </option>
+          `).join('')}
+        </select>
         <span class="badge-admin badge-red">${pending.length} pending</span>
         <span class="badge-admin badge-orange">${onboarding.length} onboarding</span>
-        <span class="badge-admin badge-green">${active.length} active</span>
+        <span class="badge-admin badge-green">${active.length}${seasonMemberUids ? '' : ''} active</span>
       </div>
     </div>
 
@@ -297,14 +325,20 @@ async function renderPlayers(el) {
       ${onboarding.map(p => _playerCard(p, false, allStats[p.uid])).join('')}
     ` : ''}
 
-    <div class="section-group-label">Active Players (${active.length})</div>
-    ${active.length ? active.map(p => _playerCard(p, !leagueMemberUids.has(p.uid), allStats[p.uid])).join('') : `<div class="admin-empty">No active players yet.</div>`}
+    <div class="section-group-label">
+      Active Players (${active.length}${seasonMemberUids ? ` in ${escHtml(seasons[filteredSid]?.name || filteredSid)}` : ''})
+    </div>
+    ${active.length
+      ? active.map(p => _playerCard(p, !seasonMemberUids && !allLeagueMemberUids.has(p.uid), allStats[p.uid])).join('')
+      : `<div class="admin-empty">No active players${seasonMemberUids ? ' in this tournament' : ''} yet.</div>`}
 
-    ${other.length ? `
+    ${other.length && !seasonMemberUids ? `
       <div class="section-group-label">Other (${other.length})</div>
       ${other.map(p => _playerCard(p, false, allStats[p.uid])).join('')}
     ` : ''}
   `;
+
+  el.querySelector('#player-season-filter')?.addEventListener('change', () => renderPlayers(el));
 
   // Approve buttons
   el.querySelectorAll('[data-action="approve"]').forEach(btn => {
