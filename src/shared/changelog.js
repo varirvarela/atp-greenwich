@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.14.1',
+    date:    '2026-08-04',
+    changes: [
+      'Doubles Pickup: proposer only selects their own partner — the opponent chooses their partner when accepting the challenge.',
+    ],
+  },
+  {
     version: '1.14.0',
     date:    '2026-08-04',
     changes: [

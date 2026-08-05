@@ -248,7 +248,7 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
       if (action === 'upload-photo')      _showUploadPhotoModal(match, myUid, allPlayers, sid, lid);
       if (action === 'adjust-result')     _showAdjustResultModal(match, myUid, allPlayers, sid, lid, league);
       if (action === 'forfeit')           _showForfeitModal(match, myUid, allPlayers, sid, lid);
-      if (action === 'accept-challenge')  _showAcceptChallengeModal(match, myUid, allPlayers, matchesObj, sid, lid);
+      if (action === 'accept-challenge')  _showAcceptChallengeModal(match, myUid, allPlayers, matchesObj, sid, lid, league);
       if (action === 'cancel-challenge')  _showCancelProposalModal(match, myUid, sid, lid);
       if (action === 'cancel-proposal')   _showCancelProposalModal(match, myUid, sid, lid);
       if (action === 'edit-proposal')        _showEditProposalModal(match, myUid, sid, lid);
@@ -679,10 +679,6 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
             ${opponents.map(p => _memberCard(p, 'data-partner-a')).join('')}
           </div>
         </div>
-        <div id="pickup-partner-b" style="margin-bottom:16px;display:none;">
-          <p class="t-small t-muted" style="margin-bottom:8px;">Opponent's partner <span style="opacity:.6;">(optional)</span>:</p>
-          <div id="partner-b-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-        </div>
       ` : ''}
 
       <div style="margin-bottom:20px;">
@@ -775,7 +771,6 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
   // ── Selection state ──────────────────────────────────────────────────────────
   let selectedUid    = null; // singles/pickup: opponent uid
   let partnerAUid    = null; // pickup: my partner
-  let partnerBUid    = null; // pickup: opponent's partner
   let selectedTeamAId = null; // team mode: my team id
   let selectedTeamBId = null; // team mode: opposing team id
 
@@ -823,12 +818,11 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
       card.addEventListener('click', () => {
         const clickedUid = card.dataset.uid;
         // Only process if it's an opponent card (not partner)
-        if (card.closest('#partner-a-list') || card.closest('#partner-b-list')) return;
+        if (card.closest('#partner-a-list')) return;
         selectedUid = clickedUid;
         partnerAUid = null;
-        partnerBUid = null;
         overlay.querySelectorAll('.tap-card[data-uid]').forEach(c => {
-          if (!c.closest('#partner-a-list') && !c.closest('#partner-b-list')) {
+          if (!c.closest('#partner-a-list')) {
             c.classList.remove('selected');
           }
         });
@@ -860,56 +854,17 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
         _rebuildPartnerBList();
       });
 
-      // Partner B selection
-      overlay.addEventListener('click', e => {
-        const card = e.target.closest('[data-partner-b]');
-        if (!card) return;
-        const uid = card.dataset.partnerB;
-        if (partnerBUid === uid) {
-          partnerBUid = null;
-          card.classList.remove('selected');
-        } else {
-          partnerBUid = uid;
-          overlay.querySelectorAll('[data-partner-b]').forEach(c => c.classList.remove('selected'));
-          card.classList.add('selected');
-        }
-      });
     }
   }
 
   function _rebuildPartnerLists() {
     if (!isPickup) return;
-    const partnerASection = overlay.querySelector('#pickup-partner-a');
-    const partnerBSection = overlay.querySelector('#pickup-partner-b');
-    if (!partnerASection) return;
-    // Re-render partner A list: all members except self and selected opponent
     const paList = overlay.querySelector('#partner-a-list');
     if (paList) {
       paList.innerHTML = opponents
         .filter(p => p.uid !== selectedUid)
         .map(p => _memberCard(p, 'data-partner-a'))
         .join('');
-    }
-    // Re-show partner B section once opponent is selected
-    if (partnerBSection && selectedUid) {
-      partnerBSection.style.display = '';
-    }
-    _rebuildPartnerBList();
-  }
-
-  function _rebuildPartnerBList() {
-    if (!isPickup) return;
-    const pbList = overlay.querySelector('#partner-b-list');
-    if (!pbList) return;
-    pbList.innerHTML = opponents
-      .filter(p => p.uid !== selectedUid && p.uid !== partnerAUid)
-      .map(p => _memberCard(p, 'data-partner-b'))
-      .join('');
-    // Re-apply selection if still valid
-    if (partnerBUid) {
-      const card = pbList.querySelector(`[data-partner-b="${CSS.escape(partnerBUid)}"]`);
-      if (card) card.classList.add('selected');
-      else partnerBUid = null;
     }
   }
 
@@ -937,7 +892,7 @@ function _showProposeModal(myUid, allPlayers, memberUids, existingMatches, sid, 
       } else if (isPickup) {
         matchData = {
           playerA: myUid, playerB: selectedUid,
-          partnerA: partnerAUid || null, partnerB: partnerBUid || null,
+          partnerA: partnerAUid || null, partnerB: null,
           proposedBy: myUid, proposedAt: Date.now(), scheduledAt,
           status: 'scheduled', result: null, photoUrl: null,
           eloDeltas: null, confirmedAt: null,
@@ -2365,7 +2320,7 @@ function _defaultAv(sz) {
 
 // ─── Accept / Cancel / Edit proposal modals ────────────────────────────────────
 
-function _showAcceptChallengeModal(match, myUid, allPlayers, existingMatches, sid, lid) {
+function _showAcceptChallengeModal(match, myUid, allPlayers, existingMatches, sid, lid, league) {
   const op = allPlayers[match.playerA] || { name: 'Unknown', alias: match.playerA };
   const matchCount = Object.values(existingMatches || {}).filter(m => {
     const inv = (m.playerA === myUid && m.playerB === match.playerA)
@@ -2373,6 +2328,18 @@ function _showAcceptChallengeModal(match, myUid, allPlayers, existingMatches, si
     return inv && ['scheduled','result_pending','photo_pending','confirmed'].includes(m.status);
   }).length;
   const atCap = matchCount >= 2;
+
+  const isPickupDoubles = league?.leagueMode === 'doubles_pickup';
+  const needsPartner    = isPickupDoubles && !match.partnerB;
+
+  // Build partner candidates: league members excluding self, proposer, and proposer's partner
+  const memberUids = Object.keys(league?.members || {});
+  const partnerCandidates = memberUids
+    .filter(uid => uid !== myUid && uid !== match.playerA && uid !== match.partnerA)
+    .map(uid => ({ uid, ...(allPlayers[uid] || {}) }))
+    .filter(p => p.name || p.alias);
+
+  let selectedPartnerUid = null;
 
   const overlay = _createOverlay();
   overlay.innerHTML = `
@@ -2390,10 +2357,24 @@ function _showAcceptChallengeModal(match, myUid, allPlayers, existingMatches, si
           </p>
         </div>
       ` : `
-        <p class="t-small t-muted" style="margin-bottom:20px;">
-          Accept the open challenge from <strong>${escHtml(op.alias || op.name)}</strong>?
-          You will be matched up for a ranked game.
+        <p class="t-small t-muted" style="margin-bottom:${needsPartner ? '12px' : '20px'};">
+          Accept the challenge from <strong>${escHtml(op.alias || op.name)}</strong>
+          ${match.partnerA ? `&amp; <strong>${escHtml(allPlayers[match.partnerA]?.alias || allPlayers[match.partnerA]?.name || '')}</strong>` : ''}?
         </p>
+        ${needsPartner ? `
+          <p class="t-small t-muted" style="margin-bottom:8px;">
+            Your partner <span style="opacity:.6;">(optional)</span>:
+          </p>
+          <div id="accept-partner-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+            ${partnerCandidates.map(p => `
+              <div class="tap-card" data-accept-partner="${escHtml(p.uid)}"
+                style="display:flex;align-items:center;gap:10px;padding:10px 12px;">
+                <span style="font-size:13px;font-weight:600;">${escHtml(p.alias || p.name || p.uid)}</span>
+              </div>
+            `).join('')}
+            ${partnerCandidates.length === 0 ? `<p class="t-small t-muted">No other league members available.</p>` : ''}
+          </div>
+        ` : ''}
         <button class="btn btn-primary" id="btn-confirm-accept">Accept Challenge</button>
       `}
     </div>
@@ -2404,16 +2385,36 @@ function _showAcceptChallengeModal(match, myUid, allPlayers, existingMatches, si
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   if (atCap) return;
 
+  if (needsPartner) {
+    overlay.addEventListener('click', e => {
+      const card = e.target.closest('[data-accept-partner]');
+      if (!card) return;
+      const uid = card.dataset.acceptPartner;
+      if (selectedPartnerUid === uid) {
+        selectedPartnerUid = null;
+        card.classList.remove('selected');
+      } else {
+        selectedPartnerUid = uid;
+        overlay.querySelectorAll('[data-accept-partner]').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+      }
+    });
+  }
+
   overlay.querySelector('#btn-confirm-accept').addEventListener('click', async () => {
     const btn = overlay.querySelector('#btn-confirm-accept');
     btn.disabled = true; btn.textContent = 'Accepting…';
     try {
-      await dbMultiUpdate({
+      const updates = {
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/playerB`]:    myUid,
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:     'scheduled',
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/acceptedBy`]: myUid,
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/acceptedAt`]: Date.now(),
-      });
+      };
+      if (needsPartner && selectedPartnerUid) {
+        updates[`seasons/${sid}/leagues/${lid}/matches/${match.mid}/partnerB`] = selectedPartnerUid;
+      }
+      await dbMultiUpdate(updates);
       overlay.remove();
     } catch (err) {
       console.error('Accept error:', err);
