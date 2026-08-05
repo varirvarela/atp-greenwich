@@ -1153,22 +1153,26 @@ async function renderLeagues(el) {
   el.innerHTML = `
     <div class="section-header">
       <div class="section-title">Leagues</div>
-      <div class="section-actions">
-        <button class="btn-admin btn-primary" id="btn-new-tournament">+ New Tournament</button>
-      </div>
+      ${!_adminIsScoped ? `
+        <div class="section-actions">
+          <button class="btn-admin btn-primary" id="btn-new-tournament">+ New Tournament</button>
+        </div>
+      ` : ''}
     </div>
 
-    <!-- New tournament form (hidden by default) -->
-    <div id="new-tournament-form" style="display:none;" class="admin-form-panel">
-      <div class="admin-form-title">Create Tournament</div>
-      <div class="admin-form-row">
-        <div class="admin-input-group" style="flex:1;">
-          <label class="admin-input-label">Tournament Name</label>
-          <input id="season-name-input" class="admin-input" placeholder="e.g. 2026 Spring"/>
+    <!-- New tournament form (hidden by default, super-admin only) -->
+    ${!_adminIsScoped ? `
+      <div id="new-tournament-form" style="display:none;" class="admin-form-panel">
+        <div class="admin-form-title">Create Tournament</div>
+        <div class="admin-form-row">
+          <div class="admin-input-group" style="flex:1;">
+            <label class="admin-input-label">Tournament Name</label>
+            <input id="season-name-input" class="admin-input" placeholder="e.g. 2026 Spring"/>
+          </div>
+          <button class="btn-admin btn-primary" id="btn-create-tournament">Create</button>
         </div>
-        <button class="btn-admin btn-primary" id="btn-create-tournament">Create</button>
       </div>
-    </div>
+    ` : ''}
 
     ${sortedSeasons.length === 0
       ? `<div class="admin-empty">No tournaments yet. Create one above.</div>`
@@ -1189,16 +1193,18 @@ async function renderLeagues(el) {
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
                 <div class="section-group-label" style="margin:0;">${escHtml(season.name||sid)}</div>
                 ${season.status === 'over' ? `<span class="badge-admin badge-muted" style="background:#e0e0e0;">Over</span>` : ''}
-                <div style="display:flex;gap:6px;margin-left:auto;">
-                  <button class="btn-admin btn-ghost" style="font-size:11px;"
-                    data-action="toggle-tournament-over" data-sid="${sid}"
-                    data-is-over="${season.status === 'over'}">
-                    ${season.status === 'over' ? 'Reopen' : 'Mark as Over'}
-                  </button>
-                  <button class="btn-admin btn-danger" style="font-size:11px;"
-                    data-action="delete-tournament" data-sid="${sid}"
-                    data-name="${escHtml(season.name||sid)}">Delete</button>
-                </div>
+                ${!_adminIsScoped ? `
+                  <div style="display:flex;gap:6px;margin-left:auto;">
+                    <button class="btn-admin btn-ghost" style="font-size:11px;"
+                      data-action="toggle-tournament-over" data-sid="${sid}"
+                      data-is-over="${season.status === 'over'}">
+                      ${season.status === 'over' ? 'Reopen' : 'Mark as Over'}
+                    </button>
+                    <button class="btn-admin btn-danger" style="font-size:11px;"
+                      data-action="delete-tournament" data-sid="${sid}"
+                      data-name="${escHtml(season.name||sid)}">Delete</button>
+                  </div>
+                ` : ''}
               </div>
               ${_renderSeason(sid, season, allPlayers||{}, leagueNotifications)}
             </div>
@@ -1207,7 +1213,7 @@ async function renderLeagues(el) {
       `}
   `;
 
-  el.querySelector('#btn-new-tournament').addEventListener('click', () => {
+  el.querySelector('#btn-new-tournament')?.addEventListener('click', () => {
     const form = el.querySelector('#new-tournament-form');
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
   });
@@ -1223,7 +1229,7 @@ async function renderLeagues(el) {
     });
   }
 
-  el.querySelector('#btn-create-tournament').addEventListener('click', async () => {
+  el.querySelector('#btn-create-tournament')?.addEventListener('click', async () => {
     const name = el.querySelector('#season-name-input').value.trim();
     if (!name) { toast('Enter a tournament name', 'error'); return; }
     const sid = 'season_' + Date.now().toString(36);
