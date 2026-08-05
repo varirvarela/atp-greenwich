@@ -777,7 +777,7 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
         </div>
       </details>
 
-      ${(player.isAdmin || player.email === 'pablorvarela@gmail.com') ? `
+      ${(player.isAdmin || player.adminFor || player.email === 'pablorvarela@gmail.com') ? `
       <!-- Admin / Owner access -->
       <div class="card" style="margin-bottom:16px;background:var(--ace-bg);border-color:var(--ace);">
         <div class="t-label" style="color:var(--ace);margin-bottom:8px;">

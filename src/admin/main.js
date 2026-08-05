@@ -18,7 +18,9 @@ const ADMIN_SEASON_KEY = 'atp_admin_season';
 const DEFAULT_PASSWORD = 'atpgreenwich2026';
 const OWNER_EMAIL      = 'pablorvarela@gmail.com';
 
-let _adminEmail = '';
+let _adminEmail    = '';
+let _adminIsScoped = false;
+let _adminForSids  = new Set();
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -30,7 +32,9 @@ async function boot() {
     const pc = JSON.parse(localStorage.getItem('atp_player_creds') || 'null');
     if (pc?.uid && pc?.pwdHash && pc.pwdHash !== 'dev') {
       const pd = await dbGet(pRef(pc.uid));
-      if (pd?.isAdmin === true && pd?.passwordHash === pc.pwdHash) {
+      const hasAccess = pd?.isAdmin === true ||
+        (pd?.adminFor && Object.keys(pd.adminFor).length > 0);
+      if (hasAccess && pd?.passwordHash === pc.pwdHash) {
         showAdminShell(app, pd);
         return;
       }
@@ -140,7 +144,19 @@ const NAV_ITEMS = [
 ];
 
 function showAdminShell(app, adminCreds) {
-  _adminEmail = adminCreds?.email || '';
+  _adminEmail    = adminCreds?.email || '';
+  const isSuperAdmin = !!(adminCreds?.isAdmin);
+  _adminIsScoped = !isSuperAdmin &&
+    !!(adminCreds?.adminFor && Object.keys(adminCreds.adminFor).length > 0);
+  _adminForSids  = _adminIsScoped
+    ? new Set(Object.keys(adminCreds.adminFor))
+    : new Set();
+
+  const SCOPED_ALLOWED = new Set(['players', 'leagues', 'matches', 'bracket', 'whatsapp']);
+  const navItems = _adminIsScoped
+    ? NAV_ITEMS.filter(it => SCOPED_ALLOWED.has(it.id))
+    : NAV_ITEMS;
+
   app.innerHTML = `
     <div class="admin-shell" id="admin-shell">
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -150,9 +166,12 @@ function showAdminShell(app, adminCreds) {
           <div class="admin-sub">Admin Dashboard</div>
           <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);
             margin-top:4px;letter-spacing:.3px;">v${APP_VERSION}</div>
+          ${_adminIsScoped ? `
+            <div style="font-size:10px;color:var(--ace2);margin-top:4px;">Tournament Admin</div>
+          ` : ''}
         </div>
         <nav class="admin-nav">
-          ${NAV_ITEMS.map(it => `
+          ${navItems.map(it => `
             <button class="admin-nav-item" data-section="${it.id}">
               ${it.icon}${escHtml(it.label)}
             </button>
@@ -183,7 +202,7 @@ function showAdminShell(app, adminCreds) {
         </div>
       </main>
       <nav class="admin-bottom-nav" id="admin-bottom-nav">
-        ${NAV_ITEMS.map(it => `
+        ${navItems.map(it => `
           <button class="admin-bottom-nav-item" data-section="${it.id}">
             ${it.icon}
             <span>${escHtml(it.label)}</span>
@@ -386,20 +405,17 @@ async function renderPlayers(el) {
     });
   });
 
-  // Toggle admin
-  el.querySelectorAll('[data-action="toggle-admin"]').forEach(btn => {
+  // Manage admin access
+  el.querySelectorAll('[data-action="manage-admin"]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const { uid } = btn.dataset;
-      const nowAdmin = btn.dataset.isAdmin === 'true';
-      const newVal   = !nowAdmin;
-      btn.disabled   = true;
-      await dbMultiUpdate({
-        [`players/${uid}/isAdmin`]:   newVal || null,
-        [`players/${uid}/adminRole`]: newVal ? 'League Admin' : null,
-      });
-      toast(`Admin ${newVal ? 'granted' : 'revoked'}`, 'success');
-      renderPlayers(el);
+      const player  = players.find(p => p.uid === uid);
+      if (!player) return;
+      const seasonsRaw = await dbGet(dbRef('seasons'));
+      const seasonList = Object.entries(seasonsRaw || {})
+        .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0));
+      _showManageAdminModal(player, seasonList, () => renderPlayers(el));
     });
   });
 }
@@ -447,11 +463,15 @@ function _playerCard(p, noLeague = false, stats = null) {
           ${p.email === 'pablorvarela@gmail.com' ? `
             <span class="badge-admin badge-teal" style="cursor:default;" title="App owner — cannot be revoked">★ Owner</span>
           ` : `
-            <button class="btn-admin ${p.isAdmin ? 'btn-danger' : 'btn-secondary'}"
-              data-action="toggle-admin" data-uid="${p.uid}"
-              data-is-admin="${p.isAdmin ? 'true' : 'false'}"
-              title="${p.isAdmin ? 'Remove admin access' : 'Grant admin access'}">
-              ${p.isAdmin ? '★ Admin' : 'Make Admin'}
+            ${p.isAdmin ? `<span class="badge-admin badge-teal" style="font-size:10px;">★ Super Admin</span>` :
+              p.adminFor && Object.keys(p.adminFor).length > 0
+                ? `<span class="badge-admin badge-green" style="font-size:10px;">
+                    Admin (${Object.keys(p.adminFor).length}T)
+                   </span>`
+                : ''}
+            <button class="btn-admin btn-secondary" style="font-size:11px;"
+              data-action="manage-admin" data-uid="${p.uid}">
+              Manage Access
             </button>
           `}
         ` : ''}
@@ -463,6 +483,89 @@ function _playerCard(p, noLeague = false, stats = null) {
       </div>
     </div>
   `;
+}
+
+function _showManageAdminModal(player, seasonList, onDone) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
+    display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;`;
+
+  const adminFor = player.adminFor || {};
+
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;
+      width:100%;max-width:380px;box-shadow:0 8px 32px rgba(28,24,20,0.2);">
+      <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;margin-bottom:4px;">
+        Manage Admin Access
+      </div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:20px;">
+        ${escHtml(player.alias || player.name || player.uid)}
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;
+          background:var(--surface2);border-radius:8px;cursor:pointer;">
+          <input type="checkbox" id="ma-super" style="width:16px;height:16px;"
+            ${player.isAdmin ? 'checked' : ''}/>
+          <div>
+            <div style="font-weight:700;font-size:13px;">Super Admin</div>
+            <div style="font-size:11px;color:var(--text3);">Full access to all sections and tournaments</div>
+          </div>
+        </label>
+      </div>
+
+      ${seasonList.length ? `
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
+          letter-spacing:.5px;margin-bottom:8px;">Tournament access</div>
+        <div id="ma-seasons" style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">
+          ${seasonList.map(([sid, s]) => `
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+              background:var(--surface2);border-radius:8px;cursor:pointer;">
+              <input type="checkbox" class="ma-season-cb" data-sid="${sid}"
+                style="width:15px;height:15px;"
+                ${adminFor[sid] ? 'checked' : ''}/>
+              <span style="font-size:13px;">${escHtml(s.name || sid)}</span>
+            </label>
+          `).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:16px;">
+          Tournament admins see only their assigned tournaments in Leagues, Matches, Bracket, and WhatsApp.
+        </div>
+      ` : ''}
+
+      <div style="display:flex;gap:10px;">
+        <button id="btn-ma-save" class="btn-admin btn-primary" style="flex:1;">Save</button>
+        <button id="btn-ma-cancel" class="btn-admin btn-secondary">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const superCb  = overlay.querySelector('#ma-super');
+  const seasonCbs = [...overlay.querySelectorAll('.ma-season-cb')];
+
+  // When super admin is checked, season checkboxes don't matter but keep them editable
+  overlay.querySelector('#btn-ma-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#btn-ma-save').addEventListener('click', async () => {
+    const isSuperAdmin = superCb.checked;
+    const newAdminFor  = {};
+    for (const cb of seasonCbs) {
+      if (cb.checked) newAdminFor[cb.dataset.sid] = true;
+    }
+    const hasAny = isSuperAdmin || Object.keys(newAdminFor).length > 0;
+
+    const updates = {
+      [`players/${player.uid}/isAdmin`]:   isSuperAdmin || null,
+      [`players/${player.uid}/adminFor`]:  Object.keys(newAdminFor).length > 0 ? newAdminFor : null,
+      [`players/${player.uid}/adminRole`]: hasAny ? (isSuperAdmin ? 'Super Admin' : 'League Admin') : null,
+    };
+    await dbMultiUpdate(updates);
+    overlay.remove();
+    toast(hasAny ? 'Admin access saved' : 'Admin access revoked', 'success');
+    onDone();
+  });
 }
 
 function _computeAllMatchStats(seasons) {
@@ -1025,6 +1128,11 @@ function _getAdminSid(sortedSeasons) {
   return sid;
 }
 
+function _allowedSeasons(sortedSeasons) {
+  if (!_adminIsScoped) return sortedSeasons;
+  return sortedSeasons.filter(([sid]) => _adminForSids.has(sid));
+}
+
 // ─── Leagues ──────────────────────────────────────────────────────────────────
 
 async function renderLeagues(el) {
@@ -1036,8 +1144,9 @@ async function renderLeagues(el) {
   const seasons = allSeasonsRaw || {};
   const leagueNotifications = leagueNotifsRaw || {};
 
-  const sortedSeasons = Object.entries(seasons)
-    .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
+  const sortedSeasons = _allowedSeasons(
+    Object.entries(seasons).sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0))
+  );
 
   const viewSid = _getAdminSid(sortedSeasons);
 
@@ -2134,8 +2243,9 @@ async function renderMatches(el) {
   const players = allPlayers || {};
   const seasons = allSeasonsRaw || {};
 
-  const sortedSeasons = Object.entries(seasons)
-    .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
+  const sortedSeasons = _allowedSeasons(
+    Object.entries(seasons).sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0))
+  );
 
   if (!sortedSeasons.length) {
     el.innerHTML = '<div class="admin-empty">No tournaments found.</div>';
@@ -2653,8 +2763,9 @@ async function renderBracketAdmin(el) {
   const players = allPlayers || {};
   const seasons = allSeasonsRaw || {};
 
-  const sortedSeasons = Object.entries(seasons)
-    .sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0));
+  const sortedSeasons = _allowedSeasons(
+    Object.entries(seasons).sort(([, sA], [, sB]) => (sB.createdAt || 0) - (sA.createdAt || 0))
+  );
 
   if (!sortedSeasons.length) { el.innerHTML = '<div class="admin-empty">No tournaments.</div>'; return; }
 

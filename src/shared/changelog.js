@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.2',
+    date:    '2026-08-05',
+    adminChanges: [
+      'Tournament-scoped admin roles: grant players access to specific tournaments only.',
+      '"Manage Access" modal on each player card — Super Admin (full access) or per-tournament checkboxes.',
+      'Scoped admins see only Leagues, Matches, Bracket, WhatsApp, and Players (filtered to their tournaments).',
+      'Super Admin, Invites, Stats, and Settings remain exclusive to full admins.',
+    ],
+  },
+  {
     version: '1.15.1',
     date:    '2026-08-05',
     adminChanges: [

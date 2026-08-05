@@ -1066,6 +1066,7 @@ export function showAvatarPicker(container, uid, onAuthenticated) {
         avatarId:  avatarId,
         adminRole: updatedPlayer ? updatedPlayer.adminRole : null,
         isAdmin:   updatedPlayer ? (updatedPlayer.isAdmin || false) : false,
+        adminFor:  updatedPlayer?.adminFor || null,
       };
 
       localStorage.setItem('atp_player_creds', JSON.stringify(creds));
@@ -1232,6 +1233,7 @@ export function showLogin(container, onAuthenticated) {
         avatarId:  player.avatarId || null,
         adminRole: player.adminRole || null,
         isAdmin:   player.isAdmin  || false,
+        adminFor:  player.adminFor  || null,
       };
 
       localStorage.setItem('atp_player_creds', JSON.stringify(creds));
@@ -1507,6 +1509,7 @@ async function _launchAfterSetup(container, uid, onAuthenticated) {
       avatarId:  player.avatarId || null,
       adminRole: player.adminRole || null,
       isAdmin:   player.isAdmin  || false,
+      adminFor:  player.adminFor  || null,
     };
 
     localStorage.setItem('atp_player_creds', JSON.stringify(creds));
