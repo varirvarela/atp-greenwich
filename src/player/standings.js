@@ -140,7 +140,9 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
   pointsCfg = pointsCfg || {};
   const gsStatus    = gs.status || 'pending';
   const showGsPts   = gsStatus === 'active' || gsStatus === 'closed';
+  const isRR        = gs.stageMode === 'round_robin';
   const qualifyPts  = gs.qualifyPoints ?? 6;
+  const qualifyCount = gs.qualifyCount || 4;
   const deadline    = gs.deadline;
   const pts         = pointsCfg;
 
@@ -155,14 +157,14 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
       ${deadlineStr && gsStatus === 'active' ? `<span style="font-size:10px;color:var(--text3);font-family:var(--font-mono);">Deadline ${deadlineStr}</span>` : ''}
     </div>
 
-    ${showGsPts ? _rulesAccordion(pts, qualifyPts, deadlineStr) : ''}
+    ${showGsPts ? _rulesAccordion(pts, qualifyPts, deadlineStr, isRR, qualifyCount) : ''}
 
-    ${table.map(row => {
+    ${table.map((row, idx) => {
       const p         = allPlayers[row.uid] || { name: 'Unknown', alias: row.uid };
       const isMe      = row.uid === myUid;
       const s         = row.standing;
       const gp        = row.groupPoints ?? null;
-      const qualifies = gp !== null && gp >= qualifyPts;
+      const qualifies = gp !== null && (isRR ? idx < qualifyCount : gp >= qualifyPts);
       const isDoublesMd = leagueMode !== 'singles';
       const elo         = isDoublesMd
         ? (allPlayers[row.uid]?.doublesEloRating || 1000)
@@ -205,7 +207,7 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
   `;
 }
 
-function _rulesAccordion(pts, qualifyPts, deadlineStr) {
+function _rulesAccordion(pts, qualifyPts, deadlineStr, isRR = false, qualifyCount = 4) {
   const played       = pts.played        ?? 1;
   const wonBonus     = pts.wonBonus      ?? 2;
   const missed       = pts.missed        ?? -1;
@@ -221,6 +223,10 @@ function _rulesAccordion(pts, qualifyPts, deadlineStr) {
       </span>
     </div>`;
   }
+
+  const qualifyLine = isRR
+    ? `Top <strong style="color:var(--text);">${qualifyCount} players</strong> advance to the bracket.`
+    : `Top players with <strong style="color:var(--text);">≥ ${qualifyPts} pts</strong> advance to the bracket.`;
 
   return `
     <details style="margin-bottom:10px;border-radius:8px;overflow:hidden;">
@@ -240,8 +246,7 @@ function _rulesAccordion(pts, qualifyPts, deadlineStr) {
         ${row('Opponent forfeits', forfeitWinner)}
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);
           font-size:11px;color:var(--text3);">
-          Top players with <strong style="color:var(--text);">≥ ${qualifyPts} pts</strong>
-          advance to the bracket.
+          ${qualifyLine}
           ${deadlineStr ? `&nbsp;·&nbsp;Deadline: <strong style="color:var(--text);">${deadlineStr}</strong>.` : ''}
         </div>
       </div>

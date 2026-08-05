@@ -1136,19 +1136,28 @@ async function renderLeagues(el) {
       const nameEl  = el.querySelector(`#league-name-input-${sid}`);
       const sportEl = el.querySelector(`#league-sport-input-${sid}`);
       const modeEl  = el.querySelector(`#league-mode-input-${sid}`);
+      const stageEl = el.querySelector(`#league-stage-input-${sid}`);
       const name    = nameEl ? nameEl.value.trim() : '';
       if (!name) { toast('Enter a league name', 'error'); return; }
       const sport      = sportEl?.value || 'tennis';
       const leagueMode = modeEl?.value  || 'singles';
+      const stageMode2 = stageEl?.value || 'classic';
       const lid = 'league_' + Date.now().toString(36);
+      const gsConfig = { stageMode: stageMode2, deadline: null, status: 'pending' };
+      if (stageMode2 === 'round_robin') {
+        gsConfig.qualifyCount = 4;
+      } else {
+        gsConfig.matchesPerPlayer = 4;
+        gsConfig.qualifyPoints    = 6;
+      }
       await dbSet(sRef(sid, lid), {
         name,
         sport,
         leagueMode,
-        division:      name.split(' ')[0],
-        createdAt:     Date.now(),
-        scoringConfig: { minMatches: 6, minWins: 4, bracketSize: 4 },
-        groupStageConfig: { matchesPerPlayer: 4, qualifyPoints: 6, deadline: null, status: 'pending' },
+        division:         name.split(' ')[0],
+        createdAt:        Date.now(),
+        scoringConfig:    { minMatches: 6, minWins: 4, bracketSize: 4 },
+        groupStageConfig: gsConfig,
         pointsConfig:     { played: 1, wonBonus: 2, missed: -1, forfeitLoser: -1, forfeitWinner: 2 },
       });
       toast('League created', 'success');
@@ -1237,10 +1246,8 @@ async function renderLeagues(el) {
   el.querySelectorAll('[data-action="save-gs-config"]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const { sid, lid } = btn.dataset;
-      const mpp = parseInt(el.querySelector(`#gs-mpp-${lid}`)?.value, 10) || 4;
-      const qp  = parseInt(el.querySelector(`#gs-qp-${lid}`)?.value,  10) || 6;
       const dlRaw = el.querySelector(`#gs-dl-${lid}`)?.value;
-      const dl  = localInputToTs(dlRaw);
+      const dl    = localInputToTs(dlRaw);
 
       const pointsConfig = {
         played:        parseFloat(el.querySelector(`#gs-pts-played-${lid}`)?.value)  ?? 1,
@@ -1250,16 +1257,29 @@ async function renderLeagues(el) {
         forfeitWinner: parseFloat(el.querySelector(`#gs-pts-fwin-${lid}`)?.value)    ?? 2,
       };
 
-      const league = seasons[sid]?.leagues?.[lid] || {};
-      const currentStatus = league.groupStageConfig?.status || 'pending';
+      const league        = seasons[sid]?.leagues?.[lid] || {};
+      const stageMode     = league.groupStageConfig?.stageMode || 'classic';
+      const currentStatus = league.groupStageConfig?.status    || 'pending';
 
       const updates = {
-        [`seasons/${sid}/leagues/${lid}/groupStageConfig/matchesPerPlayer`]: mpp,
-        [`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyPoints`]:    qp,
-        [`seasons/${sid}/leagues/${lid}/groupStageConfig/deadline`]:         dl,
-        [`seasons/${sid}/leagues/${lid}/groupStageConfig/status`]:           currentStatus,
-        [`seasons/${sid}/leagues/${lid}/pointsConfig`]:                      pointsConfig,
+        [`seasons/${sid}/leagues/${lid}/groupStageConfig/deadline`]: dl,
+        [`seasons/${sid}/leagues/${lid}/groupStageConfig/status`]:   currentStatus,
+        [`seasons/${sid}/leagues/${lid}/pointsConfig`]:              pointsConfig,
       };
+
+      if (stageMode === 'round_robin') {
+        const qc = parseInt(el.querySelector(`#gs-qc-${lid}`)?.value, 10) || 4;
+        updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyCount`] = qc;
+      } else {
+        const mpp = parseInt(el.querySelector(`#gs-mpp-${lid}`)?.value, 10) || 4;
+        const qp  = parseInt(el.querySelector(`#gs-qp-${lid}`)?.value,  10) || 6;
+        updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/matchesPerPlayer`] = mpp;
+        updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyPoints`]    = qp;
+      }
+
+      const waId = el.querySelector(`#gs-waid-${lid}`)?.value.trim() || null;
+      updates[`seasons/${sid}/leagues/${lid}/whatsappGroupId`] = waId;
+
       // Backfill deadline on all unconfirmed group matches so match cards stay in sync
       for (const [mid, m] of Object.entries(league.matches || {})) {
         if (m.groupMatch && m.status !== 'confirmed') {
@@ -1289,33 +1309,47 @@ async function renderLeagues(el) {
       const gs         = league.groupStageConfig || {};
       const pointsCfg  = league.pointsConfig || {};
       const memberUids = Object.keys(league.members || {});
+      const stageMode  = gs.stageMode || 'classic';
 
       const matchesObj = await dbGet(sRef(sid, lid, 'matches'));
       const allMatches = matchesObj || {};
-      const qualifyPts = gs.qualifyPoints || 6;
 
       const standings = memberUids.map(uid => ({
         uid,
-        pts: calculateGroupPoints(allMatches, uid, pointsCfg),
+        pts:  calculateGroupPoints(allMatches, uid, pointsCfg),
         name: (allPlayers[uid]?.alias || allPlayers[uid]?.name || uid),
       })).sort((a, b) => b.pts - a.pts);
 
-      const qualifiers = standings.filter(s => s.pts >= qualifyPts);
-      const msg =
-        `Group Stage Summary (qualify: ≥${qualifyPts} pts)\n\n` +
-        standings.map(s =>
-          `${s.pts >= qualifyPts ? '✓' : '✗'} ${s.name}: ${s.pts} pts`
-        ).join('\n') +
-        `\n\n${qualifiers.length} player(s) qualify for bracket.` +
-        `\n\nClose group stage and mark qualifiers?`;
+      let msg;
+      let qualifiesFn;
+
+      if (stageMode === 'round_robin') {
+        const qualifyCount = gs.qualifyCount || 4;
+        msg = `Round Robin — top ${qualifyCount} advance\n\n` +
+          standings.map((s, i) =>
+            `${i < qualifyCount ? '✓' : '✗'} ${s.name}: ${s.pts} pts`
+          ).join('\n') +
+          `\n\nClose group stage and mark top ${qualifyCount} as qualified?`;
+        qualifiesFn = (_, idx) => idx < qualifyCount;
+      } else {
+        const qualifyPts = gs.qualifyPoints || 6;
+        msg = `Group Stage Summary (qualify: ≥${qualifyPts} pts)\n\n` +
+          standings.map(s =>
+            `${s.pts >= qualifyPts ? '✓' : '✗'} ${s.name}: ${s.pts} pts`
+          ).join('\n') +
+          `\n\n${standings.filter(s => s.pts >= qualifyPts).length} player(s) qualify for bracket.` +
+          `\n\nClose group stage and mark qualifiers?`;
+        qualifiesFn = (s) => s.pts >= qualifyPts;
+      }
 
       if (!confirm(msg)) return;
 
       const updates = {};
       updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/status`] = 'closed';
-      for (const { uid, pts } of standings) {
-        updates[`seasons/${sid}/leagues/${lid}/members/${uid}/groupPoints`]   = pts;
-        updates[`seasons/${sid}/leagues/${lid}/members/${uid}/qualified`]     = pts >= qualifyPts;
+      for (let i = 0; i < standings.length; i++) {
+        const { uid, pts } = standings[i];
+        updates[`seasons/${sid}/leagues/${lid}/members/${uid}/groupPoints`] = pts;
+        updates[`seasons/${sid}/leagues/${lid}/members/${uid}/qualified`]   = qualifiesFn(standings[i], i);
       }
       await dbMultiUpdate(updates);
       toast('Group stage closed. Qualifiers marked.', 'success');
@@ -1328,12 +1362,19 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   const gs          = league.groupStageConfig || {};
   const pts         = league.pointsConfig     || {};
   const memberUids  = Object.keys(league.members || {});
+  const stageMode   = gs.stageMode || 'classic';
+  const isRR        = stageMode === 'round_robin';
   const mpp         = gs.matchesPerPlayer || 4;
   const qualifyPts  = gs.qualifyPoints ?? 6;
+  const qualifyCount = gs.qualifyCount || 4;
 
   const ptsPerWin      = (pts.played ?? 1) + (pts.wonBonus ?? 2);
   const smartQP        = Math.round(mpp * ptsPerWin * (2 / 3));
   const deadlineDefault = gs.deadline ? tsToLocalInput(gs.deadline) : '';
+
+  // For round_robin: auto mpp = n-1, total matches = n*(n-1)/2
+  const rrMpp         = memberUids.length > 1 ? memberUids.length - 1 : 1;
+  const rrMatchCount  = Math.floor(memberUids.length * rrMpp / 2);
 
   const overlay = document.createElement('div');
   overlay.style.cssText = `position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
@@ -1346,31 +1387,49 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
       </div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">
         ${memberUids.length} players
+        ${isRR ? `<span style="margin-left:8px;" class="badge-admin" style="background:rgba(99,102,241,.15);color:#4338ca;">Round Robin</span>` : ''}
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-        <div class="admin-input-group">
-          <label class="admin-input-label">Matches per player</label>
-          <input id="rf-mpp" class="admin-input" type="number" min="1" max="${memberUids.length - 1}" value="${mpp}"/>
+      ${isRR ? `
+        <div style="background:rgba(99,102,241,.08);border-radius:8px;padding:10px 12px;
+          font-size:13px;color:var(--text2);margin-bottom:12px;">
+          Every player faces every other player once.
+          <strong>${rrMatchCount} matches total</strong> (${rrMpp} per player).
         </div>
-        <div class="admin-input-group">
-          <label class="admin-input-label">
-            Qualify points (≥)
-            <span style="color:var(--text3);font-weight:400;"> — recommended <span id="rf-smart-qp">${smartQP}</span></span>
-          </label>
-          <input id="rf-qp" class="admin-input" type="number" min="0" value="${qualifyPts}"/>
+        <div style="display:grid;gap:10px;margin-bottom:12px;">
+          <div class="admin-input-group">
+            <label class="admin-input-label">Qualify top N players</label>
+            <input id="rf-qc" class="admin-input" type="number" min="1" max="${memberUids.length}" value="${qualifyCount}"/>
+          </div>
+          <div class="admin-input-group">
+            <label class="admin-input-label">Deadline to complete all matches</label>
+            <input id="rf-deadline" class="admin-input" type="datetime-local" value="${deadlineDefault}"/>
+          </div>
         </div>
-        <div class="admin-input-group" style="grid-column:1/-1;">
-          <label class="admin-input-label">Deadline to complete all matches</label>
-          <input id="rf-deadline" class="admin-input" type="datetime-local" value="${deadlineDefault}"/>
+      ` : `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div class="admin-input-group">
+            <label class="admin-input-label">Matches per player</label>
+            <input id="rf-mpp" class="admin-input" type="number" min="1" max="${memberUids.length - 1}" value="${mpp}"/>
+          </div>
+          <div class="admin-input-group">
+            <label class="admin-input-label">
+              Qualify points (≥)
+              <span style="color:var(--text3);font-weight:400;"> — recommended <span id="rf-smart-qp">${smartQP}</span></span>
+            </label>
+            <input id="rf-qp" class="admin-input" type="number" min="0" value="${qualifyPts}"/>
+          </div>
+          <div class="admin-input-group" style="grid-column:1/-1;">
+            <label class="admin-input-label">Deadline to complete all matches</label>
+            <input id="rf-deadline" class="admin-input" type="datetime-local" value="${deadlineDefault}"/>
+          </div>
         </div>
-      </div>
-
-      <div style="background:rgba(184,64,8,.06);border-radius:8px;padding:10px 12px;
-        font-size:12px;color:var(--ace);margin-bottom:16px;">
-        Points: won ${ptsPerWin} &nbsp;·&nbsp; lost ${pts.played??1} &nbsp;·&nbsp;
-        missed ${pts.missed??-1} &nbsp;·&nbsp; forfeit ${pts.forfeitLoser??-1}&nbsp;/&nbsp;+${pts.forfeitWinner??2}
-      </div>
+        <div style="background:rgba(184,64,8,.06);border-radius:8px;padding:10px 12px;
+          font-size:12px;color:var(--ace);margin-bottom:16px;">
+          Points: won ${ptsPerWin} &nbsp;·&nbsp; lost ${pts.played??1} &nbsp;·&nbsp;
+          missed ${pts.missed??-1} &nbsp;·&nbsp; forfeit ${pts.forfeitLoser??-1}&nbsp;/&nbsp;+${pts.forfeitWinner??2}
+        </div>
+      `}
 
       <!-- Step 1 buttons -->
       <div id="rf-step1-btns" style="display:flex;gap:10px;">
@@ -1393,16 +1452,17 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   `;
   document.body.appendChild(overlay);
 
-  const mppInput = overlay.querySelector('#rf-mpp');
+  const mppInput = isRR ? null : overlay.querySelector('#rf-mpp');
 
-  // Update recommended qualify points when mpp changes
-  mppInput.addEventListener('input', () => {
-    const newMpp = parseInt(mppInput.value, 10) || 1;
-    overlay.querySelector('#rf-smart-qp').textContent = Math.round(newMpp * ptsPerWin * (2 / 3));
-    // Reset to step 1 if user changes mpp after previewing
-    overlay.querySelector('#rf-step2').style.display = 'none';
-    overlay.querySelector('#rf-step1-btns').style.display = 'flex';
-  });
+  // Update recommended qualify points when mpp changes (classic only)
+  if (!isRR && mppInput) {
+    mppInput.addEventListener('input', () => {
+      const newMpp = parseInt(mppInput.value, 10) || 1;
+      overlay.querySelector('#rf-smart-qp').textContent = Math.round(newMpp * ptsPerWin * (2 / 3));
+      overlay.querySelector('#rf-step2').style.display = 'none';
+      overlay.querySelector('#rf-step1-btns').style.display = 'flex';
+    });
+  }
 
   overlay.querySelector('#btn-rf-cancel').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
@@ -1412,9 +1472,31 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   // Step 1: generate and preview
   overlay.querySelector('#btn-rf-preview').addEventListener('click', () => {
     if (memberUids.length < 2) { toast('Need at least 2 members', 'error'); return; }
-    const newMpp = parseInt(mppInput.value, 10) || mpp;
     const validationEl = overlay.querySelector('#rf-validation');
     const confirmBtn   = overlay.querySelector('#btn-rf-confirm');
+
+    if (isRR) {
+      // Round robin: everyone plays everyone — always valid
+      pendingPairs = generateFixtures(memberUids, rrMpp);
+      validationEl.innerHTML = `
+        <div style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);
+          border-radius:8px;padding:12px 14px;">
+          <div style="font-weight:600;color:#15803d;margin-bottom:4px;">
+            ✓ Round robin fixtures ready
+          </div>
+          <div style="font-size:13px;color:var(--text2);">
+            ${pendingPairs.length} matches · every player faces every other player once
+          </div>
+        </div>`;
+      confirmBtn.textContent = 'Confirm & Release';
+      confirmBtn.className = 'btn-admin btn-teal';
+      confirmBtn.style.display = '';
+      overlay.querySelector('#rf-step1-btns').style.display = 'none';
+      overlay.querySelector('#rf-step2').style.display = 'block';
+      return;
+    }
+
+    const newMpp = parseInt(mppInput.value, 10) || mpp;
 
     // Mathematically impossible: n×mpp is odd → can never be split into pairs
     if ((memberUids.length * newMpp) % 2 !== 0) {
@@ -1498,8 +1580,9 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   overlay.querySelector('#btn-rf-confirm').addEventListener('click', async () => {
     if (!pendingPairs || !pendingPairs.length) return;
 
-    const newMpp = parseInt(mppInput.value, 10) || mpp;
-    const newQP  = parseInt(overlay.querySelector('#rf-qp').value, 10) ?? qualifyPts;
+    const newMpp = isRR ? rrMpp : (parseInt(mppInput.value, 10) || mpp);
+    const newQP  = isRR ? null  : (parseInt(overlay.querySelector('#rf-qp').value, 10) ?? qualifyPts);
+    const newQC  = isRR ? (parseInt(overlay.querySelector('#rf-qc').value, 10) || qualifyCount) : null;
     const dlRaw  = overlay.querySelector('#rf-deadline').value;
     const dl     = localInputToTs(dlRaw);
 
@@ -1522,7 +1605,11 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
     }
     updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/status`]          = 'active';
     updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/matchesPerPlayer`] = newMpp;
-    updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyPoints`]    = newQP;
+    if (isRR) {
+      updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyCount`] = newQC;
+    } else {
+      updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/qualifyPoints`] = newQP;
+    }
     if (dl) updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/deadline`] = dl;
     updates[`notifications/group_fixtures/${sid}_${lid}`] = { sid, lid, deadline: dl || null, createdAt: Date.now() };
 
@@ -1631,6 +1718,13 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
               <option value="doubles_team">Doubles – Team</option>
             </select>
           </div>
+          <div class="admin-input-group" style="flex:1;min-width:130px;">
+            <label class="admin-input-label">Stage mode</label>
+            <select id="league-stage-input-${sid}" class="admin-input">
+              <option value="classic">Classic</option>
+              <option value="round_robin">Round Robin</option>
+            </select>
+          </div>
         </div>
         <div style="margin-top:8px;">
           <button class="btn-admin btn-teal" data-action="create-league" data-sid="${sid}">Create League</button>
@@ -1682,6 +1776,9 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
                 <span class="badge-admin badge-muted">${
                   league.leagueMode === 'doubles_pickup' ? 'Doubles (Pickup)' : 'Doubles (Team)'
                 }</span>
+              ` : ''}
+              ${gs.stageMode === 'round_robin' ? `
+                <span class="badge-admin" style="background:rgba(99,102,241,.15);color:#4338ca;font-size:10px;">Round Robin</span>
               ` : ''}
               <button class="btn-admin btn-ghost" style="color:var(--ace3);font-size:11px;"
                 data-action="delete-league" data-sid="${sid}" data-lid="${lid}"
@@ -1808,20 +1905,33 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
               <div id="gs-config-${lid}" style="display:none;background:var(--surface);
                 border-radius:6px;padding:10px;margin-bottom:10px;">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-                  <div class="admin-input-group">
-                    <label class="admin-input-label">Matches per player</label>
-                    <input id="gs-mpp-${lid}" class="admin-input" type="number" min="1" max="20"
-                      value="${gs.matchesPerPlayer || 4}"/>
-                  </div>
-                  <div class="admin-input-group">
-                    <label class="admin-input-label">Qualify points (≥)</label>
-                    <input id="gs-qp-${lid}" class="admin-input" type="number" min="0"
-                      value="${gs.qualifyPoints || 6}"/>
-                  </div>
+                  ${gs.stageMode === 'round_robin' ? `
+                    <div class="admin-input-group" style="grid-column:1/-1;">
+                      <label class="admin-input-label">Qualify top N players</label>
+                      <input id="gs-qc-${lid}" class="admin-input" type="number" min="1"
+                        value="${gs.qualifyCount || 4}"/>
+                    </div>
+                  ` : `
+                    <div class="admin-input-group">
+                      <label class="admin-input-label">Matches per player</label>
+                      <input id="gs-mpp-${lid}" class="admin-input" type="number" min="1" max="20"
+                        value="${gs.matchesPerPlayer || 4}"/>
+                    </div>
+                    <div class="admin-input-group">
+                      <label class="admin-input-label">Qualify points (≥)</label>
+                      <input id="gs-qp-${lid}" class="admin-input" type="number" min="0"
+                        value="${gs.qualifyPoints || 6}"/>
+                    </div>
+                  `}
                   <div class="admin-input-group" style="grid-column:1/-1;">
                     <label class="admin-input-label">Deadline (${deadlineStr})</label>
                     <input id="gs-dl-${lid}" class="admin-input" type="datetime-local"
                       value="${gs.deadline ? tsToLocalInput(gs.deadline) : ''}"/>
+                  </div>
+                  <div class="admin-input-group" style="grid-column:1/-1;">
+                    <label class="admin-input-label">WhatsApp Group ID (optional override)</label>
+                    <input id="gs-waid-${lid}" class="admin-input" placeholder="Leave blank for default"
+                      value="${league.whatsappGroupId || ''}"/>
                   </div>
                 </div>
                 <div style="font-size:11px;font-weight:700;color:var(--text3);

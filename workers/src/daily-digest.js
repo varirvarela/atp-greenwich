@@ -141,7 +141,7 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
     const encIdx = Math.floor(now / 86400000) % ENCOURAGING_MESSAGES.length;
     const { text: encText } = ENCOURAGING_MESSAGES[encIdx];
     msg += `\n_${encText}_`;
-    await sendWA(msg.trim(), env);
+    await sendWA(msg.trim(), env, league.whatsappGroupId);
   }
 
   // Push reminders
@@ -279,6 +279,6 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
       const alias = players?.[uid]?.alias || players?.[uid]?.name || uid;
       msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${groupPoints}pts (${wins}W ${losses}L)\n`;
     });
-    await sendWA(msg.trim(), env);
+    await sendWA(msg.trim(), env, league.whatsappGroupId);
   }
 }

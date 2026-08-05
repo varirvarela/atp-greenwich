@@ -10,6 +10,20 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.0',
+    date:    '2026-08-05',
+    changes: [
+      'Round Robin mode: new group stage where everyone plays everyone and the top N players advance.',
+      'Standings now show "Top N advance" qualification line for Round Robin leagues.',
+    ],
+    adminChanges: [
+      'Choose stage mode (Classic or Round Robin) when creating a league.',
+      'Release Fixtures auto-generates all matches for Round Robin; configure top-N qualification.',
+      'Close Group Stage ranks by points and marks the top N qualified for Round Robin.',
+      'Per-league WhatsApp Group ID: each league can route its notifications to a different WA group.',
+    ],
+  },
+  {
     version: '1.14.1',
     date:    '2026-08-04',
     changes: [

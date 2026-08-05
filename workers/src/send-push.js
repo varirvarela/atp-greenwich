@@ -84,7 +84,7 @@ export async function runSendPush(env) {
             });
           }
           if (_wantsWA(waPrefs, 'challenged'))
-            await sendWA(`🎾 *New challenge!*\n${proposerName} challenged ${challengedName} to a match.`, env);
+            await sendWA(`🎾 *New challenge!*\n${proposerName} challenged ${challengedName} to a match.`, env, league.whatsappGroupId);
           await db.set(`${base}/pushNotified/proposed`, true);
         }
 
@@ -103,7 +103,7 @@ export async function runSendPush(env) {
             }
           }
           if (_wantsWA(waPrefs, 'openChallenge'))
-            await sendWA(`🎾 *Open challenge from ${challengerName}!*\nFirst to accept in the app wins the spot.`, env);
+            await sendWA(`🎾 *Open challenge from ${challengerName}!*\nFirst to accept in the app wins the spot.`, env, league.whatsappGroupId);
           await db.set(`${base}/pushNotified/open_challenge`, true);
         }
 
@@ -155,7 +155,7 @@ export async function runSendPush(env) {
             if (dW != null && dL != null) {
               caption += `\nELO: ${wName} ${dW > 0 ? '+' : ''}${Math.round(dW)} · ${lName} ${Math.round(dL)}`;
             }
-            await sendWAPhoto(match.photoUrl || null, caption, env);
+            await sendWAPhoto(match.photoUrl || null, caption, env, league.whatsappGroupId);
           }
           await db.set(`${base}/pushNotified/confirmed`, true);
         }
@@ -174,7 +174,7 @@ export async function runSendPush(env) {
               url:   APP_URL,
             });
           if (_wantsWA(waPrefs, 'confirmed'))
-            await sendWA(`🏳️ *${forfeitName}* forfeited their group match vs *${opName}*.`, env);
+            await sendWA(`🏳️ *${forfeitName}* forfeited their group match vs *${opName}*.`, env, league.whatsappGroupId);
           await db.set(`${base}/pushNotified/forfeited`, true);
         }
       }
