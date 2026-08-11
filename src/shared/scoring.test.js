@@ -164,7 +164,7 @@ describe('buildLeagueTable', () => {
     expect(() => buildLeagueTable({},   [A, B])).not.toThrow();
   });
 
-  it('tiebreak: same wins but better gameDiff ranks higher', () => {
+  it('tiebreak: same wins, more games won ranks higher', () => {
     const bigWin = {
       status: 'confirmed',
       playerA: A,
@@ -178,8 +178,9 @@ describe('buildLeagueTable', () => {
       result: { winner: B, sets: [{ a: 7, b: 6 }, { a: 7, b: 6 }] },
     };
     const table = buildLeagueTable({ m1: bigWin, m2: smallWin }, [A, B, C]);
-    // A: 1W, GD = +12. B: 1W, GD = +2. A should rank higher.
-    expect(table[0].uid).toBe(A);
+    // A: 1W, 12 gamesWon, 0 gamesLost. B: 1W, 14 gamesWon, 12 gamesLost.
+    // Sort: matchesWon → gamesWon DESC → gamesLost ASC. B has more gamesWon so ranks first.
+    expect(table[0].uid).toBe(B);
   });
 });
 
