@@ -88,6 +88,20 @@ function _calcGroupPoints(matches, uid, pointsConfig) {
   return points;
 }
 
+function _calcGameStats(matches, uid) {
+  let gamesWon = 0, gamesLost = 0;
+  for (const m of Object.values(matches)) {
+    if (m.status !== 'confirmed' || !m.result?.sets) continue;
+    const side = m.playerA === uid ? 'a' : 'b';
+    const opp  = side === 'a' ? 'b' : 'a';
+    for (const s of m.result.sets) {
+      gamesWon  += s[side] || 0;
+      gamesLost += s[opp]  || 0;
+    }
+  }
+  return { gamesWon, gamesLost };
+}
+
 function _fmtMatchScore(result) {
   if (!result) return '';
   if (result.score) return `${result.score.a}–${result.score.b}`;
@@ -226,13 +240,23 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
 
   const pointsCfg = league.pointsConfig || {};
   const standings = memberUids
-    .map(uid => ({
-      uid,
-      ...stats[uid],
-      elo:         players[uid]?.eloRating != null ? Math.round(players[uid].eloRating) : null,
-      groupPoints: _calcGroupPoints(matches, uid, pointsCfg),
-    }))
-    .sort((a, b) => b.groupPoints - a.groupPoints || b.wins - a.wins || b.played - a.played);
+    .map(uid => {
+      const { gamesWon, gamesLost } = _calcGameStats(matches, uid);
+      return {
+        uid,
+        ...stats[uid],
+        elo:         players[uid]?.eloRating != null ? Math.round(players[uid].eloRating) : null,
+        groupPoints: _calcGroupPoints(matches, uid, pointsCfg),
+        gamesWon,
+        gamesLost,
+      };
+    })
+    .sort((a, b) =>
+      b.groupPoints - a.groupPoints ||
+      b.gamesWon    - a.gamesWon    ||
+      a.gamesLost   - b.gamesLost   ||
+      b.wins        - a.wins
+    );
 
   const results = confirmedToday
     .filter(m => m.result?.winner)

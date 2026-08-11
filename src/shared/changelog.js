@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.3',
+    date:    '2026-08-11',
+    changes: [
+      'Standings, feed, and WhatsApp now break ties consistently using games won/lost (more precise than win count alone).',
+    ],
+  },
+  {
     version: '1.15.2',
     date:    '2026-08-05',
     adminChanges: [

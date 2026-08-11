@@ -75,8 +75,10 @@ export function renderStandingsTab(el, player, creds) {
             row.groupPoints = calculateGroupPoints(allMatches, row.uid, ctx.pointsConfig);
           }
           table.sort((a, b) => {
-            if (b.groupPoints !== a.groupPoints) return b.groupPoints - a.groupPoints;
-            return b.standing.gameDiff - a.standing.gameDiff;
+            if (b.groupPoints    !== a.groupPoints)    return b.groupPoints    - a.groupPoints;
+            if (b.standing.gamesWon  !== a.standing.gamesWon)  return b.standing.gamesWon  - a.standing.gamesWon;
+            if (a.standing.gamesLost !== b.standing.gamesLost) return a.standing.gamesLost - b.standing.gamesLost;
+            return b.standing.matchesPlayed - a.standing.matchesPlayed;
           });
           let rank = 1;
           for (let i = 0; i < table.length; i++) {

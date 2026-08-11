@@ -93,13 +93,13 @@ function buildLeagueTable(allMatches, memberUids) {
     return { uid, standing };
   });
 
-  // Sort: W desc → P desc → GD desc
+  // Sort: W desc → Games Won desc → Games Lost asc → P desc
   table.sort((a, b) => {
-    if (b.standing.matchesWon !== a.standing.matchesWon)
-      return b.standing.matchesWon - a.standing.matchesWon;
-    if (b.standing.matchesPlayed !== a.standing.matchesPlayed)
-      return b.standing.matchesPlayed - a.standing.matchesPlayed;
-    return b.standing.gameDiff - a.standing.gameDiff;
+    const s1 = a.standing, s2 = b.standing;
+    if (s2.matchesWon  !== s1.matchesWon)  return s2.matchesWon  - s1.matchesWon;
+    if (s2.gamesWon    !== s1.gamesWon)    return s2.gamesWon    - s1.gamesWon;
+    if (s1.gamesLost   !== s2.gamesLost)   return s1.gamesLost   - s2.gamesLost;
+    return s2.matchesPlayed - s1.matchesPlayed;
   });
 
   // Assign ranks (tied players get the same rank)
@@ -108,9 +108,10 @@ function buildLeagueTable(allMatches, memberUids) {
     if (i > 0) {
       const prev = table[i - 1].standing;
       const curr = table[i].standing;
-      const tied = prev.matchesWon === curr.matchesWon
-        && prev.matchesPlayed === curr.matchesPlayed
-        && prev.gameDiff === curr.gameDiff;
+      const tied = prev.matchesWon   === curr.matchesWon
+        && prev.gamesWon    === curr.gamesWon
+        && prev.gamesLost   === curr.gamesLost
+        && prev.matchesPlayed === curr.matchesPlayed;
       if (!tied) rank = i + 1;
     }
     table[i].rank = rank;
