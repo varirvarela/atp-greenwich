@@ -171,8 +171,12 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
       const elo         = isDoublesMd
         ? (allPlayers[row.uid]?.doublesEloRating || 1000)
         : allPlayers[row.uid]?.eloRating;
-      const wl        = `${s.matchesWon}W–${s.matchesLost ?? (s.matchesPlayed - s.matchesWon)}L`;
-      const stats     = _computePlayerStats(allMatches, row.uid);
+      const matchesLost = s.matchesLost ?? (s.matchesPlayed - s.matchesWon);
+      const gW          = s.gamesWon  ?? 0;
+      const gL          = s.gamesLost ?? 0;
+      const gD          = gW - gL;
+      const gDStr       = (gD >= 0 ? '+' : '') + gD;
+      const stats       = _computePlayerStats(allMatches, row.uid);
       return `
         <div data-view-player="${row.uid}" style="display:flex;align-items:center;gap:8px;
           padding:10px 12px;cursor:pointer;
@@ -187,8 +191,12 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
             color:${isMe ? 'var(--ace)' : 'var(--text)'};">
             ${isMe ? 'You' : escHtml(p.alias || p.name)}
           </span>
-          <span style="font-family:var(--font-mono);font-size:11px;font-weight:600;
-            color:var(--text3);flex-shrink:0;">${wl}</span>
+          <div style="flex-shrink:0;text-align:right;">
+            <div style="font-family:var(--font-mono);font-size:11px;font-weight:600;
+              color:var(--text3);">${s.matchesWon}W–${matchesLost}L</div>
+            <div style="font-family:var(--font-mono);font-size:10px;
+              color:var(--text3);">${gW}–${gL}g (${gDStr})</div>
+          </div>
           ${(stats.missed + stats.forfeited) > 0 ? `
             <span style="font-family:var(--font-mono);font-size:10px;color:var(--ace3);
               flex-shrink:0;" title="Missed + forfeited matches">${stats.missed + stats.forfeited}M</span>

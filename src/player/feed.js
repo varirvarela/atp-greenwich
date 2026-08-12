@@ -521,7 +521,7 @@ function _activityCard(item, allPlayers, myLeagues) {
         standingList.forEach((s, i) => {
           const elo   = s.elo != null ? ` &nbsp;·&nbsp; ${s.elo}` : '';
           const games = (s.gamesWon != null && s.gamesLost != null)
-            ? ` <span style="color:var(--text3);font-size:10px;">(${s.gamesWon}–${s.gamesLost}g)</span>`
+            ? (() => { const d = s.gamesWon - s.gamesLost; return ` <span style="color:var(--text3);font-size:10px;">(${s.gamesWon}–${s.gamesLost}g ${d >= 0 ? '+' : ''}${d})</span>`; })()
             : '';
           parts.push(`${i + 1}. ${medals[i] || ''} <b>${escHtml(playerName(s.uid))}</b> — ${s.wins}W ${s.losses}L${games}${elo}`);
         });

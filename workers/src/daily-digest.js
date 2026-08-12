@@ -299,9 +299,11 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
 
     // Standings sorted by points
     msg += '\n';
-    standings.forEach(({ uid, wins, losses, groupPoints }, i) => {
+    standings.forEach(({ uid, wins, losses, groupPoints, gamesWon, gamesLost }, i) => {
       const alias = players?.[uid]?.alias || players?.[uid]?.name || uid;
-      msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${groupPoints}pts (${wins}W ${losses}L)\n`;
+      const gD    = (gamesWon || 0) - (gamesLost || 0);
+      const gDStr = (gD >= 0 ? '+' : '') + gD;
+      msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${groupPoints}pts (${wins}W ${losses}L · ${gDStr}g)\n`;
     });
     await sendWA(msg.trim(), env, league.whatsappGroupId);
   }

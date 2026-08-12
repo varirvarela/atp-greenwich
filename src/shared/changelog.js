@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.4',
+    date:    '2026-08-12',
+    changes: [
+      'Standings now shows games won, games against, and game diff (±) per player.',
+      'Feed and WhatsApp standings also show game diff alongside wins/losses.',
+    ],
+  },
+  {
     version: '1.15.3',
     date:    '2026-08-11',
     changes: [
