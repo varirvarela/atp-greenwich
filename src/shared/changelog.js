@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.5',
+    date:    '2026-08-12',
+    changes: [
+      'Fixed game counts in feed and WhatsApp standings — games from other players\' matches were incorrectly included.',
+    ],
+  },
+  {
     version: '1.15.4',
     date:    '2026-08-12',
     changes: [

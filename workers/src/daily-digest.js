@@ -92,6 +92,7 @@ function _calcGameStats(matches, uid) {
   let gamesWon = 0, gamesLost = 0;
   for (const m of Object.values(matches)) {
     if (m.status !== 'confirmed' || !m.result?.sets) continue;
+    if (m.playerA !== uid && m.playerB !== uid) continue;
     const side = m.playerA === uid ? 'a' : 'b';
     const opp  = side === 'a' ? 'b' : 'a';
     for (const s of m.result.sets) {
