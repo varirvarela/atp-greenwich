@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.8',
+    date:    '2026-08-14',
+    changes: [
+      'Players in a doubles team can rename their team from the Profile tab.',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.15.7',
     date:    '2026-08-14',
     changes: [],

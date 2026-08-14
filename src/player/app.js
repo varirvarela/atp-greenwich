@@ -797,6 +797,9 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
       </div>
       ` : ''}
 
+      <!-- My team (shown only for doubles_team leagues, loaded async) -->
+      <div class="card" id="profile-teams-card" style="display:none;margin-bottom:16px;"></div>
+
       <!-- Season stats (loaded async below) -->
       <div class="card" style="margin-bottom:16px;" id="profile-stats-card">
         <div class="t-label t-muted" style="margin-bottom:12px;">Season Stats</div>
@@ -987,6 +990,43 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
     if (chartCard) chartCard.style.display = 'none';
   });
 
+  // Load doubles team memberships
+  _loadMyTeams(creds.uid).then(teams => {
+    const card = el.querySelector('#profile-teams-card');
+    if (!card || teams.length === 0) return;
+    card.style.display = '';
+    const renderTeamRows = (list) => list.map(t => `
+      <div style="display:flex;justify-content:space-between;align-items:center;
+        padding:10px 0;border-bottom:1px solid var(--border);" data-team-row="${t.teamId}">
+        <div>
+          <div style="font-size:14px;font-weight:600;">${escHtml(t.name)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">${escHtml(t.leagueName)}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" data-sid="${escHtml(t.sid)}" data-lid="${escHtml(t.lid)}"
+          data-team-id="${escHtml(t.teamId)}"
+          style="font-size:11px;flex-shrink:0;">Rename</button>
+      </div>
+    `).join('');
+    const populate = (list) => {
+      card.innerHTML = `
+        <div class="t-label t-muted" style="margin-bottom:8px;">My Team</div>
+        ${renderTeamRows(list)}
+      `;
+      card.querySelectorAll('[data-team-id]').forEach(btn => {
+        const { sid, lid, teamId } = btn.dataset;
+        const row = card.querySelector(`[data-team-row="${teamId}"]`);
+        const currentName = row?.querySelector('[style*="font-weight:600"]')?.textContent || '';
+        btn.addEventListener('click', () => {
+          showEditTeamNameModal(sid, lid, teamId, currentName, (newName) => {
+            if (row) row.querySelector('[style*="font-weight:600"]').textContent = newName;
+            btn.dataset.teamName = newName;
+          });
+        });
+      });
+    };
+    populate(teams);
+  });
+
   const changeBtn = el.querySelector('#btn-change-avatar');
   if (changeBtn && onAvatarChanged) {
     changeBtn.addEventListener('click', () => {
@@ -1014,6 +1054,93 @@ function renderProfileTab(el, player, creds, onSignOut, onAvatarChanged, onAlias
   if (installAppBtn && onInstallApp) {
     installAppBtn.addEventListener('click', onInstallApp);
   }
+}
+
+// ─── Team helpers ─────────────────────────────────────────────────────────────
+
+async function _loadMyTeams(uid) {
+  const seasons = await dbGet(dbRef('seasons'));
+  const teams = [];
+  for (const [sid, season] of Object.entries(seasons || {})) {
+    for (const [lid, league] of Object.entries(season.leagues || {})) {
+      if (league.leagueMode !== 'doubles_team') continue;
+      for (const [teamId, team] of Object.entries(league.teams || {})) {
+        if (team.playerA === uid || team.playerB === uid) {
+          teams.push({ sid, lid, teamId, name: team.name || teamId, leagueName: league.name || lid });
+        }
+      }
+    }
+  }
+  return teams;
+}
+
+function showEditTeamNameModal(sid, lid, teamId, currentName, onSaved) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 16px;">
+        <div style="font-size:16px;font-weight:700;">Team Name</div>
+        <button class="btn-icon" id="btn-close-team-modal" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-group">
+        <label class="input-label" for="team-name-edit-input">Team name</label>
+        <input class="input" id="team-name-edit-input" type="text"
+          value="${escHtml(currentName)}"
+          maxlength="40" autocomplete="off">
+        <div id="team-name-edit-hint" class="input-hint"
+          style="font-size:12px;color:var(--text3);margin-top:4px;"></div>
+      </div>
+      <div style="padding-top:16px;">
+        <button class="btn btn-primary" id="btn-save-team-name" disabled>Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  function closeModal() { overlay.remove(); }
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  overlay.querySelector('#btn-close-team-modal').addEventListener('click', closeModal);
+
+  const input   = overlay.querySelector('#team-name-edit-input');
+  const hint    = overlay.querySelector('#team-name-edit-hint');
+  const saveBtn = overlay.querySelector('#btn-save-team-name');
+
+  input.focus();
+  input.select();
+
+  input.addEventListener('input', () => {
+    const val = input.value.trim();
+    if (!val) {
+      hint.textContent = 'Team name cannot be empty.';
+      saveBtn.disabled = true;
+    } else if (val === currentName) {
+      hint.textContent = 'This is already your team name.';
+      saveBtn.disabled = true;
+    } else if (val.length < 2) {
+      hint.textContent = 'At least 2 characters required.';
+      saveBtn.disabled = true;
+    } else {
+      hint.textContent = '';
+      saveBtn.disabled = false;
+    }
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const val = input.value.trim();
+    if (!val) return;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    await dbMultiUpdate({ [`seasons/${sid}/leagues/${lid}/teams/${teamId}/name`]: val });
+    closeModal();
+    if (typeof onSaved === 'function') onSaved(val);
+  });
 }
 
 // ─── Change avatar modal ──────────────────────────────────────────────────────
