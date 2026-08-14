@@ -45,13 +45,12 @@ export async function runDailyDigest(env, cron) {
       const matches    = league.matches || {};
       const memberUids = Object.keys(league.members || {});
       if (memberUids.length < 2) continue;
-      const waGroupId  = league.whatsappGroupId || season.whatsappGroupId;
 
       if (isMorning) {
-        const had = await _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled, waGroupId);
+        const had = await _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled);
         if (had) anyMatchesToday = true;
       } else {
-        await _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs, waGroupId);
+        await _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs);
       }
     }
   }
@@ -115,7 +114,7 @@ function _fmtMatchScore(result) {
   }).join(' ');
 }
 
-async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled, waGroupId) {
+async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled) {
   const flagPath = `config/dailyDigest/${todayET}/schedule/${lid}`;
   if (await db.get(flagPath)) {
     console.log(`  [${lid}] schedule already posted for ${todayET}`);
@@ -157,7 +156,7 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
     const encIdx = Math.floor(now / 86400000) % ENCOURAGING_MESSAGES.length;
     const { text: encText } = ENCOURAGING_MESSAGES[encIdx];
     msg += `\n_${encText}_`;
-    await sendWA(msg.trim(), env, waGroupId);
+    await sendWA(msg.trim(), env, league.whatsappGroupId);
   }
 
   // Push reminders
@@ -212,7 +211,7 @@ async function _sendActivationNudge(db, env, todayET, now) {
   console.log(`Sent activation nudge #${idx} (spice ${spice}): "${text.slice(0, 60)}…"`);
 }
 
-async function _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs, waGroupId) {
+async function _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs) {
   const flagPath = `config/dailyDigest/${todayET}/standings/${lid}`;
   if (await db.get(flagPath)) {
     console.log(`  [${lid}] standings already posted for ${todayET}`);
@@ -313,6 +312,6 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
       const gDStr = (gD >= 0 ? '+' : '') + gD;
       msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${groupPoints}pts (${wins}W ${losses}L · ${gDStr}g)\n`;
     });
-    await sendWA(msg.trim(), env, waGroupId);
+    await sendWA(msg.trim(), env, league.whatsappGroupId);
   }
 }

@@ -14,9 +14,8 @@ export const CHANGELOG = [
     date:    '2026-08-14',
     changes: [],
     adminChanges: [
-      'WhatsApp group IDs can now be set per tournament in the WhatsApp admin tab.',
-      'Leagues without their own group ID inherit the tournament\'s group ID.',
-      'If no group ID is configured at any level, WhatsApp messages are skipped.',
+      'WhatsApp messages are only sent for leagues that have a group ID configured.',
+      'Leagues without a group ID silently skip all WhatsApp notifications.',
     ],
   },
   {
