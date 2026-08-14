@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.9',
+    date:    '2026-08-14',
+    changes: [
+      'Doubles team matches now show team names in the match screen.',
+    ],
+    adminChanges: [],
+  },
+  {
     version: '1.15.8',
     date:    '2026-08-14',
     changes: [

@@ -129,12 +129,20 @@ function _compressPhoto(file, maxPx = 1280, quality = 0.82) {
 
 function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, lid, leagueName, league = {}) {
   const matches = Object.entries(matchesObj).map(([mid, m]) => ({ mid, ...m }));
-  const mine    = matches.filter(m => m.playerA === myUid || m.playerB === myUid);
+
+  // For doubles_team leagues, playerA/playerB on matches are team IDs, not player UIDs.
+  const leagueTeams = league.teams || {};
+  const myTeamId    = league.leagueMode === 'doubles_team'
+    ? (Object.entries(leagueTeams).find(([, t]) => t.playerA === myUid || t.playerB === myUid)?.[0] ?? null)
+    : null;
+  const effectiveMyId = myTeamId || myUid;
+
+  const mine    = matches.filter(m => m.playerA === effectiveMyId || m.playerB === effectiveMyId);
 
   // Open challenges from others that the current player can accept
   // Note: Firebase omits null fields on read, so playerB is undefined (not null) for open challenges
   const openChallenges = matches.filter(m =>
-    m.status === 'open_challenge' && m.playerA !== myUid && !m.playerB
+    m.status === 'open_challenge' && m.playerA !== effectiveMyId && !m.playerB
   );
 
   // Apply status + search filters to own matches
@@ -143,10 +151,11 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
     _matchFilter === 'completed' ? m.status === 'confirmed' : true;
   const searchFilter = m => {
     if (!_matchSearch) return true;
-    const opUid = m.playerA === myUid ? m.playerB : m.playerA;
-    const op = allPlayers[opUid] || {};
-    return ((op.alias || '') + ' ' + (op.name || '')).toLowerCase()
-      .includes(_matchSearch.toLowerCase());
+    const opUid = m.playerA === effectiveMyId ? m.playerB : m.playerA;
+    const name = myTeamId
+      ? (leagueTeams[opUid]?.name || '')
+      : ((allPlayers[opUid]?.alias || '') + ' ' + (allPlayers[opUid]?.name || ''));
+    return name.toLowerCase().includes(_matchSearch.toLowerCase());
   };
   const filteredMine = mine.filter(m => statusFilter(m) && searchFilter(m));
 
@@ -182,12 +191,12 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
 
       ${actionNeeded.length ? `
         <div class="t-label t-muted" style="margin:12px 0 8px;">Needs your action</div>
-        ${actionNeeded.map(m => _matchCard(m, myUid, allPlayers)).join('')}
+        ${actionNeeded.map(m => _matchCard(m, myUid, allPlayers, leagueTeams, myTeamId)).join('')}
       ` : ''}
 
       ${inProgress.length ? `
         <div class="t-label t-muted" style="margin:12px 0 8px;">In progress</div>
-        ${inProgress.map(m => _matchCard(m, myUid, allPlayers)).join('')}
+        ${inProgress.map(m => _matchCard(m, myUid, allPlayers, leagueTeams, myTeamId)).join('')}
       ` : ''}
 
       ${!hasActiveMatches && !openChallenges.length && _matchFilter === 'all' && !_matchSearch ? `
@@ -205,12 +214,12 @@ function _renderMatchList(el, matchesObj, myUid, allPlayers, memberUids, sid, li
 
       ${completed.length ? `
         <div class="t-label t-muted" style="margin:20px 0 8px;">Recent results</div>
-        ${completed.map(m => _matchCard(m, myUid, allPlayers)).join('')}
+        ${completed.map(m => _matchCard(m, myUid, allPlayers, leagueTeams, myTeamId)).join('')}
       ` : ''}
 
       ${canceled.length ? `
         <div class="t-label t-muted" style="margin:20px 0 8px;">Canceled</div>
-        ${canceled.map(m => _canceledCard(m, myUid, allPlayers)).join('')}
+        ${canceled.map(m => _canceledCard(m, myUid, allPlayers, leagueTeams, myTeamId)).join('')}
       ` : ''}
     </div>
 
@@ -289,18 +298,22 @@ function _needsMyAction(match, myUid) {
   return false;
 }
 
-function _matchCard(match, myUid, allPlayers) {
-  const opUid  = match.playerA === myUid ? match.playerB : match.playerA;
-  const op     = opUid ? (allPlayers[opUid] || { name: 'Unknown', alias: opUid })
-                       : { name: 'Open', alias: 'Any challenger' };
+function _matchCard(match, myUid, allPlayers, leagueTeams = {}, myTeamId = null) {
+  const isTeam        = !!myTeamId;
+  const effectiveMyId = myTeamId || myUid;
+  const opUid  = match.playerA === effectiveMyId ? match.playerB : match.playerA;
+  const op     = isTeam
+    ? { name: leagueTeams[opUid]?.name || opUid, alias: leagueTeams[opUid]?.name || opUid }
+    : (opUid ? (allPlayers[opUid] || { name: 'Unknown', alias: opUid })
+             : { name: 'Open', alias: 'Any challenger' });
   const meData = allPlayers[myUid];
-  const isMeA  = match.playerA === myUid;
+  const isMeA  = match.playerA === effectiveMyId;
 
-  const meAv = meData?.avatarId ? avatarToSvg(meData.avatarId, 36) : _defaultAv(36);
-  const opAv = opUid && op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36);
+  const meAv = isTeam ? '' : (meData?.avatarId ? avatarToSvg(meData.avatarId, 36) : _defaultAv(36));
+  const opAv = isTeam ? '' : (opUid && op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36));
 
   const score             = _formatScore(match.result, isMeA);
-  const { badge, action } = _cardMeta(match, myUid);
+  const { badge, action } = _cardMeta(match, myUid, effectiveMyId);
   const isConfirmed       = match.status === 'confirmed';
 
   let eloBadge = '';
@@ -332,10 +345,10 @@ function _matchCard(match, myUid, allPlayers) {
   const canForfeit = match.groupMatch && !match.forfeited && match.status !== 'confirmed';
 
   // Management buttons for non-group matches
-  const isMyOpenChallenge = match.status === 'open_challenge' && match.playerA === myUid;
+  const isMyOpenChallenge = match.status === 'open_challenge' && match.playerA === effectiveMyId;
   const isMyProposal      = !match.groupMatch && match.proposedBy === myUid && match.status === 'scheduled';
-  const isTheirProposal   = !match.groupMatch && match.playerB === myUid && match.proposedBy !== myUid && match.status === 'scheduled';
-  const canReschedule     = (match.playerA === myUid || match.playerB === myUid) && match.status === 'scheduled';
+  const isTheirProposal   = !match.groupMatch && match.playerB === effectiveMyId && match.proposedBy !== myUid && match.status === 'scheduled';
+  const canReschedule     = (match.playerA === effectiveMyId || match.playerB === effectiveMyId) && match.status === 'scheduled';
 
   const _rescheduleBtn = `<button class="btn btn-ghost btn-sm" data-action="edit-proposal" data-mid="${escHtml(match.mid)}"
         style="width:auto;">Reschedule</button>`;
@@ -359,8 +372,8 @@ function _matchCard(match, myUid, allPlayers) {
 
   const hasAnyAction = action || canForfeit || mgmtBtns;
 
-  // Doubles partner info
-  const isDoubles = !!(match.partnerA || match.teamAId);
+  // Doubles partner info (pickup doubles only — not doubles_team)
+  const isDoubles = !isTeam && !!(match.partnerA || match.teamAId);
   const myPartnerUid = isDoubles
     ? (isMeA ? match.partnerA : match.partnerB) || null
     : null;
@@ -370,7 +383,10 @@ function _matchCard(match, myUid, allPlayers) {
   const myPartner = myPartnerUid ? (allPlayers[myPartnerUid] || { alias: myPartnerUid }) : null;
   const opPartner = opPartnerUid ? (allPlayers[opPartnerUid] || { alias: opPartnerUid }) : null;
 
-  const opDisplay = opUid
+  const opDisplay = isTeam
+    ? `<span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
+        text-overflow:ellipsis;text-align:right;">${escHtml(op.alias || op.name)}</span>`
+    : opUid
     ? `<span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
         text-overflow:ellipsis;text-align:right;cursor:pointer;"
         data-view-player="${escHtml(opUid)}">
@@ -378,7 +394,9 @@ function _matchCard(match, myUid, allPlayers) {
       </span>`
     : `<span class="t-small t-muted" style="font-style:italic;">Any challenger</span>`;
 
-  const meLabel = myPartner
+  const meLabel = isTeam
+    ? escHtml(leagueTeams[myTeamId]?.name || myTeamId)
+    : myPartner
     ? `You &amp; ${escHtml(myPartner.alias || myPartner.name || myPartnerUid)}`
     : 'You';
 
@@ -388,9 +406,10 @@ function _matchCard(match, myUid, allPlayers) {
       ${isConfirmed ? `data-view-match="${escHtml(match.mid)}"` : ''}>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
-          <span data-view-player="${escHtml(myUid)}" style="cursor:pointer;flex-shrink:0;display:inline-flex;">${meAv}</span>
+          ${isTeam ? '' : `<span data-view-player="${escHtml(myUid)}" style="cursor:pointer;flex-shrink:0;display:inline-flex;">${meAv}</span>`}
           <span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
-            text-overflow:ellipsis;cursor:pointer;" data-view-player="${escHtml(myUid)}">${meLabel}</span>
+            text-overflow:ellipsis;${isTeam ? '' : 'cursor:pointer;'}"
+            ${isTeam ? '' : `data-view-player="${escHtml(myUid)}"`}>${meLabel}</span>
         </div>
         <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);
           flex-shrink:0;text-align:center;min-width:48px;">
@@ -399,7 +418,7 @@ function _matchCard(match, myUid, allPlayers) {
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;
           justify-content:flex-end;">
           ${opDisplay}
-          ${opUid ? `<span data-view-player="${escHtml(opUid)}" style="cursor:pointer;flex-shrink:0;display:inline-flex;">${opAv}</span>` : opAv}
+          ${isTeam ? '' : (opUid ? `<span data-view-player="${escHtml(opUid)}" style="cursor:pointer;flex-shrink:0;display:inline-flex;">${opAv}</span>` : opAv)}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -423,22 +442,29 @@ function _matchCard(match, myUid, allPlayers) {
   `;
 }
 
-function _canceledCard(match, myUid, allPlayers) {
-  const opUid  = match.playerA === myUid ? match.playerB : match.playerA;
-  const op     = opUid ? (allPlayers[opUid] || { name: 'Unknown', alias: opUid })
-                       : { name: 'Open', alias: 'Any challenger' };
+function _canceledCard(match, myUid, allPlayers, leagueTeams = {}, myTeamId = null) {
+  const isTeam        = !!myTeamId;
+  const effectiveMyId = myTeamId || myUid;
+  const opUid  = match.playerA === effectiveMyId ? match.playerB : match.playerA;
+  const op     = isTeam
+    ? { name: leagueTeams[opUid]?.name || opUid, alias: leagueTeams[opUid]?.name || opUid }
+    : (opUid ? (allPlayers[opUid] || { name: 'Unknown', alias: opUid })
+             : { name: 'Open', alias: 'Any challenger' });
   const meData = allPlayers[myUid];
-  const isMeA  = match.playerA === myUid;
+  const isMeA  = match.playerA === effectiveMyId;
 
-  const meAv = meData?.avatarId ? avatarToSvg(meData.avatarId, 36) : _defaultAv(36);
-  const opAv = opUid && op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36);
+  const meAv = isTeam ? '' : (meData?.avatarId ? avatarToSvg(meData.avatarId, 36) : _defaultAv(36));
+  const opAv = isTeam ? '' : (opUid && op.avatarId ? avatarToSvg(op.avatarId, 36) : _defaultAv(36));
 
   const score = _formatScore(match.result, isMeA);
+  const meLabel = isTeam ? escHtml(leagueTeams[myTeamId]?.name || myTeamId) : 'You';
 
   let statusBadge;
   if (match.forfeited) {
     const forfeitedByMe = match.forfeited === myUid;
-    const forfeitedByName = forfeitedByMe ? 'You' : escHtml(op.alias || op.name);
+    const forfeitedByName = forfeitedByMe
+      ? (isTeam ? escHtml(leagueTeams[myTeamId]?.name || 'Your team') : 'You')
+      : escHtml(op.alias || op.name);
     statusBadge = `<span class="badge badge-muted">${forfeitedByName} forfeited</span>`;
   } else {
     statusBadge = `<span class="badge badge-muted">Canceled</span>`;
@@ -453,9 +479,9 @@ function _canceledCard(match, myUid, allPlayers) {
     <div class="card match-card" style="margin-bottom:10px;padding:14px 16px;opacity:.65;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
-          ${meAv}
+          ${isTeam ? '' : meAv}
           <span class="t-small" style="font-weight:700;white-space:nowrap;overflow:hidden;
-            text-overflow:ellipsis;">You</span>
+            text-overflow:ellipsis;">${meLabel}</span>
         </div>
         <div style="font-family:var(--font-mono);font-size:11px;color:var(--text3);
           flex-shrink:0;text-align:center;min-width:48px;">
@@ -464,7 +490,7 @@ function _canceledCard(match, myUid, allPlayers) {
         <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;
           justify-content:flex-end;">
           ${opDisplay}
-          ${opAv}
+          ${isTeam ? '' : opAv}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -474,7 +500,8 @@ function _canceledCard(match, myUid, allPlayers) {
   `;
 }
 
-function _cardMeta(match, myUid) {
+function _cardMeta(match, myUid, effectiveId = null) {
+  const id = effectiveId || myUid;
   const iEnteredResult = match.result?.enteredBy === myUid;
   switch (match.status) {
     case 'scheduled':
@@ -492,7 +519,7 @@ function _cardMeta(match, myUid) {
         action: 'upload-photo',
       };
     case 'confirmed': {
-      const iWon = match.result?.winner === myUid;
+      const iWon = match.result?.winner === id;
       return {
         badge: `<span class="badge ${iWon ? 'badge-teal' : 'badge-muted'}">${iWon ? 'Won ✓' : 'Lost'}</span>`,
         action: 'adjust-result',
