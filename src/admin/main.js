@@ -2098,7 +2098,7 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
                   </div>
                   <div class="admin-input-group" style="grid-column:1/-1;">
                     <label class="admin-input-label">WhatsApp Group ID (optional override)</label>
-                    <input id="gs-waid-${lid}" class="admin-input" placeholder="Leave blank for default"
+                    <input id="gs-waid-${lid}" class="admin-input" placeholder="Leave blank to use tournament group"
                       value="${league.whatsappGroupId || ''}"/>
                   </div>
                 </div>
@@ -3287,13 +3287,18 @@ async function renderSettings(el) {
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 
 async function renderWhatsApp(el) {
-  const [rawPrefs, rawBroadcast] = await Promise.all([
+  const [rawPrefs, rawBroadcast, rawSeasons] = await Promise.all([
     dbGet(dbRef('config/whatsappPrefs')),
     dbGet(dbRef('config/whatsappBroadcast')),
+    dbGet(dbRef('seasons')),
   ]);
 
   const prefs = rawPrefs || {};
   const defaultOn = key => prefs[key] !== false;
+  const seasons = rawSeasons || {};
+  const sortedSeasons = Object.entries(seasons).sort(([, a], [, b]) =>
+    (b.createdAt || 0) - (a.createdAt || 0)
+  );
 
   function prefRow(key, label, desc) {
     return `
@@ -3343,6 +3348,27 @@ async function renderWhatsApp(el) {
     </div>
 
     <div class="admin-form-panel">
+      <div class="admin-form-title">Tournament WhatsApp groups</div>
+      <p style="font-size:12px;color:var(--text3);margin:0 0 12px;">
+        Set the WhatsApp group ID for each tournament. Leagues without their own group ID will use this.
+        If no group ID is set at either level, WhatsApp messages are skipped entirely.</p>
+      <div id="wa-tournament-list">
+        ${sortedSeasons.length === 0 ? '<p style="font-size:13px;color:var(--text3);">No tournaments found.</p>' : ''}
+        ${sortedSeasons.map(([sid, season]) => `
+          <div style="margin-bottom:14px;">
+            <label class="admin-input-label">${escHtml(season.name || sid)}</label>
+            <input class="admin-input wa-season-group-id" data-sid="${escHtml(sid)}"
+              placeholder="e.g. 12034567890@g.us"
+              value="${escHtml(season.whatsappGroupId || '')}"/>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn-admin btn-primary" id="btn-save-wa-groups" style="margin-top:4px;">
+        Save group IDs
+      </button>
+    </div>
+
+    <div class="admin-form-panel">
       <div class="admin-form-title">Broadcast message</div>
       <p style="font-size:12px;color:var(--text3);margin:0 0 12px;">
         Sends a custom message to the group (delivered within 5 minutes).</p>
@@ -3355,6 +3381,15 @@ async function renderWhatsApp(el) {
       <div id="wa-broadcast-status">${broadcastStatus}</div>
     </div>
   `;
+
+  el.querySelector('#btn-save-wa-groups').addEventListener('click', async () => {
+    const updates = {};
+    el.querySelectorAll('.wa-season-group-id').forEach(inp => {
+      updates[`seasons/${inp.dataset.sid}/whatsappGroupId`] = inp.value.trim() || null;
+    });
+    await dbMultiUpdate(updates);
+    toast('Tournament group IDs saved', 'success');
+  });
 
   el.querySelector('#btn-save-wa-prefs').addEventListener('click', async () => {
     const newPrefs = {};

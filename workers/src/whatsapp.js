@@ -1,13 +1,14 @@
 // Green API WhatsApp helper — port of scripts/whatsapp.js for CF Workers
-// env must have GREENAPI_INSTANCE_ID, GREENAPI_TOKEN, WHATSAPP_GROUP_ID
+// env must have GREENAPI_INSTANCE_ID and GREENAPI_TOKEN.
+// groupId must be provided per-call; no implicit fallback to env.WHATSAPP_GROUP_ID.
 
 export function waEnabled(env) {
-  return !!(env.GREENAPI_INSTANCE_ID && env.GREENAPI_TOKEN && env.WHATSAPP_GROUP_ID);
+  return !!(env.GREENAPI_INSTANCE_ID && env.GREENAPI_TOKEN);
 }
 
 export async function sendWA(text, env, groupId) {
-  if (!waEnabled(env)) return;
-  const chatId = groupId || env.WHATSAPP_GROUP_ID;
+  if (!waEnabled(env) || !groupId) return;
+  const chatId = groupId;
   try {
     const url  = `https://api.green-api.com/waInstance${env.GREENAPI_INSTANCE_ID}/sendMessage/${env.GREENAPI_TOKEN}`;
     const resp = await fetch(url, {
@@ -23,9 +24,9 @@ export async function sendWA(text, env, groupId) {
 }
 
 export async function sendWAPhoto(photoUrl, caption, env, groupId) {
-  if (!waEnabled(env)) return;
+  if (!waEnabled(env) || !groupId) return;
   if (!photoUrl) { await sendWA(caption, env, groupId); return; }
-  const chatId = groupId || env.WHATSAPP_GROUP_ID;
+  const chatId = groupId;
   try {
     const url  = `https://api.green-api.com/waInstance${env.GREENAPI_INSTANCE_ID}/sendFileByUrl/${env.GREENAPI_TOKEN}`;
     const resp = await fetch(url, {

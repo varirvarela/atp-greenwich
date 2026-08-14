@@ -45,12 +45,13 @@ export async function runDailyDigest(env, cron) {
       const matches    = league.matches || {};
       const memberUids = Object.keys(league.members || {});
       if (memberUids.length < 2) continue;
+      const waGroupId  = league.whatsappGroupId || season.whatsappGroupId;
 
       if (isMorning) {
-        const had = await _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled);
+        const had = await _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled, waGroupId);
         if (had) anyMatchesToday = true;
       } else {
-        await _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs);
+        await _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs, waGroupId);
       }
     }
   }
@@ -114,7 +115,7 @@ function _fmtMatchScore(result) {
   }).join(' ');
 }
 
-async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled) {
+async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled, waGroupId) {
   const flagPath = `config/dailyDigest/${todayET}/schedule/${lid}`;
   if (await db.get(flagPath)) {
     console.log(`  [${lid}] schedule already posted for ${todayET}`);
@@ -156,7 +157,7 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
     const encIdx = Math.floor(now / 86400000) % ENCOURAGING_MESSAGES.length;
     const { text: encText } = ENCOURAGING_MESSAGES[encIdx];
     msg += `\n_${encText}_`;
-    await sendWA(msg.trim(), env, league.whatsappGroupId);
+    await sendWA(msg.trim(), env, waGroupId);
   }
 
   // Push reminders
@@ -206,12 +207,12 @@ async function _sendActivationNudge(db, env, todayET, now) {
   const { text, spice } = ACTIVATION_MESSAGES[idx];
   const spiceLabel      = ['', 'Low', 'Medium', 'High'][spice] || 'Medium';
   const full            = `${text}\n\n_🤖 Generado por IA  ·  Picante Level: ${spiceLabel}_`;
-  await sendWA(full, env);
+  await sendWA(full, env, env.WHATSAPP_GROUP_ID);
   await db.set(flagPath, true);
   console.log(`Sent activation nudge #${idx} (spice ${spice}): "${text.slice(0, 60)}…"`);
 }
 
-async function _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs) {
+async function _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs, waGroupId) {
   const flagPath = `config/dailyDigest/${todayET}/standings/${lid}`;
   if (await db.get(flagPath)) {
     console.log(`  [${lid}] standings already posted for ${todayET}`);
@@ -312,6 +313,6 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
       const gDStr = (gD >= 0 ? '+' : '') + gD;
       msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${groupPoints}pts (${wins}W ${losses}L · ${gDStr}g)\n`;
     });
-    await sendWA(msg.trim(), env, league.whatsappGroupId);
+    await sendWA(msg.trim(), env, waGroupId);
   }
 }
