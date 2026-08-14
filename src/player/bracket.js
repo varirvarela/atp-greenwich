@@ -48,10 +48,11 @@ export function renderBracketTab(el, player, creds) {
       dbGet(sRef(sid, lid, 'bracket')),
       dbGet(dbRef('players')),
     ]);
+    const leagueTeams = league.teams || {};
     if (cancelled) return;
 
     if (bracketData && (bracketData.status === 'active' || bracketData.status === 'complete')) {
-      _renderBracket(el, bracketData, allPlayers || {}, creds.uid, league);
+      _renderBracket(el, bracketData, allPlayers || {}, creds.uid, league, leagueTeams);
     } else {
       // Season still in progress — live qualification tracker (group stage)
       const [membersObj, groupStageConfig, pointsConfig] = await Promise.all([
@@ -64,8 +65,10 @@ export function renderBracketTab(el, player, creds) {
       const gs  = groupStageConfig || {};
       const pts = pointsConfig     || {};
 
+      const isDoublesTeam = league.leagueMode === 'doubles_team';
+      const teamSlots     = isDoublesTeam ? Object.keys(leagueTeams) : memberUids;
       const unsub = dbListen(sRef(sid, lid, 'matches'), (matchesObj) => {
-        _renderTracker(el, matchesObj || {}, memberUids, allPlayers || {}, creds.uid, league, gs, pts);
+        _renderTracker(el, matchesObj || {}, teamSlots, allPlayers || {}, creds.uid, league, gs, pts, leagueTeams);
       });
       unsubs.push(unsub);
     }
@@ -79,12 +82,13 @@ export function renderBracketTab(el, player, creds) {
 
 // ─── Qualification tracker ────────────────────────────────────────────────────
 
-function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, gs, pointsCfg) {
+function _renderTracker(el, allMatches, slots, allPlayers, myUid, league, gs, pointsCfg, leagueTeams = {}) {
   const gsStatus   = gs.status || 'pending';
   const qualifyPts = gs.qualifyPoints ?? 6;
   const deadline   = gs.deadline;
 
-  const rows = memberUids.map(uid => {
+  const isDoubleTeam = league?.leagueMode === 'doubles_team';
+  const rows = slots.map(uid => {
     const gp = (gsStatus === 'active' || gsStatus === 'closed')
       ? calculateGroupPoints(allMatches, uid, pointsCfg)
       : null;
@@ -99,7 +103,7 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
 
   // Threshold guard: nobody qualified yet → show regular standings view
   if ((gsStatus === 'active' || gsStatus === 'closed') && qualifiedCount === 0) {
-    const table = buildLeagueTable(allMatches, memberUids);
+    const table = buildLeagueTable(allMatches, slots);
     table.sort((a, b) => b.standing.matchesWon - a.standing.matchesWon
       || b.standing.setDiff - a.standing.setDiff);
     let rank = 1;
@@ -120,8 +124,14 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
         <div class="t-label t-muted" style="margin-bottom:8px;">Current Standings</div>
         <div class="card" style="padding:0;overflow:hidden;">
           ${table.map((row, i) => {
-            const p    = allPlayers[row.uid] || {};
-            const isMe = row.uid === myUid;
+            const p      = allPlayers[row.uid] || {};
+            const teamT  = isDoubleTeam ? (leagueTeams[row.uid] || {}) : null;
+            const isMe   = isDoubleTeam
+              ? (teamT.playerA === myUid || teamT.playerB === myUid)
+              : row.uid === myUid;
+            const displayName = isDoubleTeam
+              ? escHtml(teamT.name || row.uid)
+              : (isMe ? 'You' : escHtml(p.alias || p.name || row.uid));
             const s    = row.standing;
             const gp   = rows.find(r => r.uid === row.uid)?.gp ?? 0;
             const isLast = i === table.length - 1;
@@ -131,11 +141,11 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
                 ${isMe ? 'background:rgba(184,64,8,.06);' : ''}">
                 <div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);
                   width:20px;text-align:center;flex-shrink:0;">${row.rank}</div>
-                ${avatarToSvg(p.avatarId || null, 28)}
+                ${!isDoubleTeam ? avatarToSvg(p.avatarId || null, 28) : ''}
                 <div style="flex:1;min-width:0;">
                   <div style="font-size:13px;font-weight:${isMe ? '700' : '400'};
                     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                    ${isMe ? 'You' : escHtml(p.alias || p.name || row.uid)}
+                    ${displayName}
                   </div>
                   <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);">
                     ${s.setsWon}–${s.setsLost} sets
@@ -199,8 +209,14 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
       ${gsStatus !== 'pending' ? `
         <div class="t-label t-muted" style="margin-bottom:8px;">Qualified Players</div>
         ${rows.filter(r => (r.gp ?? 0) >= qualifyPts).map((row, i) => {
-          const p    = allPlayers[row.uid] || {};
-          const isMe = row.uid === myUid;
+          const p      = allPlayers[row.uid] || {};
+          const teamT  = isDoubleTeam ? (leagueTeams[row.uid] || {}) : null;
+          const isMe   = isDoubleTeam
+            ? (teamT.playerA === myUid || teamT.playerB === myUid)
+            : row.uid === myUid;
+          const displayName = isDoubleTeam
+            ? escHtml(teamT.name || row.uid)
+            : (isMe ? 'You' : escHtml(p.alias || p.name || row.uid));
           const gp   = row.gp ?? 0;
           return `
             <div style="display:flex;align-items:center;gap:10px;padding:10px;
@@ -209,12 +225,12 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
               border-radius:var(--radius);margin-bottom:6px;">
               <div style="width:22px;text-align:center;font-family:var(--font-mono);font-size:11px;
                 font-weight:700;color:var(--ace2);flex-shrink:0;">${i + 1}</div>
-              ${avatarToSvg(p.avatarId || null, 30)}
+              ${!isDoubleTeam ? avatarToSvg(p.avatarId || null, 30) : ''}
               <div style="flex:1;min-width:0;">
                 <div style="font-weight:700;font-size:14px;
                   color:${isMe ? 'var(--ace)' : 'var(--text)'};
                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  ${isMe ? 'You' : escHtml(p.alias || p.name || row.uid)}
+                  ${displayName}
                 </div>
               </div>
               <div style="font-family:var(--font-mono);font-size:18px;font-weight:800;
@@ -235,11 +251,14 @@ function _renderTracker(el, allMatches, memberUids, allPlayers, myUid, league, g
 
 // ─── Active bracket ───────────────────────────────────────────────────────────
 
-function _renderBracket(el, bracket, allPlayers, myUid, league) {
+function _renderBracket(el, bracket, allPlayers, myUid, league, leagueTeams = {}) {
   const rounds    = bracket.rounds || {};
   const roundKeys = Object.keys(rounds).sort();
   const isComplete = bracket.status === 'complete';
-  const champion  = bracket.champion ? allPlayers[bracket.champion] : null;
+  const isDoubleTeam = league?.leagueMode === 'doubles_team';
+  const champion  = bracket.champion
+    ? (isDoubleTeam ? (leagueTeams[bracket.champion] || { name: bracket.champion }) : allPlayers[bracket.champion])
+    : null;
 
   el.innerHTML = `
     <div style="padding-bottom:80px;">
@@ -255,7 +274,7 @@ function _renderBracket(el, bracket, allPlayers, myUid, league) {
           <div style="font-family:var(--font-serif);font-size:18px;font-weight:700;
             color:var(--ace);">Champion</div>
           <div style="font-weight:700;font-size:15px;margin-top:6px;">
-            ${bracket.champion === myUid ? 'You!' : escHtml(champion.alias || champion.name || '')}
+            ${(!isDoubleTeam && bracket.champion === myUid) ? 'You!' : escHtml(champion.name || champion.alias || '')}
           </div>
         </div>
       ` : ''}
@@ -269,14 +288,16 @@ function _renderBracket(el, bracket, allPlayers, myUid, league) {
           </div>
           ${matchKeys.map(mk => {
             const m  = round.matches[mk];
-            const pA = allPlayers[m.playerA] || {};
-            const pB = m.playerB ? (allPlayers[m.playerB] || {}) : null;
+            const pA = isDoubleTeam ? (leagueTeams[m.playerA] || { name: m.playerA }) : (allPlayers[m.playerA] || {});
+            const pB = m.playerB
+              ? (isDoubleTeam ? (leagueTeams[m.playerB] || { name: m.playerB }) : (allPlayers[m.playerB] || {}))
+              : null;
             const aWon = m.winner === m.playerA;
             const bWon = m.winner === m.playerB;
             const played = !!m.winner;
             return `
               <div class="card" style="margin-bottom:8px;padding:12px;">
-                ${_matchRow(m.playerA, pA, aWon, played, myUid)}
+                ${_matchRow(m.playerA, pA, aWon, played, myUid, isDoubleTeam)}
                 <div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
                   <div style="flex:1;height:1px;background:var(--border);"></div>
                   <span style="font-family:var(--font-mono);font-size:11px;color:var(--text3);">
@@ -285,7 +306,7 @@ function _renderBracket(el, bracket, allPlayers, myUid, league) {
                   <div style="flex:1;height:1px;background:var(--border);"></div>
                 </div>
                 ${pB
-                  ? _matchRow(m.playerB, pB, bWon, played, myUid)
+                  ? _matchRow(m.playerB, pB, bWon, played, myUid, isDoubleTeam)
                   : `<div style="padding:6px 0;font-size:13px;color:var(--text3);font-style:italic;">
                        TBD — awaiting previous round
                      </div>`
@@ -310,15 +331,18 @@ function _renderBracket(el, bracket, allPlayers, myUid, league) {
   `;
 }
 
-function _matchRow(uid, p, won, played, myUid) {
-  const isMe = uid === myUid;
+function _matchRow(uid, p, won, played, myUid, isDoubleTeam = false) {
+  const isMe = !isDoubleTeam && uid === myUid;
+  const displayName = isDoubleTeam
+    ? escHtml(p.name || uid)
+    : (isMe ? 'You' : escHtml(p.alias || p.name || uid));
   return `
     <div style="display:flex;align-items:center;gap:10px;padding:6px 0;
       opacity:${played && !won ? '0.4' : '1'};">
-      ${avatarToSvg(p.avatarId || null, 28)}
+      ${!isDoubleTeam ? avatarToSvg(p.avatarId || null, 28) : ''}
       <div style="flex:1;font-weight:${won ? '700' : '400'};font-size:14px;
         color:${isMe ? 'var(--ace)' : 'var(--text)'};">
-        ${isMe ? 'You' : escHtml(p.alias || p.name || uid)}
+        ${displayName}
       </div>
       ${won ? `<div class="badge badge-teal">Won</div>` : ''}
     </div>

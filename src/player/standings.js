@@ -42,6 +42,7 @@ export function renderStandingsTab(el, player, creds) {
       leagueMode:       l.leagueMode      || 'singles',
       groupStageConfig: l.groupStageConfig || {},
       pointsConfig:     l.pointsConfig     || {},
+      teams:            l.teams            || {},
     }));
     if (!leagueList.length) { _renderEmpty(el); return; }
 
@@ -67,9 +68,12 @@ export function renderStandingsTab(el, player, creds) {
 
       function applyMatches(matchesObj) {
         if (cancelled) return;
-        const allMatches = matchesObj || {};
-        const memberUids = Object.keys(membersCache[lid] || {});
-        const table      = buildLeagueTable(allMatches, memberUids);
+        const allMatches  = matchesObj || {};
+        const memberUids  = Object.keys(membersCache[lid] || {});
+        const isDoubles   = ctx.leagueMode === 'doubles_team';
+        const leagueTeams = allSeasons[sid]?.leagues?.[lid]?.teams || {};
+        const slots       = isDoubles ? Object.keys(leagueTeams) : memberUids;
+        const table       = buildLeagueTable(allMatches, slots);
         if (gsStatus === 'active' || gsStatus === 'closed') {
           for (const row of table) {
             row.groupPoints = calculateGroupPoints(allMatches, row.uid, ctx.pointsConfig);
@@ -88,7 +92,7 @@ export function renderStandingsTab(el, player, creds) {
         }
         const mount = el.querySelector('#standings-mount');
         if (!mount) return;
-        _renderLeagueTable(mount, table, allPlayers, allMatches, creds.uid, ctx.name, ctx.groupStageConfig, ctx.pointsConfig, ctx.leagueMode);
+        _renderLeagueTable(mount, table, allPlayers, allMatches, creds.uid, ctx.name, ctx.groupStageConfig, ctx.pointsConfig, ctx.leagueMode, leagueTeams);
         mount.querySelectorAll('[data-view-player]').forEach(row =>
           row.addEventListener('click', () =>
             showPlayerModal(row.dataset.viewPlayer, allPlayers, allMatches, creds.uid)
@@ -126,7 +130,7 @@ export function renderStandingsTab(el, player, creds) {
 
 // ─── League table ─────────────────────────────────────────────────────────────
 
-function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName, gs, pointsCfg, leagueMode = 'singles') {
+function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName, gs, pointsCfg, leagueMode = 'singles', leagueTeams = {}) {
   if (!table || table.length === 0) {
     el.innerHTML = `
       <div style="text-align:center;padding:24px 0;">
@@ -162,8 +166,12 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
     ${showGsPts ? _rulesAccordion(pts, qualifyPts, deadlineStr, isRR, qualifyCount) : ''}
 
     ${table.map((row, idx) => {
-      const p         = allPlayers[row.uid] || { name: 'Unknown', alias: row.uid };
-      const isMe      = row.uid === myUid;
+      const isDoubleTeam = leagueMode === 'doubles_team';
+      const team         = isDoubleTeam ? (leagueTeams[row.uid] || {}) : null;
+      const p            = allPlayers[row.uid] || { name: 'Unknown', alias: row.uid };
+      const isMe         = isDoubleTeam
+        ? (team.playerA === myUid || team.playerB === myUid)
+        : row.uid === myUid;
       const s         = row.standing;
       const gp        = row.groupPoints ?? null;
       const qualifies = gp !== null && (isRR ? idx < qualifyCount : gp >= qualifyPts);
@@ -178,19 +186,26 @@ function _renderLeagueTable(el, table, allPlayers, allMatches, myUid, leagueName
       const gDStr       = (gD >= 0 ? '+' : '') + gD;
       const stats       = _computePlayerStats(allMatches, row.uid);
       return `
-        <div data-view-player="${row.uid}" style="display:flex;align-items:center;gap:8px;
-          padding:10px 12px;cursor:pointer;
+        <div ${!isDoubleTeam ? `data-view-player="${row.uid}"` : ''} style="display:flex;align-items:center;gap:8px;
+          padding:10px 12px;cursor:${isDoubleTeam ? 'default' : 'pointer'};
           background:${isMe ? 'rgba(184,64,8,.06)' : 'var(--surface)'};
           border:1px solid ${isMe ? 'var(--ace)' : 'var(--border)'};
           border-radius:var(--radius);margin-bottom:6px;">
           <div style="font-family:var(--font-mono);font-size:12px;color:var(--text3);
             width:20px;text-align:center;flex-shrink:0;">${row.rank}</div>
-          ${p.avatarId ? avatarToSvg(p.avatarId, 28) : _defaultAv(28)}
-          <span style="font-size:13px;font-weight:${isMe ? '700' : '400'};
-            flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-            color:${isMe ? 'var(--ace)' : 'var(--text)'};">
-            ${isMe ? 'You' : escHtml(p.alias || p.name)}
-          </span>
+          ${!isDoubleTeam ? (p.avatarId ? avatarToSvg(p.avatarId, 28) : _defaultAv(28)) : ''}
+          <div style="flex:1;min-width:0;overflow:hidden;">
+            <div style="font-size:13px;font-weight:${isMe ? '700' : '400'};
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+              color:${isMe ? 'var(--ace)' : 'var(--text)'};">
+              ${isDoubleTeam
+                ? escHtml(team.name || row.uid)
+                : (isMe ? 'You' : escHtml(p.alias || p.name))}
+            </div>
+            ${isDoubleTeam ? `<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${escHtml((allPlayers[team.playerA]?.alias || allPlayers[team.playerA]?.name || '') + ' & ' + (allPlayers[team.playerB]?.alias || allPlayers[team.playerB]?.name || ''))}
+            </div>` : ''}
+          </div>
           <div style="flex-shrink:0;text-align:right;">
             <div style="font-family:var(--font-mono);font-size:11px;font-weight:600;
               color:var(--text3);">${s.matchesWon}W–${matchesLost}L</div>

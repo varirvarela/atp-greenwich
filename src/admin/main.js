@@ -1459,14 +1459,19 @@ async function renderLeagues(el) {
       const pointsCfg  = league.pointsConfig || {};
       const memberUids = Object.keys(league.members || {});
       const stageMode  = gs.stageMode || 'classic';
+      const isDoubles  = league.leagueMode === 'doubles_team';
+      const teams      = league.teams || {};
+      const slots      = isDoubles ? Object.keys(teams) : memberUids;
 
       const matchesObj = await dbGet(sRef(sid, lid, 'matches'));
       const allMatches = matchesObj || {};
 
-      const standings = memberUids.map(uid => ({
-        uid,
-        pts:  calculateGroupPoints(allMatches, uid, pointsCfg),
-        name: (allPlayers[uid]?.alias || allPlayers[uid]?.name || uid),
+      const standings = slots.map(id => ({
+        id,
+        pts:  calculateGroupPoints(allMatches, id, pointsCfg),
+        name: isDoubles
+          ? (teams[id]?.name || id)
+          : (allPlayers[id]?.alias || allPlayers[id]?.name || id),
       })).sort((a, b) => b.pts - a.pts);
 
       let msg;
@@ -1486,7 +1491,7 @@ async function renderLeagues(el) {
           standings.map(s =>
             `${s.pts >= qualifyPts ? '✓' : '✗'} ${s.name}: ${s.pts} pts`
           ).join('\n') +
-          `\n\n${standings.filter(s => s.pts >= qualifyPts).length} player(s) qualify for bracket.` +
+          `\n\n${standings.filter(s => s.pts >= qualifyPts).length} ${isDoubles ? 'team(s)' : 'player(s)'} qualify for bracket.` +
           `\n\nClose group stage and mark qualifiers?`;
         qualifiesFn = (s) => s.pts >= qualifyPts;
       }
@@ -1496,9 +1501,12 @@ async function renderLeagues(el) {
       const updates = {};
       updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/status`] = 'closed';
       for (let i = 0; i < standings.length; i++) {
-        const { uid, pts } = standings[i];
-        updates[`seasons/${sid}/leagues/${lid}/members/${uid}/groupPoints`] = pts;
-        updates[`seasons/${sid}/leagues/${lid}/members/${uid}/qualified`]   = qualifiesFn(standings[i], i);
+        const { id, pts } = standings[i];
+        const basePath = isDoubles
+          ? `seasons/${sid}/leagues/${lid}/teams/${id}`
+          : `seasons/${sid}/leagues/${lid}/members/${id}`;
+        updates[`${basePath}/groupPoints`] = pts;
+        updates[`${basePath}/qualified`]   = qualifiesFn(standings[i], i);
       }
       await dbMultiUpdate(updates);
       toast('Group stage closed. Qualifiers marked.', 'success');
@@ -1511,6 +1519,9 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   const gs          = league.groupStageConfig || {};
   const pts         = league.pointsConfig     || {};
   const memberUids  = Object.keys(league.members || {});
+  const isDoubles   = league.leagueMode === 'doubles_team';
+  const teams       = league.teams || {};
+  const slots       = isDoubles ? Object.keys(teams) : memberUids;
   const stageMode   = gs.stageMode || 'classic';
   const isRR        = stageMode === 'round_robin';
   const mpp         = gs.matchesPerPlayer || 4;
@@ -1522,8 +1533,8 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
   const deadlineDefault = gs.deadline ? tsToLocalInput(gs.deadline) : '';
 
   // For round_robin: auto mpp = n-1, total matches = n*(n-1)/2
-  const rrMpp         = memberUids.length > 1 ? memberUids.length - 1 : 1;
-  const rrMatchCount  = Math.floor(memberUids.length * rrMpp / 2);
+  const rrMpp         = slots.length > 1 ? slots.length - 1 : 1;
+  const rrMatchCount  = Math.floor(slots.length * rrMpp / 2);
 
   const overlay = document.createElement('div');
   overlay.style.cssText = `position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
@@ -1535,7 +1546,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
         Release Group Fixtures
       </div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">
-        ${memberUids.length} players
+        ${isDoubles ? slots.length + ' teams' : memberUids.length + ' players'}
         ${isRR ? `<span style="margin-left:8px;" class="badge-admin" style="background:rgba(99,102,241,.15);color:#4338ca;">Round Robin</span>` : ''}
       </div>
 
@@ -1548,7 +1559,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
         <div style="display:grid;gap:10px;margin-bottom:12px;">
           <div class="admin-input-group">
             <label class="admin-input-label">Qualify top N players</label>
-            <input id="rf-qc" class="admin-input" type="number" min="1" max="${memberUids.length}" value="${qualifyCount}"/>
+            <input id="rf-qc" class="admin-input" type="number" min="1" max="${slots.length}" value="${qualifyCount}"/>
           </div>
           <div class="admin-input-group">
             <label class="admin-input-label">Deadline to complete all matches</label>
@@ -1559,7 +1570,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
           <div class="admin-input-group">
             <label class="admin-input-label">Matches per player</label>
-            <input id="rf-mpp" class="admin-input" type="number" min="1" max="${memberUids.length - 1}" value="${mpp}"/>
+            <input id="rf-mpp" class="admin-input" type="number" min="1" max="${slots.length - 1}" value="${mpp}"/>
           </div>
           <div class="admin-input-group">
             <label class="admin-input-label">
@@ -1620,13 +1631,13 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
 
   // Step 1: generate and preview
   overlay.querySelector('#btn-rf-preview').addEventListener('click', () => {
-    if (memberUids.length < 2) { toast('Need at least 2 members', 'error'); return; }
+    if (slots.length < 2) { toast(`Need at least 2 ${isDoubles ? 'teams' : 'members'}`, 'error'); return; }
     const validationEl = overlay.querySelector('#rf-validation');
     const confirmBtn   = overlay.querySelector('#btn-rf-confirm');
 
     if (isRR) {
       // Round robin: everyone plays everyone — always valid
-      pendingPairs = generateFixtures(memberUids, rrMpp);
+      pendingPairs = generateFixtures(slots, rrMpp);
       validationEl.innerHTML = `
         <div style="background:rgba(22,163,74,.1);border:1px solid rgba(22,163,74,.3);
           border-radius:8px;padding:12px 14px;">
@@ -1634,7 +1645,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
             ✓ Round robin fixtures ready
           </div>
           <div style="font-size:13px;color:var(--text2);">
-            ${pendingPairs.length} matches · every player faces every other player once
+            ${pendingPairs.length} matches · every ${isDoubles ? 'team' : 'player'} faces every other once
           </div>
         </div>`;
       confirmBtn.textContent = 'Confirm & Release';
@@ -1648,7 +1659,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
     const newMpp = parseInt(mppInput.value, 10) || mpp;
 
     // Mathematically impossible: n×mpp is odd → can never be split into pairs
-    if ((memberUids.length * newMpp) % 2 !== 0) {
+    if ((slots.length * newMpp) % 2 !== 0) {
       pendingPairs = null;
       validationEl.innerHTML = `
         <div style="background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.3);
@@ -1657,7 +1668,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
             ✗ Impossible combination
           </div>
           <div style="font-size:13px;color:var(--text2);">
-            ${memberUids.length} players × ${newMpp} matches = ${memberUids.length * newMpp} total slots —
+            ${slots.length} ${isDoubles ? 'teams' : 'players'} × ${newMpp} matches = ${slots.length * newMpp} total slots —
             an odd number that cannot be split into pairs.<br><br>
             Try an even number of matches per player (e.g. ${newMpp + 1}).
           </div>
@@ -1668,8 +1679,8 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
       return;
     }
 
-    pendingPairs = generateFixtures(memberUids, newMpp);
-    const { ok, counts, shortfall } = validateFixtures(pendingPairs, memberUids, newMpp);
+    pendingPairs = generateFixtures(slots, newMpp);
+    const { ok, counts, shortfall } = validateFixtures(pendingPairs, slots, newMpp);
 
     if (ok) {
       validationEl.innerHTML = `
@@ -1679,16 +1690,18 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
             ✓ Fixtures look good
           </div>
           <div style="font-size:13px;color:var(--text2);">
-            ${pendingPairs.length} matches · every player gets exactly ${newMpp} fixtures
+            ${pendingPairs.length} matches · every ${isDoubles ? 'team' : 'player'} gets exactly ${newMpp} fixtures
           </div>
         </div>`;
       confirmBtn.textContent = 'Confirm & Release';
       confirmBtn.className = 'btn-admin btn-teal';
       confirmBtn.style.display = '';
     } else {
-      const rows = memberUids.map(uid => {
-        const name  = escHtml((allPlayers[uid] || {}).alias || (allPlayers[uid] || {}).name || uid);
-        const got   = counts[uid];
+      const rows = slots.map(id => {
+        const name  = isDoubles
+          ? escHtml(teams[id]?.name || id)
+          : escHtml((allPlayers[id] || {}).alias || (allPlayers[id] || {}).name || id);
+        const got   = counts[id];
         const short = got < newMpp;
         return `<tr>
           <td style="padding:3px 8px 3px 0;">${name}</td>
@@ -1704,7 +1717,7 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
             ⚠ Incomplete schedule
           </div>
           <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">
-            ${shortfall.length} player(s) will get fewer than ${newMpp} fixtures.
+            ${shortfall.length} ${isDoubles ? 'team(s)' : 'player(s)'} will get fewer than ${newMpp} fixtures.
             This can happen with an odd number of players.
           </div>
           <table style="font-size:12px;width:100%;"><tbody>${rows}</tbody></table>
@@ -1740,17 +1753,23 @@ function _showReleaseFixturesModal(sid, lid, league, allPlayers, onDone) {
 
     const now = Date.now();
     const updates = {};
-    for (const [playerA, playerB] of pendingPairs) {
+    for (const [slotA, slotB] of pendingPairs) {
       const mid = 'gm_' + now.toString(36) + '_' + Math.random().toString(36).slice(2, 7);
       const base = `seasons/${sid}/leagues/${lid}/matches/${mid}`;
-      updates[base + '/playerA']    = playerA;
-      updates[base + '/playerB']    = playerB;
+      updates[base + '/playerA']    = slotA;
+      updates[base + '/playerB']    = slotB;
       updates[base + '/proposedBy'] = 'admin';
       updates[base + '/proposedAt'] = now;
       updates[base + '/status']     = 'scheduled';
       updates[base + '/groupMatch'] = true;
       updates[base + '/deadline']   = dl;
       updates[base + '/result']     = null;
+      if (isDoubles) {
+        const tA = teams[slotA] || {};
+        const tB = teams[slotB] || {};
+        updates[base + '/teamAPlayers'] = [tA.playerA, tA.playerB].filter(Boolean);
+        updates[base + '/teamBPlayers'] = [tB.playerA, tB.playerB].filter(Boolean);
+      }
     }
     updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/status`]          = 'active';
     updates[`seasons/${sid}/leagues/${lid}/groupStageConfig/matchesPerPlayer`] = newMpp;
@@ -2804,6 +2823,9 @@ async function renderBracketAdmin(el) {
     const lid    = activeLid;
     const league = leagues[lid];
 
+    const isDoubles = league.leagueMode === 'doubles_team';
+    const leagueTeams = league.teams || {};
+
     const [membersObj, matchesObj, bracketData, scoringConfig] = await Promise.all([
       dbGet(sRef(activeSid, lid, 'members')),
       dbGet(sRef(activeSid, lid, 'matches')),
@@ -2812,14 +2834,17 @@ async function renderBracketAdmin(el) {
     ]);
 
     const memberUids  = Object.keys(membersObj || {});
+    const slots       = isDoubles ? Object.keys(leagueTeams) : memberUids;
     const allMatches  = matchesObj || {};
     const cfg         = scoringConfig || { minMatches: 6, minWins: 4, bracketSize: 4 };
     const gsConfig    = league.groupStageConfig || {};
     const pointsCfg   = league.pointsConfig     || {};
-    const table       = buildLeagueTable(allMatches, memberUids);
+    const table       = buildLeagueTable(allMatches, slots);
     // When group stage is closed, use the qualified flag set during close (not minMatches/minWins)
     const qualified   = gsConfig.status === 'closed'
-      ? table.filter(row => membersObj?.[row.uid]?.qualified === true)
+      ? isDoubles
+        ? Object.entries(leagueTeams).filter(([, t]) => t.qualified === true).map(([id]) => ({ uid: id }))
+        : table.filter(row => membersObj?.[row.uid]?.qualified === true)
       : getQualifiedPlayers(table, cfg);
 
     // Attach group points to table rows
@@ -2844,8 +2869,8 @@ async function renderBracketAdmin(el) {
           </div>
         </div>
         ${bracketData && bracketData.status !== 'pending'
-          ? _renderBracketAdminView(bracketData, players, activeSid, lid)
-          : _renderQualifiedTable(table, qualified, players, cfg, gsConfig)}
+          ? _renderBracketAdminView(bracketData, players, activeSid, lid, league)
+          : _renderQualifiedTable(table, qualified, players, cfg, gsConfig, league)}
       </div>
     `;
     bodyEl.innerHTML = '';
@@ -2862,7 +2887,7 @@ async function renderBracketAdmin(el) {
     if (genBtn) {
       genBtn.addEventListener('click', async () => {
         if (qualified.length < 2) { toast('Need at least 2 qualified players', 'error'); return; }
-        if (!confirm(`Generate bracket for ${qualified.length} players?`)) return;
+        if (!confirm(`Generate bracket for ${qualified.length} ${isDoubles ? 'teams' : 'players'}?`)) return;
         const bracket = _generateBracket(qualified, players);
         await dbSet(sRef(activeSid, lid, 'bracket'), bracket);
         await dbSet(dbRef(`notifications/bracket/${activeSid}_${lid}`), { sid: activeSid, lid, createdAt: Date.now() });
@@ -2882,7 +2907,7 @@ async function renderBracketAdmin(el) {
     div.querySelectorAll('[data-action="set-bracket-result"]').forEach(btn => {
       btn.addEventListener('click', () => {
         const { sid: s, lid: l, rk, mk } = btn.dataset;
-        _showBracketResultModal(s, l, rk, mk, bracketData, players, loadAndRender);
+        _showBracketResultModal(s, l, rk, mk, bracketData, players, loadAndRender, league);
       });
     });
     div.querySelectorAll('[data-action="bye-advance"]').forEach(btn => {
@@ -3012,11 +3037,13 @@ function _generateBracket(qualified, allPlayers) {
   return { status: 'active', bracketSize: n, createdAt: Date.now(), rounds };
 }
 
-function _renderQualifiedTable(table, qualified, allPlayers, cfg, gsConfig) {
+function _renderQualifiedTable(table, qualified, allPlayers, cfg, gsConfig, league) {
   const bracketSize = cfg.bracketSize || 4;
   const gsStatus    = gsConfig?.status || 'pending';
   const showPts     = gsStatus === 'active' || gsStatus === 'closed';
   const qualifyPts  = gsConfig?.qualifyPoints ?? 6;
+  const isDoubles   = league?.leagueMode === 'doubles_team';
+  const leagueTeams = league?.teams || {};
 
   return `
     <div style="overflow-x:auto;">
@@ -3024,7 +3051,7 @@ function _renderQualifiedTable(table, qualified, allPlayers, cfg, gsConfig) {
       <thead>
         <tr>
           <th>#</th>
-          <th>Player</th>
+          <th>${isDoubles ? 'Team' : 'Player'}</th>
           ${showPts ? '<th>Pts</th>' : ''}
           <th>W</th>
           <th>P</th>
@@ -3035,17 +3062,27 @@ function _renderQualifiedTable(table, qualified, allPlayers, cfg, gsConfig) {
       <tbody>
         ${table.map((row, i) => {
           const p  = allPlayers[row.uid] || {};
-          const q  = showPts ? (row.groupPoints ?? 0) >= qualifyPts : isQualified(row.standing, cfg);
+          const q  = isDoubles
+            ? (leagueTeams[row.uid]?.qualified === true || (showPts && (row.groupPoints ?? 0) >= qualifyPts))
+            : (showPts ? (row.groupPoints ?? 0) >= qualifyPts : isQualified(row.standing, cfg));
           const s  = row.standing;
           const gp = row.groupPoints ?? null;
+          const displayName = isDoubles
+            ? escHtml(leagueTeams[row.uid]?.name || row.uid)
+            : escHtml(p.alias || p.name || row.uid);
+          const team = isDoubles ? (leagueTeams[row.uid] || {}) : null;
+          const teamSubline = team
+            ? `<div style="font-size:10px;color:var(--text3);">${escHtml((allPlayers[team.playerA]?.alias || allPlayers[team.playerA]?.name || '') + ' & ' + (allPlayers[team.playerB]?.alias || allPlayers[team.playerB]?.name || ''))}</div>`
+            : '';
           return `
-            <tr data-view-player="${row.uid}" style="cursor:pointer;"
-              title="Click to view player profile">
+            <tr style="cursor:${isDoubles ? 'default' : 'pointer'};"
+              ${!isDoubles ? `data-view-player="${row.uid}"` : ''}
+              title="${isDoubles ? '' : 'Click to view player profile'}">
               <td style="font-family:var(--font-mono);color:var(--text3);">${i + 1}</td>
               <td style="font-weight:${q ? '700' : '400'};">
                 <div style="display:flex;align-items:center;gap:6px;">
-                  ${avatarToSvg(p.avatarId || null, 22)}
-                  ${escHtml(p.alias || p.name || row.uid)}
+                  ${!isDoubles ? avatarToSvg(p.avatarId || null, 22) : ''}
+                  <div>${displayName}${teamSubline}</div>
                 </div>
               </td>
               ${showPts ? `
@@ -3071,9 +3108,19 @@ function _renderQualifiedTable(table, qualified, allPlayers, cfg, gsConfig) {
   `;
 }
 
-function _renderBracketAdminView(bracket, allPlayers, sid, lid) {
+function _renderBracketAdminView(bracket, allPlayers, sid, lid, league) {
   const rounds    = bracket.rounds || {};
   const roundKeys = Object.keys(rounds).sort();
+  const isDoubles   = league?.leagueMode === 'doubles_team';
+  const leagueTeams = league?.teams || {};
+
+  function _slotName(id) {
+    if (!id) return null;
+    if (isDoubles) return leagueTeams[id]?.name || id;
+    const p = allPlayers[id] || {};
+    return p.alias || p.name || id;
+  }
+
   return roundKeys.map(rk => {
     const round     = rounds[rk];
     const matchKeys = Object.keys(round.matches || {}).sort();
@@ -3083,19 +3130,19 @@ function _renderBracketAdminView(bracket, allPlayers, sid, lid) {
           color:var(--text3);margin-bottom:8px;">${escHtml(round.name || rk)}</div>
         ${matchKeys.map(mk => {
           const m  = round.matches[mk];
-          const pA = m.playerA ? (allPlayers[m.playerA] || {}) : null;
-          const pB = m.playerB ? (allPlayers[m.playerB] || {}) : null;
+          const nA = m.playerA ? _slotName(m.playerA) : null;
+          const nB = m.playerB ? _slotName(m.playerB) : null;
           return `
             <div style="display:flex;align-items:center;gap:10px;padding:8px;
               background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:6px;">
               <span style="font-size:13px;flex:1;">
-                ${pA ? escHtml(pA.alias || pA.name || m.playerA) : 'TBD'}
+                ${nA ? escHtml(nA) : 'TBD'}
                 vs
-                ${pB ? escHtml(pB.alias || pB.name || m.playerB) : 'TBD'}
+                ${nB ? escHtml(nB) : 'TBD'}
                 ${m.score ? `<span style="color:var(--text3);font-size:11px;"> · ${escHtml(m.score)}</span>` : ''}
               </span>
               ${m.winner ? `<span class="badge-admin badge-green">
-                ${escHtml((allPlayers[m.winner] || {}).alias || m.winner)}
+                ${escHtml(_slotName(m.winner) || m.winner)}
               </span>` : ''}
               ${m.playerA && m.playerB && !m.winner ? `
                 <button class="btn-admin btn-secondary" data-action="set-bracket-result"
@@ -3117,10 +3164,18 @@ function _renderBracketAdminView(bracket, allPlayers, sid, lid) {
   }).join('');
 }
 
-function _showBracketResultModal(sid, lid, rk, mk, bracket, allPlayers, onDone) {
-  const match = bracket.rounds[rk].matches[mk];
-  const pA    = allPlayers[match.playerA] || {};
-  const pB    = allPlayers[match.playerB] || {};
+function _showBracketResultModal(sid, lid, rk, mk, bracket, allPlayers, onDone, league) {
+  const match       = bracket.rounds[rk].matches[mk];
+  const isDoubles   = league?.leagueMode === 'doubles_team';
+  const leagueTeams = league?.teams || {};
+  function _slotLabel(id) {
+    if (!id) return id;
+    if (isDoubles) return leagueTeams[id]?.name || id;
+    const p = allPlayers[id] || {};
+    return p.alias || p.name || id;
+  }
+  const nameA = _slotLabel(match.playerA);
+  const nameB = _slotLabel(match.playerB);
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position:fixed;inset:0;background:rgba(28,24,20,0.55);z-index:9000;
@@ -3131,14 +3186,14 @@ function _showBracketResultModal(sid, lid, rk, mk, bracket, allPlayers, onDone) 
       width:100%;max-width:380px;">
       <div style="font-weight:700;font-size:16px;margin-bottom:14px;">Bracket Match Result</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">
-        ${escHtml(pA.alias || pA.name || match.playerA)} vs ${escHtml(pB.alias || pB.name || match.playerB)}
+        ${escHtml(nameA)} vs ${escHtml(nameB)}
       </div>
       <div class="admin-input-group">
         <label class="admin-input-label">Winner</label>
         <select id="br-winner" class="admin-input">
           <option value="">Select winner…</option>
-          <option value="${match.playerA}">${escHtml(pA.alias || pA.name || match.playerA)}</option>
-          <option value="${match.playerB}">${escHtml(pB.alias || pB.name || match.playerB)}</option>
+          <option value="${match.playerA}">${escHtml(nameA)}</option>
+          <option value="${match.playerB}">${escHtml(nameB)}</option>
         </select>
       </div>
       <div class="admin-input-group">

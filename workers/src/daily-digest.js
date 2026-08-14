@@ -230,7 +230,11 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
     return;
   }
 
-  const stats = Object.fromEntries(memberUids.map(u => [u, { wins: 0, losses: 0, played: 0 }]));
+  const isDoubles = league.leagueMode === 'doubles_team';
+  const leagueTeams = league.teams || {};
+  const slots = isDoubles ? Object.keys(leagueTeams) : memberUids;
+
+  const stats = Object.fromEntries(slots.map(u => [u, { wins: 0, losses: 0, played: 0 }]));
   for (const m of matchValues) {
     if (m.status !== 'confirmed' || !m.result?.winner) continue;
     const w = m.result.winner;
@@ -240,13 +244,13 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
   }
 
   const pointsCfg = league.pointsConfig || {};
-  const standings = memberUids
+  const standings = slots
     .map(uid => {
       const { gamesWon, gamesLost } = _calcGameStats(matches, uid);
       return {
         uid,
         ...stats[uid],
-        elo:         players[uid]?.eloRating != null ? Math.round(players[uid].eloRating) : null,
+        elo:         !isDoubles && players[uid]?.eloRating != null ? Math.round(players[uid].eloRating) : null,
         groupPoints: _calcGroupPoints(matches, uid, pointsCfg),
         gamesWon,
         gamesLost,
@@ -301,7 +305,9 @@ async function _eveningStandings(db, env, sid, lid, league, matches, memberUids,
     // Standings sorted by points
     msg += '\n';
     standings.forEach(({ uid, wins, losses, groupPoints, gamesWon, gamesLost }, i) => {
-      const alias = players?.[uid]?.alias || players?.[uid]?.name || uid;
+      const alias = isDoubles
+        ? (leagueTeams[uid]?.name || uid)
+        : (players?.[uid]?.alias || players?.[uid]?.name || uid);
       const gD    = (gamesWon || 0) - (gamesLost || 0);
       const gDStr = (gD >= 0 ? '+' : '') + gD;
       msg += `${i + 1}. ${medals[i] || '  '} *${alias}* — ${groupPoints}pts (${wins}W ${losses}L · ${gDStr}g)\n`;

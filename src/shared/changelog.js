@@ -10,6 +10,18 @@
 
 export const CHANGELOG = [
   {
+    version: '1.15.6',
+    date:    '2026-08-14',
+    changes: [
+      'Doubles team leagues now use the team as the unit: fixtures, standings, and bracket all operate team vs team.',
+    ],
+    adminChanges: [
+      'Round robin fixtures in doubles_team leagues are generated between teams, not individual players.',
+      'Group stage standings and bracket qualification track teams.',
+      'Bracket slots show team names in doubles_team leagues.',
+    ],
+  },
+  {
     version: '1.15.5',
     date:    '2026-08-12',
     changes: [
