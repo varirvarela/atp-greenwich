@@ -985,10 +985,19 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust, lea
   if (isPadel && match.format === 'bo3') isSupertb = false;
   if (isPadel && !match.format) isSupertb = true;
 
-  const opUid  = match.playerA === myUid ? match.playerB : match.playerA;
-  const op     = allPlayers[opUid] || { name: 'Unknown', alias: opUid };
+  const leagueTeams   = league.teams || {};
+  const isTeamMode    = league.leagueMode === 'doubles_team';
+  const myTeamId      = isTeamMode
+    ? (Object.entries(leagueTeams).find(([, t]) => t.playerA === myUid || t.playerB === myUid)?.[0] ?? null)
+    : null;
+  const effectiveMyId = myTeamId || myUid;
+
+  const opUid  = match.playerA === effectiveMyId ? match.playerB : match.playerA;
+  const op     = isTeamMode
+    ? { name: leagueTeams[opUid]?.name || opUid, alias: leagueTeams[opUid]?.name || opUid }
+    : (allPlayers[opUid] || { name: 'Unknown', alias: opUid });
   const opName = op.alias || op.name;
-  const isMeA  = match.playerA === myUid;
+  const isMeA  = match.playerA === effectiveMyId;
   const prev   = isAdjust ? match.result : null;
 
   // When adjusting and format was already set, restore choice from prev score shape
@@ -1319,8 +1328,8 @@ function _showResultEntryModal(match, myUid, allPlayers, sid, lid, isAdjust, lea
     overlay.querySelector('#submit-status').style.display = 'block';
 
     const winnerIsMe = derivedWinner === 'me';
-    const winnerUid  = winnerIsMe ? myUid : opUid;
-    const loserUid   = winnerIsMe ? opUid : myUid;
+    const winnerUid  = winnerIsMe ? effectiveMyId : opUid;
+    const loserUid   = winnerIsMe ? opUid : effectiveMyId;
 
     let resultData;
     if (isPro10) {
@@ -1998,7 +2007,22 @@ async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, al
   // Normalise history to an array — Firebase can return an object if keys aren't sequential
   const _toArr = v => Array.isArray(v) ? v : (v ? Object.values(v) : []);
 
-  const isDoubles = !!(match.partnerA || match.teamAId);
+  const isTeamMatch = typeof uidA === 'string' && uidA.startsWith('team_');
+  const isDoubles   = !isTeamMatch && !!(match.partnerA || match.teamAId);
+
+  if (isTeamMatch) {
+    // doubles_team league — no ELO, just write the result
+    await dbMultiUpdate({
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:      format || match.format || null,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
+    });
+    writeActivity('match_confirmed', { sid, lid, mid: match.mid, playerA: uidA, playerB: uidB, winnerId: resultData.winner });
+    return;
+  }
 
   if (isDoubles) {
     // ── Doubles ELO ────────────────────────────────────────────────────────────

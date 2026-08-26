@@ -365,7 +365,10 @@ async function renderPlayers(el) {
   `;
 
   el.querySelector('#player-season-filter')?.addEventListener('change', () => renderPlayers(el));
-  el.querySelector('#player-search')?.addEventListener('input', () => renderPlayers(el));
+  el.querySelector('#player-search')?.addEventListener('input', async () => {
+    await renderPlayers(el);
+    el.querySelector('#player-search')?.focus();
+  });
 
   // Approve buttons
   el.querySelectorAll('[data-action="approve"]').forEach(btn => {
@@ -2400,7 +2403,7 @@ async function renderMatches(el) {
       card.addEventListener('click', e => {
         if (e.target.closest('button')) return;
         const row = rows.find(m => m.mid === card.dataset.mid);
-        if (row) _showMatchEditModal(row, players, () => loadMatches().then(renderList));
+        if (row) _showMatchEditModal(row, players, leagueMap, () => loadMatches().then(renderList));
       });
     });
 
@@ -2434,7 +2437,7 @@ async function renderMatches(el) {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const row = rows.find(m => m.mid === btn.dataset.mid);
-        if (row) _showMatchEditModal(row, players, () => loadMatches().then(renderList));
+        if (row) _showMatchEditModal(row, players, leagueMap, () => loadMatches().then(renderList));
       });
     });
   }
@@ -2530,13 +2533,17 @@ function _isAdminValidTennisSet(a, b) {
   return false;
 }
 
-function _showMatchEditModal(match, allPlayers, onDone) {
+function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
   if (match.status === 'open_challenge') {
     return _showOpenChallengeAdminModal(match, allPlayers, onDone);
   }
 
+  const league  = leagueMap[match.lid] || {};
+  const isTeam  = league.leagueMode === 'doubles_team';
+  const slotName = uid => isTeam
+    ? (league.teams?.[uid]?.name || uid)
+    : (allPlayers[uid]?.alias || allPlayers[uid]?.name || uid);
   const pA = allPlayers[match.playerA] || {};
-  const pB = allPlayers[match.playerB] || {};
 
   // Build initial sets from existing result, or one blank set
   const existingSets = match.result?.sets?.length ? match.result.sets : [{ a: '', b: '' }];
@@ -2581,20 +2588,20 @@ function _showMatchEditModal(match, allPlayers, onDone) {
         Edit Match
       </div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:${isConfirmed?'10':'16'}px;">
-        ${escHtml(pA.alias||pA.name||match.playerA)} vs ${escHtml(pB.alias||pB.name||match.playerB)}
+        ${escHtml(slotName(match.playerA))} vs ${escHtml(slotName(match.playerB))}
         &nbsp;·&nbsp;<span class="badge-admin ${isConfirmed?'badge-green':'badge-orange'}">${escHtml(match.status)}</span>
       </div>
       ${isConfirmed ? `
         <div style="background:rgba(184,64,8,.08);border-radius:8px;padding:8px 10px;
           font-size:12px;color:var(--ace);margin-bottom:14px;">
-          This match is confirmed. Saving will override the result and recalculate ELO.
+          This match is confirmed. Saving will override the result${isTeam ? '.' : ' and recalculate ELO.'}
         </div>
       ` : ''}
 
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
         color:var(--text3);margin-bottom:8px;">
         Score &nbsp;
-        <span style="font-size:11px;color:var(--text3);font-weight:400;">(${escHtml(pA.alias||pA.name||'A')} — ${escHtml(pB.alias||pB.name||'B')})</span>
+        <span style="font-size:11px;color:var(--text3);font-weight:400;">(${escHtml(slotName(match.playerA))} — ${escHtml(slotName(match.playerB))})</span>
       </div>
       <div id="set-rows">${setsHtml(existingSets)}</div>
       <button type="button" id="btn-add-set" class="btn-admin btn-ghost"
@@ -2605,9 +2612,9 @@ function _showMatchEditModal(match, allPlayers, onDone) {
         <select id="winner-select" class="admin-input">
           <option value="">Auto (from sets)</option>
           <option value="${match.playerA}" ${match.result?.winner===match.playerA?'selected':''}>
-            ${escHtml(pA.alias||pA.name||match.playerA)}</option>
+            ${escHtml(slotName(match.playerA))}</option>
           <option value="${match.playerB}" ${match.result?.winner===match.playerB?'selected':''}>
-            ${escHtml(pB.alias||pB.name||match.playerB)}</option>
+            ${escHtml(slotName(match.playerB))}</option>
         </select>
       </div>
 
@@ -2705,24 +2712,26 @@ function _showMatchEditModal(match, allPlayers, onDone) {
     }
     if (!winner) { toast('Could not determine winner — select manually', 'error'); saveBtn.disabled = false; saveBtn.textContent = 'Save Result'; return; }
 
-    const pAData = allPlayers[match.playerA] || {};
-    const pBData = allPlayers[match.playerB] || {};
-    const eloResult = calculateElo(pAData.eloRating||1000, pBData.eloRating||1000, winner===match.playerA ? 'a' : 'b');
-
-    const now  = Date.now();
-    const base = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
+    const now    = Date.now();
+    const base   = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
+    const loser  = winner === match.playerA ? match.playerB : match.playerA;
     const updates = {
       [base + '/status']:        'confirmed',
       [base + '/confirmedAt']:   match.confirmedAt || now,
       [base + '/adminOverride']: true,
       [base + '/disputed']:      null,
-      [base + '/result']:        { winner, sets },
-      [`players/${match.playerA}/eloRating`]: eloResult.newA,
-      [`players/${match.playerB}/eloRating`]: eloResult.newB,
+      [base + '/result']:        { winner, loser, sets },
     };
+    if (!isTeam) {
+      const pAData    = allPlayers[match.playerA] || {};
+      const pBData    = allPlayers[match.playerB] || {};
+      const eloResult = calculateElo(pAData.eloRating||1000, pBData.eloRating||1000, winner===match.playerA ? 'a' : 'b');
+      updates[`players/${match.playerA}/eloRating`] = eloResult.newA;
+      updates[`players/${match.playerB}/eloRating`] = eloResult.newB;
+    }
     await dbMultiUpdate(updates);
     overlay.remove();
-    toast('Match saved — ELO updated', 'success');
+    toast(isTeam ? 'Match saved' : 'Match saved — ELO updated', 'success');
     onDone();
   });
 }

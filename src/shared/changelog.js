@@ -10,6 +10,18 @@
 
 export const CHANGELOG = [
   {
+    version: '1.16.1',
+    date:    '2026-08-25',
+    changes: [
+      'Team doubles results now record the correct winner and update standings properly.',
+    ],
+    adminChanges: [
+      'Player search box no longer loses focus after each keystroke.',
+      'Match edit modal shows team names instead of team codes in winner dropdown.',
+      'Saving a team doubles match result no longer incorrectly modifies ELO ratings.',
+    ],
+  },
+  {
     version: '1.16.0',
     date:    '2026-08-25',
     changes: [],
