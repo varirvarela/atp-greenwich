@@ -10,10 +10,11 @@
 
 export const CHANGELOG = [
   {
-    version: '1.16.1',
+    version: '1.16.2',
     date:    '2026-08-25',
     changes: [
       'Team doubles results now record the correct winner and update standings properly.',
+      'Activity feed now shows team names instead of team codes for doubles team matches.',
     ],
     adminChanges: [
       'Player search box no longer loses focus after each keystroke.',

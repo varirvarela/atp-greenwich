@@ -42,7 +42,7 @@ export function renderFeedTab(el, player, creds) {
 
     // All leagues in this tournament (for feed content)
     const allTournamentLeagues = Object.entries(leaguesMap).map(([lid, l]) => ({
-      lid, name: l.name || lid,
+      lid, name: l.name || lid, leagueMode: l.leagueMode, teams: l.teams || {},
     }));
 
     // Player's own leagues (membership check — must be in at least one)
@@ -279,14 +279,29 @@ function _showFeedSettings(allLeagues, onClose, uid) {
 // ─── Feed item ────────────────────────────────────────────────────────────────
 
 function _feedItem(match, myUid, allPlayers, leagueList) {
-  const leagueName = leagueList ? leagueList.find(l => l.lid === match.lid)?.name : null;
-  const pA    = allPlayers[match.playerA] || { name: 'Player A', alias: match.playerA };
-  const pB    = allPlayers[match.playerB] || { name: 'Player B', alias: match.playerB };
-  const avA   = pA.avatarId ? avatarToSvg(pA.avatarId, 32) : _defaultAv(32);
-  const avB   = pB.avatarId ? avatarToSvg(pB.avatarId, 32) : _defaultAv(32);
+  const league      = leagueList?.find(l => l.lid === match.lid) || {};
+  const leagueName  = league.name || null;
+  const isTeamMode  = league.leagueMode === 'doubles_team';
+  const leagueTeams = league.teams || {};
 
-  const isMeA    = match.playerA === myUid;
-  const isMeB    = match.playerB === myUid;
+  const nameA = isTeamMode
+    ? (leagueTeams[match.playerA]?.name || match.playerA)
+    : (allPlayers[match.playerA]?.alias || allPlayers[match.playerA]?.name || match.playerA);
+  const nameB = isTeamMode
+    ? (leagueTeams[match.playerB]?.name || match.playerB)
+    : (allPlayers[match.playerB]?.alias || allPlayers[match.playerB]?.name || match.playerB);
+
+  const pA    = isTeamMode ? {} : (allPlayers[match.playerA] || {});
+  const pB    = isTeamMode ? {} : (allPlayers[match.playerB] || {});
+  const avA   = !isTeamMode && pA.avatarId ? avatarToSvg(pA.avatarId, 32) : _defaultAv(32);
+  const avB   = !isTeamMode && pB.avatarId ? avatarToSvg(pB.avatarId, 32) : _defaultAv(32);
+
+  const isMeA = isTeamMode
+    ? (leagueTeams[match.playerA]?.playerA === myUid || leagueTeams[match.playerA]?.playerB === myUid)
+    : match.playerA === myUid;
+  const isMeB = isTeamMode
+    ? (leagueTeams[match.playerB]?.playerA === myUid || leagueTeams[match.playerB]?.playerB === myUid)
+    : match.playerB === myUid;
   const iMePlayed = isMeA || isMeB;
 
   const winnerUid = match.result.winner;
@@ -295,9 +310,6 @@ function _feedItem(match, myUid, allPlayers, leagueList) {
 
   const deltaA = match.eloDeltas?.[match.playerA];
   const deltaB = match.eloDeltas?.[match.playerB];
-
-  const nameA = pA.alias || pA.name;
-  const nameB = pB.alias || pB.name;
 
   const winnerIsA = winnerUid === match.playerA;
 
