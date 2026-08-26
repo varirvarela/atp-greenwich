@@ -10,6 +10,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.16.0',
+    date:    '2026-08-25',
+    changes: [],
+    adminChanges: [
+      'Players tab now has a text search box to filter by name, alias, or email.',
+      'Team doubles matches now show team alias names instead of raw team IDs.',
+    ],
+  },
+  {
     version: '1.15.9',
     date:    '2026-08-14',
     changes: [

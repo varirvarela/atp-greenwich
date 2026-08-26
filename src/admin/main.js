@@ -279,8 +279,9 @@ function toast(msg, type = '') {
 // ─── Players ──────────────────────────────────────────────────────────────────
 
 async function renderPlayers(el) {
-  // Persist season filter across re-renders
-  const filteredSid = el.querySelector('#player-season-filter')?.value || '';
+  // Persist filters across re-renders
+  const filteredSid   = el.querySelector('#player-season-filter')?.value || '';
+  const searchQuery   = el.querySelector('#player-search')?.value.trim().toLowerCase() || '';
 
   const [allObj, seasonsRaw] = await Promise.all([dbGet(pRef()), dbGet(dbRef('seasons'))]);
   const players = allObj
@@ -306,10 +307,13 @@ async function renderPlayers(el) {
 
   const allStats = _computeAllMatchStats(seasons);
 
-  const pending    = players.filter(p => p.status === 'invited');
-  const onboarding = players.filter(p => p.status === 'onboarding');
-  const allActive  = players.filter(p => p.status === 'active');
-  const other      = players.filter(p => !['invited','onboarding','active'].includes(p.status));
+  const matchesSearch = p => !searchQuery || [p.name, p.alias, p.email, p.username]
+    .filter(Boolean).some(v => v.toLowerCase().includes(searchQuery));
+
+  const pending    = players.filter(p => p.status === 'invited'   && matchesSearch(p));
+  const onboarding = players.filter(p => p.status === 'onboarding' && matchesSearch(p));
+  const allActive  = players.filter(p => p.status === 'active'    && matchesSearch(p));
+  const other      = players.filter(p => !['invited','onboarding','active'].includes(p.status) && matchesSearch(p));
 
   const active = seasonMemberUids
     ? allActive.filter(p => seasonMemberUids.has(p.uid))
@@ -319,6 +323,9 @@ async function renderPlayers(el) {
     <div class="section-header">
       <div class="section-title">Players</div>
       <div class="section-actions">
+        <input id="player-search" class="admin-input" type="search"
+          placeholder="Search players…" value="${escHtml(searchQuery)}"
+          style="font-size:12px;padding:4px 8px;height:auto;min-width:140px;">
         <select id="player-season-filter" class="admin-input"
           style="font-size:12px;padding:4px 8px;height:auto;">
           <option value="">All tournaments</option>
@@ -358,6 +365,7 @@ async function renderPlayers(el) {
   `;
 
   el.querySelector('#player-season-filter')?.addEventListener('change', () => renderPlayers(el));
+  el.querySelector('#player-search')?.addEventListener('input', () => renderPlayers(el));
 
   // Approve buttons
   el.querySelectorAll('[data-action="approve"]').forEach(btn => {
@@ -2308,9 +2316,17 @@ async function renderMatches(el) {
       if (activeStatus === 'disputed' && !m.disputed) return false;
       if (activeStatus === 'cancelled' && m.status !== 'cancelled') return false;
       if (searchPlayer) {
-        const pA = players[m.playerA] || {};
-        const pB = players[m.playerB] || {};
-        const names = [pA.name, pA.alias, pB.name, pB.alias].filter(Boolean).join(' ').toLowerCase();
+        const league = leagueMap[m.lid] || {};
+        let names;
+        if (league.leagueMode === 'doubles_team') {
+          const tA = league.teams?.[m.playerA] || {};
+          const tB = league.teams?.[m.playerB] || {};
+          names = [tA.name, tB.name].filter(Boolean).join(' ').toLowerCase();
+        } else {
+          const pA = players[m.playerA] || {};
+          const pB = players[m.playerB] || {};
+          names = [pA.name, pA.alias, pB.name, pB.alias].filter(Boolean).join(' ').toLowerCase();
+        }
         if (!names.includes(searchPlayer.toLowerCase())) return false;
       }
       return true;
@@ -2369,13 +2385,13 @@ async function renderMatches(el) {
 
     listEl.innerHTML = `
       ${disputed.length ? `<div class="section-group-label">Disputed (${disputed.length})</div>
-        ${disputed.map(m => _matchCard(m, players)).join('')}` : ''}
+        ${disputed.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
       ${open.length ? `<div class="section-group-label">Open (${open.length})</div>
-        ${open.map(m => _matchCard(m, players)).join('')}` : ''}
+        ${open.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
       ${done.length ? `<div class="section-group-label">Confirmed (${done.length})</div>
-        ${done.map(m => _matchCard(m, players)).join('')}` : ''}
+        ${done.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
       ${other.length ? `<div class="section-group-label">Other (${other.length})</div>
-        ${other.map(m => _matchCard(m, players)).join('')}` : ''}
+        ${other.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
     `;
 
     // Click card → edit modal
@@ -2455,10 +2471,14 @@ async function renderMatches(el) {
   renderList();
 }
 
-function _matchCard(m, allPlayers) {
-  const pA = allPlayers[m.playerA] || {};
-  const pB = m.playerB ? (allPlayers[m.playerB] || {}) : null;
-  const pBLabel = pB ? escHtml(pB.alias||pB.name||m.playerB) : '<span style="color:var(--ace);">Open</span>';
+function _matchCard(m, allPlayers, leagueMap = {}) {
+  const league  = leagueMap[m.lid] || {};
+  const isTeam  = league.leagueMode === 'doubles_team';
+  const slotName = uid => isTeam
+    ? (league.teams?.[uid]?.name || uid)
+    : (allPlayers[uid]?.alias || allPlayers[uid]?.name || uid);
+  const pALabel = escHtml(slotName(m.playerA));
+  const pBLabel = m.playerB ? escHtml(slotName(m.playerB)) : '<span style="color:var(--ace);">Open</span>';
   const statusClass = {
     scheduled: 'badge-muted', result_pending: 'badge-orange',
     photo_pending: 'badge-orange', confirmed: 'badge-green', cancelled: 'badge-muted',
@@ -2470,7 +2490,7 @@ function _matchCard(m, allPlayers) {
     <div class="admin-card" data-mid="${m.mid}">
       <div class="admin-card-body">
         <div class="admin-card-name">
-          ${escHtml(pA.alias||pA.name||m.playerA)} vs ${pBLabel}
+          ${pALabel} vs ${pBLabel}
         </div>
         <div class="admin-card-sub">
           ${escHtml(m.leagueName||'')}
