@@ -409,11 +409,18 @@ function _feedItem(match, myUid, allPlayers, leagueList) {
 function _activityCard(item, allPlayers, myLeagues) {
   function playerName(uid) {
     if (!uid) return 'Unknown';
+    if (typeof uid === 'string' && uid.startsWith('team_')) {
+      for (const league of (myLeagues || [])) {
+        const n = league.teams?.[uid]?.name;
+        if (n) return escHtml(n);
+      }
+      return escHtml(uid);
+    }
     const p = allPlayers[uid] || {};
     return escHtml(p.alias || p.username || uid);
   }
   function playerAv(uid, sz = 28) {
-    if (!uid) return _defaultAv(sz);
+    if (!uid || (typeof uid === 'string' && uid.startsWith('team_'))) return _defaultAv(sz);
     const p = allPlayers[uid] || {};
     return p.avatarId ? avatarToSvg(p.avatarId, sz) : _defaultAv(sz);
   }
