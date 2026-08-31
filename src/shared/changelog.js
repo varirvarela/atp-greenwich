@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.16.6',
+    date:    '2026-08-26',
+    adminChanges: [
+      'Match cards now show a ⚠ Penalty label for matches with a deadline penalty applied.',
+      'Match edit modal shows the match deadline (editable) and a "Clear penalty" button that also saves the new deadline to stop the cron from re-applying it.',
+    ],
+  },
+  {
     version: '1.16.5',
     date:    '2026-08-26',
     adminChanges: [

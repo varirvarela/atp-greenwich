@@ -2502,6 +2502,7 @@ function _matchCard(m, allPlayers, leagueMap = {}) {
           ${scheduledStr ? ' &middot; 📅 ' + scheduledStr : ''}
           ${m.disputed ? ' &middot; <span style="color:var(--ace3);">Disputed</span>' : ''}
           ${m.groupMatch ? ' &middot; <span style="color:#0a7a5e;">Group</span>' : ''}
+          ${m.deadlinePenaltyApplied ? ' &middot; <span style="color:var(--ace3);font-weight:600;">⚠ Penalty</span>' : ''}
         </div>
       </div>
       <div class="admin-card-actions">
@@ -2618,9 +2619,21 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
         </select>
       </div>
 
+      ${match.deadline ? `
+        <div class="admin-input-group" style="margin-top:12px;">
+          <label class="admin-input-label">Match deadline</label>
+          <input id="match-deadline" class="admin-input" type="datetime-local"
+            value="${escHtml(tsToLocalInput(match.deadline))}"
+            style="font-size:13px;">
+          <div style="font-size:11px;color:var(--text3);margin-top:3px;">
+            Update to prevent the daily cron from re-applying penalties.
+          </div>
+        </div>
+      ` : ''}
+
       ${match.deadlinePenaltyApplied ? `
         <div style="background:rgba(184,64,8,.06);border-radius:8px;padding:8px 10px;
-          margin-top:4px;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          margin-top:8px;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
           <span style="font-size:12px;color:var(--ace3);">⚠️ Deadline penalty applied</span>
           <button id="btn-clear-penalty" class="btn-admin btn-ghost"
             style="font-size:11px;color:var(--ace2);padding:4px 10px;">Clear penalty</button>
@@ -2688,9 +2701,13 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
   overlay.querySelector('#btn-clear-penalty')?.addEventListener('click', async () => {
     const btn = overlay.querySelector('#btn-clear-penalty');
     btn.disabled = true; btn.textContent = '…';
-    const base = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
-    await dbMultiUpdate({ [base + '/deadlinePenaltyApplied']: null });
-    toast('Deadline penalty cleared', 'success');
+    const base      = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
+    const dlInput   = overlay.querySelector('#match-deadline');
+    const newDl     = dlInput ? localInputToTs(dlInput.value) : null;
+    const updates   = { [base + '/deadlinePenaltyApplied']: null };
+    if (newDl)  updates[base + '/deadline'] = newDl;
+    await dbMultiUpdate(updates);
+    toast('Deadline penalty cleared' + (newDl ? ' · deadline updated' : ''), 'success');
     overlay.remove();
     onDone();
   });
@@ -2731,15 +2748,18 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
     }
     if (!winner) { toast('Could not determine winner — select manually', 'error'); saveBtn.disabled = false; saveBtn.textContent = 'Save Result'; return; }
 
-    const now    = Date.now();
-    const base   = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
-    const loser  = winner === match.playerA ? match.playerB : match.playerA;
+    const now     = Date.now();
+    const base    = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
+    const loser   = winner === match.playerA ? match.playerB : match.playerA;
+    const dlInput = overlay.querySelector('#match-deadline');
+    const newDl   = dlInput ? localInputToTs(dlInput.value) : null;
     const updates = {
       [base + '/status']:        'confirmed',
       [base + '/confirmedAt']:   match.confirmedAt || now,
       [base + '/adminOverride']: true,
       [base + '/disputed']:      null,
       [base + '/result']:        { winner, loser, sets },
+      ...(newDl ? { [base + '/deadline']: newDl } : {}),
     };
     if (!isTeam) {
       const pAData    = allPlayers[match.playerA] || {};
