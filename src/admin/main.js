@@ -3290,6 +3290,16 @@ async function renderSettings(el) {
     </div>
 
     <div class="admin-form-panel">
+      <div class="admin-form-title">Maintenance</div>
+      <p style="font-size:12px;color:var(--text3);margin:0 0 12px;">
+        Rechecks all active group-stage match deadlines — lifts penalties from matches
+        whose deadline was extended, applies penalties to any that have since expired.
+        Runs within 5 minutes via the background worker.</p>
+      <button class="btn-admin btn-primary" id="btn-deadline-check">Run deadline check</button>
+      <div id="deadline-check-status"></div>
+    </div>
+
+    <div class="admin-form-panel">
       <div class="admin-form-title">App Info</div>
       <div style="font-size:13px;color:var(--text2);">
         <div style="margin-bottom:4px;">ATP Greenwich Admin · v${APP_VERSION}</div>
@@ -3309,6 +3319,35 @@ async function renderSettings(el) {
     toast('Password updated', 'success');
     el.querySelector('#new-pwd-input').value = '';
     el.querySelector('#confirm-pwd-input').value = '';
+  });
+
+  el.querySelector('#btn-deadline-check').addEventListener('click', async () => {
+    const btn    = el.querySelector('#btn-deadline-check');
+    const status = el.querySelector('#deadline-check-status');
+    btn.disabled = true;
+    status.innerHTML = `<p style="font-size:12px;color:var(--text3);margin:8px 0 0;">
+      ⏳ Queued — will run within 5 minutes…</p>`;
+    await dbSet(dbRef('config/deadlineCheckRequest'), { requestedAt: Date.now(), completedAt: null, result: null });
+    // Poll for completion (up to 6 minutes)
+    const start = Date.now();
+    const poll  = setInterval(async () => {
+      const req = await dbGet(dbRef('config/deadlineCheckRequest'));
+      if (req?.completedAt) {
+        clearInterval(poll);
+        btn.disabled = false;
+        const { lifted = 0, penalised = 0 } = req.result || {};
+        const msg = lifted === 0 && penalised === 0
+          ? 'Nothing to change — all penalties are current.'
+          : `Done: lifted ${lifted} early penalty/penalties, applied ${penalised} new.`;
+        status.innerHTML = `<p style="font-size:12px;color:var(--ace2);margin:8px 0 0;">✅ ${msg}</p>`;
+        toast('Deadline check complete', 'success');
+      } else if (Date.now() - start > 370000) {
+        clearInterval(poll);
+        btn.disabled = false;
+        status.innerHTML = `<p style="font-size:12px;color:var(--ace3);margin:8px 0 0;">
+          Timed out — check Worker logs.</p>`;
+      }
+    }, 15000);
   });
 
 }

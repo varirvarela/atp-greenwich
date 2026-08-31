@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.16.4',
+    date:    '2026-08-26',
+    adminChanges: [
+      'Settings: "Run deadline check" button — lifts premature penalties and applies any newly overdue ones, runs within 5 minutes via background worker.',
+    ],
+  },
+  {
     version: '1.16.3',
     date:    '2026-08-25',
     changes: [

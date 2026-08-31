@@ -4,6 +4,7 @@
 import { createFirebase }                   from './firebase.js';
 import { sendWebPush }                      from './vapid.js';
 import { waEnabled, sendWA, sendWAPhoto }   from './whatsapp.js';
+import { runDeadlineCheck }                 from './deadline-check.js';
 
 const APP_URL = 'https://varirvarela.github.io/atp-greenwich/';
 
@@ -216,6 +217,16 @@ export async function runSendPush(env) {
       await db.set('config/whatsappBroadcast/sentAt', Date.now());
       console.log('Broadcast sent.');
     }
+  }
+
+  // ── Pending deadline check ────────────────────────────────────────────────
+  const dcReq = await db.get('config/deadlineCheckRequest');
+  if (dcReq?.requestedAt && !dcReq.completedAt) {
+    console.log('Running deadline check (requested by admin)…');
+    const result = await runDeadlineCheck(db);
+    await db.set('config/deadlineCheckRequest/completedAt', Date.now());
+    await db.set('config/deadlineCheckRequest/result', result);
+    console.log('Deadline check complete:', result);
   }
 
   console.log('Notification pass complete.');
