@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.16.7',
+    date:    '2026-08-26',
+    adminChanges: [
+      'Matches tab: league filter now correctly shows all leagues on initial load.',
+    ],
+  },
+  {
     version: '1.16.6',
     date:    '2026-08-26',
     adminChanges: [

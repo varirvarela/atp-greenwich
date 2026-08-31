@@ -2471,6 +2471,12 @@ async function renderMatches(el) {
   el.querySelector('#filter-player').addEventListener('input',  e => { searchPlayer = e.target.value; renderList(); });
 
   await loadMatches();
+  // Populate league filter now that leagueMap is loaded
+  el.querySelector('#filter-league').innerHTML =
+    `<option value="all" ${activeLid==='all'?'selected':''}>All leagues</option>` +
+    Object.entries(leagueMap)
+      .map(([lid, l]) => `<option value="${lid}" ${activeLid===lid?'selected':''}>${escHtml(l.name||lid)}</option>`)
+      .join('');
   renderList();
 }
 
