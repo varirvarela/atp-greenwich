@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.16.5',
+    date:    '2026-08-26',
+    adminChanges: [
+      'Match edit modal now shows a "Clear penalty" button for matches with a deadline penalty applied.',
+    ],
+  },
+  {
     version: '1.16.4',
     date:    '2026-08-26',
     adminChanges: [

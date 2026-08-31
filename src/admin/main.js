@@ -2618,6 +2618,15 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
         </select>
       </div>
 
+      ${match.deadlinePenaltyApplied ? `
+        <div style="background:rgba(184,64,8,.06);border-radius:8px;padding:8px 10px;
+          margin-top:4px;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span style="font-size:12px;color:var(--ace3);">⚠️ Deadline penalty applied</span>
+          <button id="btn-clear-penalty" class="btn-admin btn-ghost"
+            style="font-size:11px;color:var(--ace2);padding:4px 10px;">Clear penalty</button>
+        </div>
+      ` : ''}
+
       <div style="display:flex;gap:10px;margin-top:16px;">
         <button id="btn-save-match" class="btn-admin btn-primary" style="flex:1;">Save Result</button>
         <button id="btn-close-match" class="btn-admin btn-secondary">Cancel</button>
@@ -2675,6 +2684,16 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
 
   overlay.querySelector('#btn-close-match').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#btn-clear-penalty')?.addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-clear-penalty');
+    btn.disabled = true; btn.textContent = '…';
+    const base = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
+    await dbMultiUpdate({ [base + '/deadlinePenaltyApplied']: null });
+    toast('Deadline penalty cleared', 'success');
+    overlay.remove();
+    onDone();
+  });
 
   overlay.querySelector('#btn-save-match').addEventListener('click', async () => {
     const saveBtn = overlay.querySelector('#btn-save-match');
