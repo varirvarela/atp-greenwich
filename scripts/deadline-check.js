@@ -38,6 +38,7 @@ async function run() {
   const seasons = seasonsSnap.val() || {};
 
   let penalised = 0;
+  let lifted    = 0;
 
   for (const [sid, season] of Object.entries(seasons)) {
     const leagues = season.leagues || {};
@@ -52,21 +53,36 @@ async function run() {
         if (!match.groupMatch) continue;
         if (match.status === 'confirmed') continue;
         if (match.forfeited) continue;
-        if (match.deadlinePenaltyApplied) continue;
-        if (!match.deadline || match.deadline > now) continue;
 
-        updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/deadlinePenaltyApplied`] = true;
-        penalised++;
+        const deadlinePassed = match.deadline && match.deadline <= now;
+
+        if (match.deadlinePenaltyApplied && !deadlinePassed) {
+          // Deadline was extended after penalty was applied — lift the penalty
+          updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/deadlinePenaltyApplied`] = null;
+          lifted++;
+        } else if (!match.deadlinePenaltyApplied && deadlinePassed) {
+          // Deadline has passed with no result — apply penalty
+          updates[`seasons/${sid}/leagues/${lid}/matches/${mid}/deadlinePenaltyApplied`] = true;
+          penalised++;
+        }
       }
 
       if (Object.keys(updates).length > 0) {
         await db.ref().update(updates);
-        console.log(`[${sid}/${lid}] Penalised ${Object.keys(updates).length} match(es).`);
+        const liftedHere    = Object.values(updates).filter(v => v === null).length;
+        const penalisedHere = Object.values(updates).filter(v => v === true).length;
+        if (liftedHere)    console.log(`[${sid}/${lid}] Lifted ${liftedHere} premature penalty/penalties (deadline extended).`);
+        if (penalisedHere) console.log(`[${sid}/${lid}] Penalised ${penalisedHere} match(es) past deadline.`);
       }
     }
   }
 
-  console.log(penalised === 0 ? 'No deadline penalties to apply.' : `Done. Total penalised: ${penalised}`);
+  if (lifted === 0 && penalised === 0) {
+    console.log('Nothing to do — all penalties are current.');
+  } else {
+    if (lifted)    console.log(`Done. Lifted: ${lifted}  Penalised: ${penalised}`);
+    if (!lifted)   console.log(`Done. Total penalised: ${penalised}`);
+  }
   process.exit(0);
 }
 
