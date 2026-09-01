@@ -2013,12 +2013,13 @@ async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, al
   if (isTeamMatch) {
     // doubles_team league — no ELO, just write the result
     await dbMultiUpdate({
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:      format || match.format || null,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:                   'confirmed',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:                   resultData,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:                 photoUrl,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:                   format || match.format || null,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]:              now,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]:              'player',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/deadlinePenaltyApplied`]:   null,
     });
     writeActivity('match_confirmed', { sid, lid, mid: match.mid, playerA: uidA, playerB: uidB, winnerId: resultData.winner });
     return;
@@ -2071,13 +2072,14 @@ async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, al
     };
 
     const updates = {
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:      format || match.format || null,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:   eloDeltas,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:                   'confirmed',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:                   resultData,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:                 photoUrl,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:                   format || match.format || null,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]:              now,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]:              'player',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:               eloDeltas,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/deadlinePenaltyApplied`]:   null,
       [`players/${uidA1}/doublesEloRating`]:  rA1 + dElo.deltaA1,
       [`players/${uidA1}/doublesEloHistory`]: hA1,
       [`players/${uidB1}/doublesEloRating`]:  rB1 + dElo.deltaB1,
@@ -2117,16 +2119,14 @@ async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, al
       { delta: elo.deltaB, match: match.mid, ts: now }];
 
     await dbMultiUpdate({
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:      'confirmed',
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:      resultData,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:    photoUrl,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:      format || match.format || null,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: now,
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]: 'player',
-      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:   {
-        [uidA]: elo.deltaA,
-        [uidB]: elo.deltaB,
-      },
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:                   'confirmed',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:                   resultData,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/photoUrl`]:                 photoUrl,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/format`]:                   format || match.format || null,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]:              now,
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedBy`]:              'player',
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/eloDeltas`]:               { [uidA]: elo.deltaA, [uidB]: elo.deltaB },
+      [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/deadlinePenaltyApplied`]:   null,
       [`players/${uidA}/eloRating`]:  elo.newRatingA,
       [`players/${uidB}/eloRating`]:  elo.newRatingB,
       [`players/${uidA}/eloHistory`]: newHistA,

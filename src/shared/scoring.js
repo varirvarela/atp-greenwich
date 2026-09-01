@@ -295,8 +295,8 @@ export function calculateGroupPoints(allMatches, uid, pointsConfig) {
       continue;
     }
 
-    // Deadline passed — both absent (cron sets this flag)
-    if (match.deadlinePenaltyApplied) {
+    // Deadline passed — only counts if not subsequently confirmed
+    if (match.deadlinePenaltyApplied && match.status !== 'confirmed') {
       points += missed;
       continue;
     }

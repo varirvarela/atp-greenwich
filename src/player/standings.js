@@ -288,7 +288,7 @@ function _computePlayerStats(allMatches, uid) {
     if (m.forfeited) {
       if (m.forfeited === uid) forfeited++;
       else opponentForfeited++;
-    } else if (m.deadlinePenaltyApplied) {
+    } else if (m.deadlinePenaltyApplied && m.status !== 'confirmed') {
       missed++;
     }
     if (m.status === 'confirmed') {

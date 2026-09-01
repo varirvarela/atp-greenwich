@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.16.8',
+    date:    '2026-09-01',
+    changes: [
+      'Fixed: confirmed group matches no longer incorrectly count as missed even when deadline penalty was previously applied.',
+    ],
+  },
+  {
     version: '1.16.7',
     date:    '2026-08-26',
     adminChanges: [

@@ -2760,11 +2760,12 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
     const dlInput = overlay.querySelector('#match-deadline');
     const newDl   = dlInput ? localInputToTs(dlInput.value) : null;
     const updates = {
-      [base + '/status']:        'confirmed',
-      [base + '/confirmedAt']:   match.confirmedAt || now,
-      [base + '/adminOverride']: true,
-      [base + '/disputed']:      null,
-      [base + '/result']:        { winner, loser, sets },
+      [base + '/status']:                   'confirmed',
+      [base + '/confirmedAt']:              match.confirmedAt || now,
+      [base + '/adminOverride']:            true,
+      [base + '/disputed']:                 null,
+      [base + '/result']:                   { winner, loser, sets },
+      [base + '/deadlinePenaltyApplied']:   null,
       ...(newDl ? { [base + '/deadline']: newDl } : {}),
     };
     if (!isTeam) {
