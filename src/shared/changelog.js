@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.16.9',
+    date:    '2026-09-08',
+    adminChanges: [
+      'Fixed: evening standings digest now correctly ignores deadline penalty flag on confirmed matches.',
+    ],
+  },
+  {
     version: '1.16.8',
     date:    '2026-09-01',
     changes: [

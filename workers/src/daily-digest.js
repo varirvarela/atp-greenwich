@@ -79,7 +79,7 @@ function _calcGroupPoints(matches, uid, pointsConfig) {
       points += (match.forfeited === uid) ? forfeitLoser : forfeitWinner;
       continue;
     }
-    if (match.deadlinePenaltyApplied) { points += missed; continue; }
+    if (match.deadlinePenaltyApplied && match.status !== 'confirmed') { points += missed; continue; }
     if (match.status === 'confirmed') {
       points += played;
       if (match.result?.winner === uid) points += wonBonus;
