@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.0',
+    date:    '2026-09-17',
+    adminChanges: [
+      'Bracket seeding now uses standard format: BYEs go to top seeds, who re-enter against the weakest available opponent. Seeds sorted by group points.',
+    ],
+  },
+  {
     version: '1.16.9',
     date:    '2026-09-08',
     adminChanges: [

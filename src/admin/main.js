@@ -2915,17 +2915,30 @@ async function renderBracketAdmin(el) {
     const gsConfig    = league.groupStageConfig || {};
     const pointsCfg   = league.pointsConfig     || {};
     const table       = buildLeagueTable(allMatches, slots);
-    // When group stage is closed, use the qualified flag set during close (not minMatches/minWins)
-    const qualified   = gsConfig.status === 'closed'
-      ? isDoubles
-        ? Object.entries(leagueTeams).filter(([, t]) => t.qualified === true).map(([id]) => ({ uid: id }))
-        : table.filter(row => membersObj?.[row.uid]?.qualified === true)
-      : getQualifiedPlayers(table, cfg);
-
-    // Attach group points to table rows
+    // Attach group points to table rows first — needed for seeding and display
     for (const row of table) {
       row.groupPoints = calculateGroupPoints(allMatches, row.uid, pointsCfg);
     }
+
+    // When group stage is closed, use the qualified flag set during close (not minMatches/minWins)
+    const qualified   = gsConfig.status === 'closed'
+      ? isDoubles
+        ? Object.entries(leagueTeams).filter(([, t]) => t.qualified === true).map(([id]) => ({
+            uid: id, groupPoints: calculateGroupPoints(allMatches, id, pointsCfg),
+          }))
+        : table.filter(row => membersObj?.[row.uid]?.qualified === true)
+      : getQualifiedPlayers(table, cfg);
+
+    // Seed by group points desc; tiebreak: wins desc, game diff desc
+    qualified.sort((a, b) => {
+      const gp = (b.groupPoints || 0) - (a.groupPoints || 0);
+      if (gp !== 0) return gp;
+      if ((b.standing?.matchesWon || 0) !== (a.standing?.matchesWon || 0))
+        return (b.standing?.matchesWon || 0) - (a.standing?.matchesWon || 0);
+      const agd = (a.standing?.gamesWon || 0) - (a.standing?.gamesLost || 0);
+      const bgd = (b.standing?.gamesWon || 0) - (b.standing?.gamesLost || 0);
+      return bgd - agd;
+    });
 
     const div = document.createElement('div');
     div.innerHTML = `
@@ -3044,33 +3057,50 @@ async function renderBracketAdmin(el) {
 }
 
 function _generateBracket(qualified, allPlayers) {
-  const players = qualified.map(r => r.uid);
-  const n       = players.length;
+  const seeds = qualified.map(r => r.uid);
+  const n     = seeds.length;
 
-  // Standard seeding: 1v(n), 2v(n-1), ... for first round
+  // Find smallest power of 2 >= n (bracket size).
+  // Any slot above n becomes a BYE, which goes to the top seeds first.
+  let size = 1;
+  while (size < n) size *= 2;
+
+  // Generate standard seeded bracket slot positions via recursive expansion.
+  // Start with [1, 2]; each expansion: every seed s → [s, next-s].
+  // Result for size=8: [1, 8, 4, 5, 3, 6, 2, 7]
+  // Property: consecutive pairs play in R1; Seeds 1 & 2 are on opposite
+  // halves and can only meet in the Final.
+  let slots = [1, 2];
+  while (slots.length < size) {
+    const next = slots.length * 2 + 1;
+    slots = slots.flatMap(s => [s, next - s]);
+  }
+
+  // Build first-round matches: pair consecutive slots; slot > n → BYE.
+  // Because the highest seed numbers (weakest players) are near the end of
+  // slots[], top seeds naturally receive the BYEs when n < size.
   const roundMatches = {};
-  for (let i = 0; i < Math.floor(n / 2); i++) {
-    roundMatches['m' + i] = {
-      playerA: players[i],
-      playerB: players[n - 1 - i],
-      winner:  null,
-      score:   '',
-    };
-  }
-  // Odd player gets a bye
-  if (n % 2 === 1) {
-    roundMatches['m' + Math.floor(n / 2)] = {
-      playerA: players[Math.floor(n / 2)],
-      playerB: null,
-      winner:  players[Math.floor(n / 2)],
-      score:   'BYE',
-    };
+  for (let i = 0; i < size; i += 2) {
+    const sA   = slots[i];
+    const sB   = slots[i + 1];
+    const uidA = sA <= n ? seeds[sA - 1] : null;
+    const uidB = sB <= n ? seeds[sB - 1] : null;
+    const mk   = 'm' + (i / 2);
+    if (uidA && !uidB) {
+      roundMatches[mk] = { playerA: uidA, playerB: null, winner: uidA, score: 'BYE' };
+    } else if (!uidA && uidB) {
+      roundMatches[mk] = { playerA: null, playerB: uidB, winner: uidB, score: 'BYE' };
+    } else {
+      roundMatches[mk] = { playerA: uidA, playerB: uidB, winner: null, score: '' };
+    }
   }
 
-  const rounds = { r0: { name: n <= 4 ? 'Semifinals' : 'Quarterfinals', matches: roundMatches } };
+  const r0Count = size / 2;
+  const r0Name  = r0Count >= 4 ? 'Quarterfinals' : r0Count === 2 ? 'Semifinals' : 'Final';
+  const rounds  = { r0: { name: r0Name, matches: roundMatches } };
 
   // Add subsequent empty rounds
-  let matchCount = Math.ceil(n / 2);
+  let matchCount = r0Count;
   let roundIdx   = 1;
   while (matchCount > 1) {
     matchCount = Math.ceil(matchCount / 2);
@@ -3083,7 +3113,8 @@ function _generateBracket(qualified, allPlayers) {
     roundIdx++;
   }
 
-  // Propagate BYE winners through all rounds; auto-BYE any match left with one player and no source
+  // Propagate BYE winners into subsequent rounds; auto-BYE any next-round
+  // match that has only one source match feeding into it.
   for (const rk of Object.keys(rounds).sort()) {
     const ri     = parseInt(rk.replace('r', ''), 10);
     const nextRk = 'r' + (ri + 1);
@@ -3104,7 +3135,7 @@ function _generateBracket(qualified, allPlayers) {
       const nmi = parseInt(mk.replace('m', ''), 10);
       const hasSrcA = ('m' + (nmi * 2))     in rounds[rk].matches;
       const hasSrcB = ('m' + (nmi * 2 + 1)) in rounds[rk].matches;
-      if (nm.playerA && !nm.playerB && !hasSrcB) { nm.winner = nm.playerA; nm.score = 'BYE'; }
+      if      (nm.playerA && !nm.playerB && !hasSrcB) { nm.winner = nm.playerA; nm.score = 'BYE'; }
       else if (!nm.playerA && nm.playerB && !hasSrcA) { nm.winner = nm.playerB; nm.score = 'BYE'; }
     }
   }
