@@ -447,7 +447,9 @@ function _activityCard(item, allPlayers, myLeagues) {
       icon      = '🏆';
       avatarUid = null;
       const leagueStr = item.leagueName || (league ? escHtml(league.name) : '');
-      title = `${escHtml(item.roundName || 'Bracket')} is live${leagueStr ? ' · ' + escHtml(leagueStr) : ''}!`;
+      const matchups  = item.matchups || [];
+      const kickoffRoundName = matchups.length === 1 ? 'Final' : matchups.length === 2 ? 'Semifinals' : matchups.length >= 4 ? 'Quarterfinals' : (item.roundName || 'Bracket');
+      title = `${escHtml(kickoffRoundName)} is live${leagueStr ? ' · ' + escHtml(leagueStr) : ''}!`;
       const lines = (item.matchups || []).map(m => {
         const a = playerName(m.playerA);
         const b = playerName(m.playerB);
@@ -464,7 +466,8 @@ function _activityCard(item, allPlayers, myLeagues) {
       const lName    = playerName(item.loser);
       const scoreStr = item.score ? ` · ${escHtml(item.score)}` : '';
       const leagueStr = league ? ` · ${escHtml(league.name)}` : '';
-      title = `${escHtml(item.roundName || 'Bracket')}${leagueStr}`;
+      const resultRoundName = item.isFinal ? 'Final' : (item.roundName || 'Bracket');
+      title = `${escHtml(resultRoundName)}${leagueStr}`;
       const resultLine = `${wName} def. ${lName}${scoreStr}`;
       let nextLine = '';
       if (item.isFinal) {
