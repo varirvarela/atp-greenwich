@@ -442,6 +442,20 @@ function _activityCard(item, allPlayers, myLeagues) {
         : `Open challenge${_leaguePart}${_whenPart}`;
       break;
     }
+    case 'bracket_kickoff': {
+      const league  = myLeagues?.find(l => l.lid === item.lid);
+      icon      = '🏆';
+      avatarUid = null;
+      const leagueStr = item.leagueName || (league ? escHtml(league.name) : '');
+      title = `${escHtml(item.roundName || 'Bracket')} is live${leagueStr ? ' · ' + escHtml(leagueStr) : ''}!`;
+      const lines = (item.matchups || []).map(m => {
+        const a = playerName(m.playerA);
+        const b = playerName(m.playerB);
+        return `⚔️ ${a} vs ${b}`;
+      });
+      sub = lines.join('<br>');
+      break;
+    }
     case 'bracket_result': {
       const league  = myLeagues?.find(l => l.lid === item.lid);
       icon      = '🏆';

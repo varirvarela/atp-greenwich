@@ -2952,6 +2952,7 @@ async function renderBracketAdmin(el) {
               </button>
             ` : `
               <span class="badge-admin badge-green">Bracket Active</span>
+              <button class="btn-admin btn-secondary" id="btn-announce-bracket">📣 Announce</button>
               <button class="btn-admin btn-danger" id="btn-reset-bracket">Reset</button>
             `}
           </div>
@@ -2983,6 +2984,27 @@ async function renderBracketAdmin(el) {
         loadAndRender();
       });
     }
+    const announceBtn = div.querySelector('#btn-announce-bracket');
+    if (announceBtn) {
+      announceBtn.addEventListener('click', async () => {
+        if (!bracketData) return;
+        const r0       = bracketData.rounds?.r0;
+        if (!r0) { toast('No first round found', 'error'); return; }
+        const roundName = r0.name || 'First Round';
+        const matchups  = Object.values(r0.matches || {})
+          .filter(m => m.playerA && m.playerB && m.score !== 'BYE')
+          .map(m => ({ playerA: m.playerA, playerB: m.playerB }));
+        if (matchups.length === 0) { toast('No matchups to announce', 'error'); return; }
+
+        const payload = { sid: activeSid, lid, roundName, matchups, leagueName: league.name || lid };
+        writeActivity('bracket_kickoff', { ...payload, createdAt: Date.now() });
+        await dbSet(dbRef(`notifications/bracketKickoff/${activeSid}_${lid}`), {
+          ...payload, createdAt: Date.now(),
+        });
+        toast('Bracket announced! WhatsApp sends within 5 min.', 'success');
+      });
+    }
+
     const resetBtn = div.querySelector('#btn-reset-bracket');
     if (resetBtn) {
       resetBtn.addEventListener('click', async () => {

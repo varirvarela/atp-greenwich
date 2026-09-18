@@ -219,6 +219,39 @@ export async function runSendPush(env) {
     }
   }
 
+  // ── Bracket kickoff announcement → WhatsApp ───────────────────────────────
+  if (waEnabled(env)) {
+    const kickoffNotifs = await db.get('notifications/bracketKickoff').then(v => v || {});
+    for (const [key, notif] of Object.entries(kickoffNotifs)) {
+      if (!notif?.createdAt || notif.waNotifiedAt) continue;
+      const { sid, lid, roundName, matchups, leagueName } = notif;
+      const league = seasons[sid]?.leagues?.[lid];
+      if (!league) { await db.set(`notifications/bracketKickoff/${key}/waNotifiedAt`, -1); continue; }
+
+      const isDoubles   = league.leagueMode === 'doubles_team';
+      const leagueTeams = league.teams || {};
+      const _bName = uid => {
+        if (!uid) return '?';
+        if (isDoubles) return leagueTeams[uid]?.name || uid;
+        const p = players[uid] || {};
+        return p.alias || p.name || uid;
+      };
+
+      const name = leagueName || league.name || lid;
+      let msg = `🏆 *${roundName} — ${name}*\n\nThe bracket is live! Here are the matchups:\n\n`;
+      for (const { playerA, playerB } of (matchups || [])) {
+        msg += `⚔️ *${_bName(playerA)}* vs *${_bName(playerB)}*\n`;
+      }
+      msg += `\nGood luck everyone! 🎾`;
+
+      if (_wantsWA(waPrefs, 'bracketResults')) {
+        await sendWA(msg.trim(), env, league.whatsappGroupId);
+        console.log(`[bracket] kickoff WA sent for ${key}`);
+      }
+      await db.set(`notifications/bracketKickoff/${key}/waNotifiedAt`, Date.now());
+    }
+  }
+
   // ── Bracket result notifications → WhatsApp ───────────────────────────────
   if (waEnabled(env)) {
     const bracketNotifs = await db.get('notifications/bracketResult').then(v => v || {});

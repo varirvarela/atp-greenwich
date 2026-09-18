@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.2',
+    date:    '2026-09-17',
+    changes: [
+      'Bracket kickoff now appears in the activity feed with all first-round matchups.',
+    ],
+    adminChanges: [
+      '"📣 Announce" button on the bracket tab posts the bracket draw to the feed and WhatsApp.',
+    ],
+  },
+  {
     version: '1.17.1',
     date:    '2026-09-17',
     changes: [
