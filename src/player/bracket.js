@@ -282,9 +282,10 @@ function _renderBracket(el, bracket, allPlayers, myUid, league, leagueTeams = {}
       ${roundKeys.map(rk => {
         const round     = rounds[rk];
         const matchKeys = Object.keys(round.matches || {}).sort();
+        const roundDisplayName = matchKeys.length === 1 ? 'Final' : matchKeys.length === 2 ? 'Semifinals' : matchKeys.length >= 4 ? 'Quarterfinals' : (round.name || 'Round ' + (parseInt(rk.replace('r', ''), 10) + 1));
         return `
           <div class="t-label t-muted" style="margin:16px 0 8px;">
-            ${escHtml(round.name || 'Round ' + (parseInt(rk.replace('r', ''), 10) + 1))}
+            ${escHtml(roundDisplayName)}
           </div>
           ${matchKeys.map(mk => {
             const m  = round.matches[mk];

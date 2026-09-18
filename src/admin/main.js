@@ -3252,10 +3252,11 @@ function _renderBracketAdminView(bracket, allPlayers, sid, lid, league) {
   return roundKeys.map(rk => {
     const round     = rounds[rk];
     const matchKeys = Object.keys(round.matches || {}).sort();
+    const roundDisplayName = matchKeys.length === 1 ? 'Final' : matchKeys.length === 2 ? 'Semifinals' : matchKeys.length >= 4 ? 'Quarterfinals' : (round.name || rk);
     return `
       <div style="margin-bottom:16px;">
         <div style="font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;
-          color:var(--text3);margin-bottom:8px;">${escHtml(round.name || rk)}</div>
+          color:var(--text3);margin-bottom:8px;">${escHtml(roundDisplayName)}</div>
         ${matchKeys.map(mk => {
           const m  = round.matches[mk];
           const nA = m.playerA ? _slotName(m.playerA) : null;

@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.3',
+    date:    '2026-09-18',
+    changes: [
+      'Bracket round names now display correctly regardless of when the bracket was generated.',
+    ],
+    adminChanges: [
+      'Fix: 2-player brackets labelled "Semifinals" now correctly show as "Final" without needing a reset.',
+    ],
+  },
+  {
     version: '1.17.2',
     date:    '2026-09-17',
     changes: [
