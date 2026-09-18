@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.1',
+    date:    '2026-09-17',
+    changes: [
+      'Bracket results now appear in the activity feed with the round name, score, and next matchup.',
+    ],
+    adminChanges: [
+      'WhatsApp notification sent automatically (within 5 min) whenever a bracket result is saved.',
+    ],
+  },
+  {
     version: '1.17.0',
     date:    '2026-09-17',
     adminChanges: [

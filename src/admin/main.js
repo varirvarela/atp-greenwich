@@ -3319,24 +3319,44 @@ function _showBracketResultModal(sid, lid, rk, mk, bracket, allPlayers, onDone, 
     const winner = overlay.querySelector('#br-winner').value;
     const score  = overlay.querySelector('#br-score').value.trim();
     if (!winner) { toast('Select a winner', 'error'); return; }
-    const updates = {};
-    updates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/winner`] = winner;
-    updates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/score`]  = score;
-    // Advance winner to next round
+
+    const loser    = winner === match.playerA ? match.playerB : match.playerA;
     const roundIdx = parseInt(rk.replace('r', ''), 10);
     const matchIdx = parseInt(mk.replace('m', ''), 10);
     const nextRk   = 'r' + (roundIdx + 1);
     const nextMk   = 'm' + Math.floor(matchIdx / 2);
     const side     = matchIdx % 2 === 0 ? 'playerA' : 'playerB';
-    if (bracket.rounds[nextRk]) {
+    const isFinal  = !bracket.rounds[nextRk];
+
+    const updates = {};
+    updates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/winner`] = winner;
+    updates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/score`]  = score;
+    if (!isFinal) {
       updates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${nextRk}/matches/${nextMk}/${side}`] = winner;
     } else {
-      // Final completed — set champion
       updates[`seasons/${sid}/leagues/${lid}/bracket/champion`] = winner;
       updates[`seasons/${sid}/leagues/${lid}/bracket/status`]   = 'complete';
     }
     await dbMultiUpdate(updates);
-    writeActivity('bracket_advance', { sid, lid, playerId: winner?.uid || (typeof winner === 'string' ? winner : null), round: rk });
+
+    // Resolve next opponent (sibling match's winner, if already played)
+    const sibMk        = 'm' + (matchIdx % 2 === 0 ? matchIdx + 1 : matchIdx - 1);
+    const nextOpponent = !isFinal ? (bracket.rounds[rk]?.matches?.[sibMk]?.winner || null) : null;
+    const curRound     = bracket.rounds[rk]?.name  || rk;
+    const nextRound    = !isFinal ? (bracket.rounds[nextRk]?.name || nextRk) : null;
+
+    writeActivity('bracket_result', {
+      sid, lid, rk, mk,
+      roundName: curRound, winner, loser, score, isFinal, nextRoundName: nextRound, nextOpponent,
+    });
+
+    // Notification flag for Worker → WhatsApp (picked up within 5 min)
+    await dbSet(dbRef(`notifications/bracketResult/${sid}_${lid}_${rk}_${mk}`), {
+      sid, lid, rk, mk,
+      roundName: curRound, winner, loser, score, isFinal, nextRoundName: nextRound, nextOpponent,
+      createdAt: Date.now(),
+    });
+
     overlay.remove();
     toast('Result saved', 'success');
     onDone();

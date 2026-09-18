@@ -442,11 +442,31 @@ function _activityCard(item, allPlayers, myLeagues) {
         : `Open challenge${_leaguePart}${_whenPart}`;
       break;
     }
+    case 'bracket_result': {
+      const league  = myLeagues?.find(l => l.lid === item.lid);
+      icon      = '🏆';
+      avatarUid = item.winner;
+      const wName    = playerName(item.winner);
+      const lName    = playerName(item.loser);
+      const scoreStr = item.score ? ` · ${escHtml(item.score)}` : '';
+      const leagueStr = league ? ` · ${escHtml(league.name)}` : '';
+      title = `${escHtml(item.roundName || 'Bracket')}${leagueStr}`;
+      const resultLine = `${wName} def. ${lName}${scoreStr}`;
+      let nextLine = '';
+      if (item.isFinal) {
+        nextLine = `🥇 ${wName} wins${league ? ' ' + escHtml(league.name) : ''}!`;
+      } else if (item.nextRoundName) {
+        const opp = item.nextOpponent ? playerName(item.nextOpponent) : 'TBD';
+        nextLine = `Next → ${escHtml(item.nextRoundName)}: ${wName} vs ${opp}`;
+      }
+      sub = [resultLine, nextLine].filter(Boolean).join('<br>');
+      break;
+    }
     case 'bracket_advance': {
       icon = '🏆';
       avatarUid = item.playerId;
       title = `${playerName(item.playerId)} advanced in the bracket`;
-      sub = item.round ? `Round ${escHtml(item.round)}` : '';
+      sub = '';
       break;
     }
     case 'fixtures_released': {

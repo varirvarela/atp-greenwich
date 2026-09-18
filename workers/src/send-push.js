@@ -219,6 +219,45 @@ export async function runSendPush(env) {
     }
   }
 
+  // ── Bracket result notifications → WhatsApp ───────────────────────────────
+  if (waEnabled(env)) {
+    const bracketNotifs = await db.get('notifications/bracketResult').then(v => v || {});
+    for (const [key, notif] of Object.entries(bracketNotifs)) {
+      if (!notif?.createdAt || notif.waNotifiedAt) continue;
+      const { sid, lid, roundName, winner, loser, score, isFinal, nextRoundName, nextOpponent } = notif;
+      const league = seasons[sid]?.leagues?.[lid];
+      if (!league) { await db.set(`notifications/bracketResult/${key}/waNotifiedAt`, -1); continue; }
+
+      const isDoubles   = league.leagueMode === 'doubles_team';
+      const leagueTeams = league.teams || {};
+      const _bName = uid => {
+        if (!uid) return '?';
+        if (isDoubles) return leagueTeams[uid]?.name || uid;
+        const p = players[uid] || {};
+        return p.alias || p.name || uid;
+      };
+
+      const wName    = _bName(winner);
+      const lName    = _bName(loser);
+      const scoreStr = score ? ` ${score}` : '';
+      const leagueName = league.name || lid;
+
+      let msg;
+      if (isFinal) {
+        msg = `🏆 *FINAL — ${leagueName}*\n🎾 *${wName}* def. *${lName}*${scoreStr}\n\n🥇 *${wName}* wins the ${leagueName} title!`;
+      } else {
+        const oppName = nextOpponent ? _bName(nextOpponent) : 'TBD';
+        msg = `🏆 *${roundName} — ${leagueName}*\n🎾 *${wName}* def. *${lName}*${scoreStr}\n\nNext → ${nextRoundName}: *${wName}* vs *${oppName}*`;
+      }
+
+      if (_wantsWA(waPrefs, 'bracketResults')) {
+        await sendWA(msg, env, league.whatsappGroupId);
+        console.log(`[bracket] WA sent for ${key}`);
+      }
+      await db.set(`notifications/bracketResult/${key}/waNotifiedAt`, Date.now());
+    }
+  }
+
   // ── Pending deadline check ────────────────────────────────────────────────
   const dcReq = await db.get('config/deadlineCheckRequest');
   if (dcReq?.requestedAt && !dcReq.completedAt) {
