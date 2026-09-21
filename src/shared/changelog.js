@@ -10,6 +10,14 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.4',
+    date:    '2026-09-21',
+    changes: [],
+    adminChanges: [
+      'Fix: changing the point threshold now correctly updates the qualified player list for bracket generation.',
+    ],
+  },
+  {
     version: '1.17.3',
     date:    '2026-09-18',
     changes: [

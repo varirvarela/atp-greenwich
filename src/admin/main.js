@@ -2921,13 +2921,16 @@ async function renderBracketAdmin(el) {
     }
 
     // When group stage is closed, use the qualified flag set during close (not minMatches/minWins)
+    const qualifyPts = gsConfig.qualifyPoints ?? null;
     const qualified   = gsConfig.status === 'closed'
       ? isDoubles
         ? Object.entries(leagueTeams).filter(([, t]) => t.qualified === true).map(([id]) => ({
             uid: id, groupPoints: calculateGroupPoints(allMatches, id, pointsCfg),
           }))
         : table.filter(row => membersObj?.[row.uid]?.qualified === true)
-      : getQualifiedPlayers(table, cfg);
+      : qualifyPts != null
+        ? table.filter(row => (row.groupPoints ?? 0) >= qualifyPts)
+        : getQualifiedPlayers(table, cfg);
 
     // Seed by group points desc; tiebreak: wins desc, game diff desc
     qualified.sort((a, b) => {
