@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.5',
+    date:    '2026-09-23',
+    changes: [
+      'When a match date is set or changed, the group WhatsApp is notified.',
+    ],
+  },
+  {
     version: '1.17.4',
     date:    '2026-09-21',
     changes: [],

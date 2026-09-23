@@ -2549,8 +2549,17 @@ function _showEditProposalModal(match, myUid, sid, lid) {
     try {
       const val = overlay.querySelector('#edit-date').value;
       const scheduledAt = localInputToTs(val);
+      const now = Date.now();
+      const notifKey = `${sid}_${lid}_${match.mid}_${now}`;
       await dbMultiUpdate({
         [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/scheduledAt`]: scheduledAt,
+        [`notifications/matchScheduled/${notifKey}`]: {
+          sid, lid, mid: match.mid,
+          playerA: match.playerA, playerB: match.playerB,
+          scheduledAt, setBy: myUid,
+          isReschedule: !!(match.scheduledAt),
+          createdAt: now,
+        },
       });
       writeActivity('match_rescheduled', {
         sid, lid, mid: match.mid,
