@@ -219,6 +219,44 @@ export async function runSendPush(env) {
     }
   }
 
+  // ── Match scheduled/rescheduled → WhatsApp ───────────────────────────────
+  if (waEnabled(env)) {
+    const schedNotifs = await db.get('notifications/matchScheduled').then(v => v || {});
+    for (const [key, notif] of Object.entries(schedNotifs)) {
+      if (!notif?.createdAt || notif.waNotifiedAt) continue;
+      const { sid, lid, playerA, playerB, scheduledAt, setBy, isReschedule } = notif;
+      const league = seasons[sid]?.leagues?.[lid];
+      if (!league) { await db.set(`notifications/matchScheduled/${key}/waNotifiedAt`, -1); continue; }
+
+      const isDoubles   = league.leagueMode === 'doubles_team';
+      const leagueTeams = league.teams || {};
+      const _mName = uid => {
+        if (!uid) return '?';
+        if (isDoubles) return leagueTeams[uid]?.name || uid;
+        const p = players[uid] || {};
+        return p.alias || p.name || uid;
+      };
+
+      const nameA = _mName(playerA);
+      const nameB = _mName(playerB);
+      const leagueName = league.name || lid;
+      const dateStr = scheduledAt ? new Date(scheduledAt).toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York',
+      }) : '?';
+
+      const msg = isReschedule
+        ? `🔄 *${nameA} vs ${nameB}* rescheduled\n📅 ${dateStr} · ${leagueName}`
+        : `📅 *${nameA} vs ${nameB}* is on!\n${dateStr} · ${leagueName}`;
+
+      if (_wantsWA(waPrefs, 'matchScheduled')) {
+        await sendWA(msg, env, league.whatsappGroupId);
+        console.log(`[matchScheduled] WA sent for ${key}`);
+      }
+      await db.set(`notifications/matchScheduled/${key}/waNotifiedAt`, Date.now());
+    }
+  }
+
   // ── Bracket kickoff announcement → WhatsApp ───────────────────────────────
   if (waEnabled(env)) {
     const kickoffNotifs = await db.get('notifications/bracketKickoff').then(v => v || {});
