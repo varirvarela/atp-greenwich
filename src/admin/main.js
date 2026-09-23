@@ -2314,10 +2314,11 @@ async function renderMatches(el) {
   function filteredRows() {
     return allRows.filter(m => {
       if (activeLid !== 'all' && m.lid !== activeLid) return false;
-      if (activeStatus === 'open' && !['scheduled','result_pending','photo_pending'].includes(m.status)) return false;
+      if (activeStatus === 'open' && (m.forfeited || !['scheduled','result_pending','photo_pending','open_challenge'].includes(m.status))) return false;
       if (activeStatus === 'complete' && m.status !== 'confirmed') return false;
       if (activeStatus === 'disputed' && !m.disputed) return false;
       if (activeStatus === 'cancelled' && m.status !== 'cancelled') return false;
+      if (activeStatus === 'forfeited' && !m.forfeited) return false;
       if (searchPlayer) {
         const league = leagueMap[m.lid] || {};
         let names;
@@ -2356,6 +2357,7 @@ async function renderMatches(el) {
           <option value="open"     ${activeStatus==='open'?'selected':''}>Open</option>
           <option value="complete" ${activeStatus==='complete'?'selected':''}>Confirmed</option>
           <option value="disputed" ${activeStatus==='disputed'?'selected':''}>Disputed</option>
+          <option value="forfeited"${activeStatus==='forfeited'?'selected':''}>Forfeited</option>
           <option value="cancelled"${activeStatus==='cancelled'?'selected':''}>Cancelled</option>
         </select>
         <input id="filter-player" class="admin-input" placeholder="Search player…"
@@ -2366,14 +2368,17 @@ async function renderMatches(el) {
 
   function renderList() {
     const rows     = filteredRows();
-    const disputed = rows.filter(m => m.disputed);
-    const open     = rows.filter(m => !m.disputed && ['scheduled','result_pending','photo_pending'].includes(m.status));
-    const done     = rows.filter(m => m.status === 'confirmed');
-    const other    = rows.filter(m => !['scheduled','result_pending','photo_pending','confirmed'].includes(m.status) && !m.disputed);
+    const disputed  = rows.filter(m => m.disputed && !m.forfeited);
+    const forfeited = rows.filter(m => m.forfeited);
+    const open      = rows.filter(m => !m.disputed && !m.forfeited && ['scheduled','result_pending','photo_pending','open_challenge'].includes(m.status));
+    const done      = rows.filter(m => !m.forfeited && m.status === 'confirmed');
+    const other     = rows.filter(m => !['scheduled','result_pending','photo_pending','open_challenge','confirmed','cancelled'].includes(m.status) && !m.disputed && !m.forfeited);
+    const cancelled = rows.filter(m => m.status === 'cancelled' && !m.forfeited);
 
     const statsEl = el.querySelector('#match-stats');
     if (statsEl) statsEl.innerHTML = `
-      ${disputed.length ? `<span class="badge-admin badge-red">${disputed.length} disputed</span>` : ''}
+      ${disputed.length  ? `<span class="badge-admin badge-red">${disputed.length} disputed</span>` : ''}
+      ${forfeited.length ? `<span class="badge-admin badge-muted">${forfeited.length} forfeited</span>` : ''}
       <span class="badge-admin badge-orange">${open.length} open</span>
       ${done.length ? `<span class="badge-admin badge-green">${done.length} confirmed</span>` : ''}
     `;
@@ -2387,12 +2392,16 @@ async function renderMatches(el) {
     }
 
     listEl.innerHTML = `
-      ${disputed.length ? `<div class="section-group-label">Disputed (${disputed.length})</div>
+      ${disputed.length  ? `<div class="section-group-label">Disputed (${disputed.length})</div>
         ${disputed.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
       ${open.length ? `<div class="section-group-label">Open (${open.length})</div>
         ${open.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
       ${done.length ? `<div class="section-group-label">Confirmed (${done.length})</div>
         ${done.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
+      ${forfeited.length ? `<div class="section-group-label">Forfeited (${forfeited.length})</div>
+        ${forfeited.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
+      ${cancelled.length ? `<div class="section-group-label">Cancelled (${cancelled.length})</div>
+        ${cancelled.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
       ${other.length ? `<div class="section-group-label">Other (${other.length})</div>
         ${other.map(m => _matchCard(m, players, leagueMap)).join('')}` : ''}
     `;
@@ -2488,11 +2497,16 @@ function _matchCard(m, allPlayers, leagueMap = {}) {
     : (allPlayers[uid]?.alias || allPlayers[uid]?.name || uid);
   const pALabel = escHtml(slotName(m.playerA));
   const pBLabel = m.playerB ? escHtml(slotName(m.playerB)) : '<span style="color:var(--ace);">Open</span>';
-  const statusClass = {
-    scheduled: 'badge-muted', result_pending: 'badge-orange',
-    photo_pending: 'badge-orange', confirmed: 'badge-green', cancelled: 'badge-muted',
-    open_challenge: 'badge-orange',
-  }[m.status] || 'badge-muted';
+  const _statusLabel = {
+    scheduled: 'Scheduled', result_pending: 'Result Pending',
+    photo_pending: 'Photo Pending', confirmed: 'Confirmed',
+    cancelled: 'Cancelled', open_challenge: 'Open Challenge',
+  };
+  const statusLabel = m.forfeited ? 'Forfeited' : (_statusLabel[m.status] || m.status || '?');
+  const statusClass = m.forfeited ? 'badge-muted'
+    : ({ scheduled: 'badge-muted', result_pending: 'badge-orange', photo_pending: 'badge-orange',
+         confirmed: 'badge-green', cancelled: 'badge-muted', open_challenge: 'badge-orange',
+       }[m.status] || 'badge-muted');
   const score = m.result?.sets ? m.result.sets.map(s => `${s.a}-${s.b}`).join(' ') : '';
   const scheduledStr = m.scheduledAt ? fmtTime(m.scheduledAt) : null;
   return `
@@ -2512,7 +2526,7 @@ function _matchCard(m, allPlayers, leagueMap = {}) {
         </div>
       </div>
       <div class="admin-card-actions">
-        <span class="badge-admin ${statusClass}">${escHtml(m.status||'?')}</span>
+        <span class="badge-admin ${statusClass}">${escHtml(statusLabel)}</span>
         ${m.disputed ? `
           <button class="btn-admin btn-teal" data-action="dismiss-dispute"
             data-sid="${m.sid}" data-lid="${m.lid}" data-mid="${m.mid}">Dismiss</button>

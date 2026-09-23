@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.6',
+    date:    '2026-09-23',
+    changes: [],
+    adminChanges: [
+      'Matches: status badges now show human-readable labels (e.g. "Result Pending" instead of "result_pending").',
+      'Matches: open challenges and forfeited matches are now grouped and filtered correctly.',
+      'Matches: new "Forfeited" filter option added.',
+    ],
+  },
+  {
     version: '1.17.5',
     date:    '2026-09-23',
     changes: [
