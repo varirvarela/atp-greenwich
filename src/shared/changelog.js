@@ -10,6 +10,16 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.9',
+    date:    '2026-10-01',
+    adminChanges: [
+      'Admin match cards now show the winner name and score directly (including 10-game matches).',
+      'Bracket matches are now labelled in the matches panel.',
+      'Confirming a bracket match result from the matches panel now advances the bracket automatically.',
+      'Edit modal now shows the existing plain score for 10-game matches.',
+    ],
+  },
+  {
     version: '1.17.8',
     date:    '2026-10-01',
     changes: [

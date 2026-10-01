@@ -2507,13 +2507,16 @@ function _matchCard(m, allPlayers, leagueMap = {}) {
     : ({ scheduled: 'badge-muted', result_pending: 'badge-orange', photo_pending: 'badge-orange',
          confirmed: 'badge-green', cancelled: 'badge-muted', open_challenge: 'badge-orange',
        }[m.status] || 'badge-muted');
-  const score = m.result?.sets ? m.result.sets.map(s => `${s.a}-${s.b}`).join(' ') : '';
+  const score = m.result?.sets ? m.result.sets.map(s => `${s.a}-${s.b}`).join(' ') : (m.result?.score || '');
+  const winnerUid  = m.result?.winner;
+  const winnerName = winnerUid ? escHtml(slotName(winnerUid)) : null;
   const scheduledStr = m.scheduledAt ? fmtTime(m.scheduledAt) : null;
   return `
     <div class="admin-card" data-mid="${m.mid}">
       <div class="admin-card-body">
         <div class="admin-card-name">
           ${pALabel} vs ${pBLabel}
+          ${winnerName ? `<span style="font-size:12px;font-weight:400;color:var(--ace2);margin-left:8px;">🏆 ${winnerName}</span>` : ''}
         </div>
         <div class="admin-card-sub">
           ${escHtml(m.leagueName||'')}
@@ -2522,6 +2525,7 @@ function _matchCard(m, allPlayers, leagueMap = {}) {
           ${scheduledStr ? ' &middot; 📅 ' + scheduledStr : ''}
           ${m.disputed ? ' &middot; <span style="color:var(--ace3);">Disputed</span>' : ''}
           ${m.groupMatch ? ' &middot; <span style="color:#0a7a5e;">Group</span>' : ''}
+          ${m.bracketMatch ? ' &middot; <span style="color:var(--ace);">Bracket</span>' : ''}
           ${m.deadlinePenaltyApplied ? ' &middot; <span style="color:var(--ace3);font-weight:600;">⚠ Penalty</span>' : ''}
         </div>
       </div>
@@ -2627,6 +2631,12 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
       <div id="set-rows">${setsHtml(existingSets)}</div>
       <button type="button" id="btn-add-set" class="btn-admin btn-ghost"
         style="margin-top:4px;margin-bottom:14px;font-size:12px;">+ Add Set</button>
+
+      <div class="admin-input-group" style="margin-top:6px;">
+        <label class="admin-input-label">Plain score <span style="font-weight:400;color:var(--text3);">(10-game, or override)</span></label>
+        <input id="plain-score" class="admin-input" type="text" placeholder="e.g. 10-3 or 6-3 6-4"
+          value="${escHtml(match.result?.score || '')}">
+      </div>
 
       <div class="admin-input-group">
         <label class="admin-input-label">Winner</label>
@@ -2768,17 +2778,22 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
     }
     if (!winner) { toast('Could not determine winner — select manually', 'error'); saveBtn.disabled = false; saveBtn.textContent = 'Save Result'; return; }
 
+    const plainScore = (overlay.querySelector('#plain-score')?.value || '').trim();
+    const resultScore = sets.length ? sets : undefined;
+    const scoreStr   = sets.length ? sets.map(s => `${s.a}-${s.b}`).join(' ') : plainScore;
+
     const now     = Date.now();
     const base    = `seasons/${match.sid}/leagues/${match.lid}/matches/${match.mid}`;
     const loser   = winner === match.playerA ? match.playerB : match.playerA;
     const dlInput = overlay.querySelector('#match-deadline');
     const newDl   = dlInput ? localInputToTs(dlInput.value) : null;
+    const result  = { winner, loser, ...(resultScore ? { sets: resultScore } : {}), ...(scoreStr ? { score: scoreStr } : {}) };
     const updates = {
       [base + '/status']:                   'confirmed',
       [base + '/confirmedAt']:              match.confirmedAt || now,
       [base + '/adminOverride']:            true,
       [base + '/disputed']:                 null,
-      [base + '/result']:                   { winner, loser, sets },
+      [base + '/result']:                   result,
       [base + '/deadlinePenaltyApplied']:   null,
       ...(newDl ? { [base + '/deadline']: newDl } : {}),
     };
@@ -2790,6 +2805,35 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
       updates[`players/${match.playerB}/eloRating`] = eloResult.newB;
     }
     await dbMultiUpdate(updates);
+
+    // If this is a bracket match, also advance the bracket
+    if (match.bracketMatch && match.bracketRound && match.bracketMatchKey) {
+      const sid = match.sid, lid = match.lid;
+      const rk  = match.bracketRound, mk = match.bracketMatchKey;
+      const ri  = parseInt(rk.replace('r', ''), 10);
+      const mi  = parseInt(mk.replace('m', ''), 10);
+      const nextRk = 'r' + (ri + 1);
+      const nextMk = 'm' + Math.floor(mi / 2);
+      const side   = mi % 2 === 0 ? 'playerA' : 'playerB';
+      const bracketData = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
+      if (bracketData) {
+        const isFinal = !bracketData.rounds?.[nextRk];
+        const bracketUpdates = {
+          [`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/winner`]: winner,
+          [`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/score`]:  scoreStr,
+        };
+        if (!isFinal) {
+          bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${nextRk}/matches/${nextMk}/${side}`] = winner;
+        } else {
+          bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/champion`] = winner;
+          bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/status`]   = 'complete';
+        }
+        await dbMultiUpdate(bracketUpdates);
+        const updatedBracket = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
+        if (updatedBracket) await _createBracketMatchEntries(sid, lid, updatedBracket);
+      }
+    }
+
     overlay.remove();
     toast(isTeam ? 'Match saved' : 'Match saved — ELO updated', 'success');
     onDone();
