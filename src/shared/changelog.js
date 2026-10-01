@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.8',
+    date:    '2026-10-01',
+    changes: [
+      'Match photos are now compressed before upload (max 1200 px, ~200 KB) — faster uploads, less storage.',
+    ],
+  },
+  {
     version: '1.17.7',
     date:    '2026-10-01',
     changes: [

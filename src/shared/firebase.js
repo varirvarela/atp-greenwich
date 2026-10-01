@@ -83,15 +83,40 @@ function pRef(uid, path) {
 
 // ─── Storage helpers ─────────────────────────────────────────────────────────
 
+// Resize + compress an image file to JPEG before upload.
+// Limits longest dimension to 1200 px and quality to 0.78 (~150–300 KB typical).
+function _compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 1200;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width >= height) { height = Math.round(height * MAX / width); width = MAX; }
+        else                 { width  = Math.round(width  * MAX / height); height = MAX; }
+      }
+      const canvas  = document.createElement('canvas');
+      canvas.width  = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas toBlob failed')), 'image/jpeg', 0.78);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 // Upload a match confirmation photo.
 // file: File object from <input type="file">
 // matchId: the match document ID
 // Returns: public download URL string
 async function uploadMatchPhoto(matchId, file) {
-  const ext      = file.name.split('.').pop() || 'jpg';
-  const path     = DEV_ROOT + 'match-photos/' + matchId + '.' + ext;
+  const compressed = await _compressImage(file);
+  const path     = DEV_ROOT + 'match-photos/' + matchId + '.jpg';
   const photoRef = storageRef(storage, path);
-  const snap     = await uploadBytes(photoRef, file, { contentType: file.type || 'image/jpeg' });
+  const snap     = await uploadBytes(photoRef, compressed, { contentType: 'image/jpeg' });
   return getDownloadURL(snap.ref);
 }
 
