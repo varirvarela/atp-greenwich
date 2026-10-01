@@ -330,6 +330,8 @@ function _matchCard(match, myUid, allPlayers, leagueTeams = {}, myTeamId = null)
     : '';
   const groupBadge  = match.groupMatch
     ? `<span class="badge" style="font-size:10px;background:rgba(0,100,220,.10);color:#0054c4;">Group</span>`
+    : match.bracketMatch
+    ? `<span class="badge" style="font-size:10px;background:rgba(180,120,0,.12);color:#7a5000;">🏆 Bracket</span>`
     : '';
   const dateBadge   = (match.scheduledAt && (match.status === 'scheduled' || match.status === 'open_challenge'))
     ? `<span class="t-label t-muted" style="font-size:10px;">
@@ -347,7 +349,7 @@ function _matchCard(match, myUid, allPlayers, leagueTeams = {}, myTeamId = null)
   // Management buttons for non-group matches
   const isMyOpenChallenge = match.status === 'open_challenge' && match.playerA === effectiveMyId;
   const isMyProposal      = !match.groupMatch && match.proposedBy === myUid && match.status === 'scheduled';
-  const isTheirProposal   = !match.groupMatch && match.playerB === effectiveMyId && match.proposedBy !== myUid && match.status === 'scheduled';
+  const isTheirProposal   = !match.groupMatch && !match.bracketMatch && match.playerB === effectiveMyId && match.proposedBy !== myUid && match.status === 'scheduled';
   const canReschedule     = (match.playerA === effectiveMyId || match.playerB === effectiveMyId) && match.status === 'scheduled';
 
   const _rescheduleBtn = `<button class="btn btn-ghost btn-sm" data-action="edit-proposal" data-mid="${escHtml(match.mid)}"

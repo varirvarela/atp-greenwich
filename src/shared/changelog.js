@@ -10,6 +10,17 @@
 
 export const CHANGELOG = [
   {
+    version: '1.17.7',
+    date:    '2026-10-01',
+    changes: [
+      'Bracket matches now appear in the app for each player, labelled with a 🏆 Bracket badge.',
+    ],
+    adminChanges: [
+      'Bracket generation now creates match entries so players see their matchups in the app.',
+      'Saving a bracket result confirms the match entry and creates the next-round match automatically.',
+    ],
+  },
+  {
     version: '1.17.6',
     date:    '2026-09-23',
     changes: [],

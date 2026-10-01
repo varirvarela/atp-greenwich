@@ -2869,6 +2869,26 @@ function _showOpenChallengeAdminModal(match, allPlayers, onDone) {
 
 // ─── Bracket ──────────────────────────────────────────────────────────────────
 
+// Creates matches/ entries for every bracket round match that has both players
+// but no mid yet. Safe to call repeatedly — skips already-created entries.
+async function _createBracketMatchEntries(sid, lid, bracket) {
+  const midUpdates = {};
+  const now = Date.now();
+  for (const [rk, round] of Object.entries(bracket.rounds || {})) {
+    for (const [mk, m] of Object.entries(round.matches || {})) {
+      if (m.mid || m.score === 'BYE' || !m.playerA || !m.playerB) continue;
+      const ref = await dbPush(sRef(sid, lid, 'matches'), {
+        playerA: m.playerA, playerB: m.playerB,
+        status: 'scheduled', bracketMatch: true,
+        bracketRound: rk, bracketMatchKey: mk,
+        createdAt: now,
+      });
+      midUpdates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/mid`] = ref.key;
+    }
+  }
+  if (Object.keys(midUpdates).length) await dbMultiUpdate(midUpdates);
+}
+
 async function renderBracketAdmin(el) {
   const [allSeasonsRaw, allPlayers] = await Promise.all([
     dbGet(dbRef('seasons')),
@@ -2921,6 +2941,11 @@ async function renderBracketAdmin(el) {
       dbGet(sRef(activeSid, lid, 'bracket')),
       dbGet(sRef(activeSid, lid, 'scoringConfig')),
     ]);
+
+    // Auto-create any missing match entries (idempotent; fixes existing brackets)
+    if (bracketData?.status === 'active') {
+      await _createBracketMatchEntries(activeSid, lid, bracketData);
+    }
 
     const memberUids  = Object.keys(membersObj || {});
     const slots       = isDoubles ? Object.keys(leagueTeams) : memberUids;
@@ -2997,6 +3022,7 @@ async function renderBracketAdmin(el) {
         if (!confirm(`Generate bracket for ${qualified.length} ${isDoubles ? 'teams' : 'players'}?`)) return;
         const bracket = _generateBracket(qualified, players);
         await dbSet(sRef(activeSid, lid, 'bracket'), bracket);
+        await _createBracketMatchEntries(activeSid, lid, bracket);
         await dbSet(dbRef(`notifications/bracket/${activeSid}_${lid}`), { sid: activeSid, lid, createdAt: Date.now() });
         toast('Bracket generated!', 'success');
         loadAndRender();
@@ -3379,6 +3405,21 @@ function _showBracketResultModal(sid, lid, rk, mk, bracket, allPlayers, onDone, 
       updates[`seasons/${sid}/leagues/${lid}/bracket/status`]   = 'complete';
     }
     await dbMultiUpdate(updates);
+
+    // Confirm the corresponding matches/ entry if it exists
+    if (match.mid) {
+      await dbMultiUpdate({
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/status`]:     'confirmed',
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/result`]:     { winner, loser, score: score || '' },
+        [`seasons/${sid}/leagues/${lid}/matches/${match.mid}/confirmedAt`]: Date.now(),
+      });
+    }
+
+    // Create match entry for next round if both players now known
+    if (!isFinal) {
+      const updatedBracket = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
+      if (updatedBracket) await _createBracketMatchEntries(sid, lid, updatedBracket);
+    }
 
     // Resolve next opponent (sibling match's winner, if already played)
     const sibMk        = 'm' + (matchIdx % 2 === 0 ? matchIdx + 1 : matchIdx - 1);
