@@ -16,7 +16,7 @@ export const CHANGELOG = [
       'Admin match cards now show the winner name and score directly (including 10-game matches).',
       'Bracket matches are now labelled in the matches panel.',
       'Confirming a bracket match result from the matches panel now advances the bracket automatically.',
-      'Edit modal now shows the existing plain score for 10-game matches.',
+      'Edit modal now shows the existing score for 10-game matches (was showing object Object).',
     ],
   },
   {

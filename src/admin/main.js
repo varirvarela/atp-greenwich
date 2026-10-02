@@ -2489,6 +2489,14 @@ async function renderMatches(el) {
   renderList();
 }
 
+function _adminFormatScore(result) {
+  if (!result) return '';
+  if (result.sets?.length) return result.sets.map(s => `${s.a}-${s.b}`).join(' ');
+  if (result.score && typeof result.score === 'object') return `${result.score.a}–${result.score.b}`;
+  if (typeof result.score === 'string' && result.score) return result.score;
+  return '';
+}
+
 function _matchCard(m, allPlayers, leagueMap = {}) {
   const league  = leagueMap[m.lid] || {};
   const isTeam  = league.leagueMode === 'doubles_team';
@@ -2507,7 +2515,7 @@ function _matchCard(m, allPlayers, leagueMap = {}) {
     : ({ scheduled: 'badge-muted', result_pending: 'badge-orange', photo_pending: 'badge-orange',
          confirmed: 'badge-green', cancelled: 'badge-muted', open_challenge: 'badge-orange',
        }[m.status] || 'badge-muted');
-  const score = m.result?.sets ? m.result.sets.map(s => `${s.a}-${s.b}`).join(' ') : (m.result?.score || '');
+  const score = _adminFormatScore(m.result);
   const winnerUid  = m.result?.winner;
   const winnerName = winnerUid ? escHtml(slotName(winnerUid)) : null;
   const scheduledStr = m.scheduledAt ? fmtTime(m.scheduledAt) : null;
@@ -2635,7 +2643,7 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
       <div class="admin-input-group" style="margin-top:6px;">
         <label class="admin-input-label">Plain score <span style="font-weight:400;color:var(--text3);">(10-game, or override)</span></label>
         <input id="plain-score" class="admin-input" type="text" placeholder="e.g. 10-3 or 6-3 6-4"
-          value="${escHtml(match.result?.score || '')}">
+          value="${escHtml(_adminFormatScore(match.result))}">
       </div>
 
       <div class="admin-input-group">
