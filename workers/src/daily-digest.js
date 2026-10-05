@@ -46,9 +46,12 @@ export async function runDailyDigest(env, cron) {
       const memberUids = Object.keys(league.members || {});
       if (memberUids.length < 2) continue;
 
+      const inBracket = league.bracket?.status === 'active' || league.bracket?.status === 'complete';
       if (isMorning) {
-        const had = await _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled);
+        const had = await _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled, inBracket);
         if (had) anyMatchesToday = true;
+      } else if (inBracket) {
+        await _eveningBracket(db, env, sid, lid, league, matches, todayET, now, players, waPrefs);
       } else {
         await _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs);
       }
@@ -114,7 +117,7 @@ function _fmtMatchScore(result) {
   }).join(' ');
 }
 
-async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled) {
+async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now, players, waPrefs, pushEnabled, inBracket = false) {
   const flagPath = `config/dailyDigest/${todayET}/schedule/${lid}`;
   if (await db.get(flagPath)) {
     console.log(`  [${lid}] schedule already posted for ${todayET}`);
@@ -125,7 +128,7 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
     .filter(([, m]) => m.scheduledAt && m.status !== 'confirmed' && m.status !== 'cancelled'
       && etDateStr(m.scheduledAt) === todayET)
     .sort(([, a], [, b]) => a.scheduledAt - b.scheduledAt)
-    .map(([mid, m]) => ({ mid, playerA: m.playerA, playerB: m.playerB, scheduledAt: m.scheduledAt }));
+    .map(([mid, m]) => ({ mid, playerA: m.playerA, playerB: m.playerB, scheduledAt: m.scheduledAt, bracketMatch: m.bracketMatch || false }));
 
   if (todayMatches.length === 0) {
     console.log(`  [${lid}] no matches scheduled for ${todayET}`);
@@ -142,8 +145,9 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
   // WhatsApp morning schedule
   if (waEnabled(env) && waPrefs.dailySchedule !== false) {
     const leagueName = league.name || lid;
-    let msg = `📅 *Today's matches — ${leagueName}*\n`;
-    for (const { playerA, playerB, scheduledAt } of todayMatches) {
+    const header = inBracket ? `🏆 *Today's bracket matches — ${leagueName}*\n` : `📅 *Today's matches — ${leagueName}*\n`;
+    let msg = header;
+    for (const { playerA, playerB, scheduledAt, bracketMatch } of todayMatches) {
       const pA = players[playerA]?.alias || players[playerA]?.name || playerA;
       const pB = players[playerB]?.alias || players[playerB]?.name || playerB;
       const timeStr = scheduledAt
@@ -151,7 +155,8 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
             timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true,
           }).format(new Date(scheduledAt))
         : null;
-      msg += timeStr ? `• ${pA} vs ${pB} at ${timeStr}\n` : `• ${pA} vs ${pB}\n`;
+      const bracketTag = bracketMatch && !inBracket ? ' 🏆' : '';
+      msg += timeStr ? `• ${pA} vs ${pB} at ${timeStr}${bracketTag}\n` : `• ${pA} vs ${pB}${bracketTag}\n`;
     }
     const encIdx = Math.floor(now / 86400000) % ENCOURAGING_MESSAGES.length;
     const { text: encText } = ENCOURAGING_MESSAGES[encIdx];
@@ -209,6 +214,108 @@ async function _sendActivationNudge(db, env, todayET, now) {
   await sendWA(full, env, env.WHATSAPP_GROUP_ID);
   await db.set(flagPath, true);
   console.log(`Sent activation nudge #${idx} (spice ${spice}): "${text.slice(0, 60)}…"`);
+}
+
+async function _eveningBracket(db, env, sid, lid, league, matches, todayET, now, players, waPrefs) {
+  const flagPath = `config/dailyDigest/${todayET}/bracket/${lid}`;
+  if (await db.get(flagPath)) {
+    console.log(`  [${lid}] bracket update already posted for ${todayET}`);
+    return;
+  }
+
+  const bracket   = league.bracket || {};
+  const rounds    = bracket.rounds || {};
+  const cutoff    = now - 36 * 60 * 60 * 1000;
+  const matchVals = Object.values(matches);
+
+  const bracketConfirmedToday = matchVals.filter(
+    m => m.bracketMatch && m.status === 'confirmed' && m.confirmedAt && m.confirmedAt >= cutoff
+  );
+
+  if (bracketConfirmedToday.length === 0) {
+    console.log(`  [${lid}] no bracket matches confirmed in last 36h — skipping`);
+    return;
+  }
+
+  // Build round snapshots for feed
+  const roundSnapshots = {};
+  for (const [rk, round] of Object.entries(rounds)) {
+    const matchSnaps = {};
+    for (const [mk, bm] of Object.entries(round.matches || {})) {
+      matchSnaps[mk] = { playerA: bm.playerA || null, playerB: bm.playerB || null, winner: bm.winner || null, score: bm.score || null };
+    }
+    roundSnapshots[rk] = { name: round.name || rk, matches: matchSnaps };
+  }
+
+  // Pending bracket matches (scheduled, both players known, not yet confirmed)
+  const pendingMatches = Object.entries(matches)
+    .filter(([, m]) => m.bracketMatch && !['confirmed', 'cancelled'].includes(m.status) && m.playerA && m.playerB)
+    .map(([mid, m]) => ({ mid, playerA: m.playerA, playerB: m.playerB, scheduledAt: m.scheduledAt || null }));
+
+  await db.push('activity', {
+    type: 'bracket_standings', ts: now, sid, lid, dateET: todayET,
+    rounds: roundSnapshots,
+    champion: bracket.champion || null,
+    bracketComplete: bracket.status === 'complete',
+    pendingMatches,
+    matchesPlayedToday: bracketConfirmedToday.length,
+  });
+  await db.set(flagPath, true);
+  console.log(`  [${lid}] posted bracket_standings (${bracketConfirmedToday.length} match(es) today, ${pendingMatches.length} pending)`);
+
+  if (waEnabled(env) && waPrefs.eveningStandings !== false) {
+    const leagueName = league.name || lid;
+    const dateLabel  = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' }).format(new Date());
+    const getName    = uid => uid ? (players[uid]?.alias || players[uid]?.name || uid) : '?';
+
+    let msg = `🏆 *${leagueName} — Bracket (${dateLabel})*`;
+
+    // Results today
+    const todayResults = bracketConfirmedToday.filter(m => m.result?.winner);
+    if (todayResults.length > 0) {
+      msg += '\n';
+      for (const m of todayResults) {
+        const score = _fmtMatchScore(m.result);
+        msg += `\n🎾 *${getName(m.result.winner)}* def. ${getName(m.result.loser)}${score ? ` ${score}` : ''}`;
+      }
+    }
+
+    // Full bracket state by round
+    const sortedRounds = Object.entries(rounds).sort(([a], [b]) => a.localeCompare(b));
+    msg += '\n\n*Bracket:*';
+    for (const [, round] of sortedRounds) {
+      const matchList = Object.values(round.matches || {}).filter(bm => bm.score !== 'BYE');
+      if (!matchList.length) continue;
+      const roundLabel = matchList.length === 1 ? 'Final' : matchList.length === 2 ? 'Semifinals' : 'Quarterfinals';
+      msg += `\n_${roundLabel}_`;
+      for (const bm of matchList) {
+        const a = getName(bm.playerA);
+        const b = getName(bm.playerB || null);
+        if (bm.winner) {
+          const w = getName(bm.winner);
+          const scoreStr = bm.score && bm.score !== 'BYE' ? ` ${bm.score}` : '';
+          msg += `\n  ✅ *${w}* def. ${w === a ? b : a}${scoreStr}`;
+        } else if (bm.playerA && bm.playerB) {
+          msg += `\n  ⏳ ${a} vs ${b}`;
+        } else {
+          msg += `\n  ⏳ ${a} vs TBD`;
+        }
+      }
+    }
+
+    if (bracket.status === 'complete' && bracket.champion) {
+      msg += `\n\n🏆 *Champion: ${getName(bracket.champion)}*! 🎉`;
+    } else if (pendingMatches.length > 0) {
+      msg += '\n\n*Still to play:*';
+      for (const pm of pendingMatches) {
+        const a = getName(pm.playerA);
+        const b = getName(pm.playerB);
+        msg += `\n  📅 ${a} vs ${b}`;
+      }
+    }
+
+    await sendWA(msg.trim(), env, league.whatsappGroupId);
+  }
 }
 
 async function _eveningStandings(db, env, sid, lid, league, matches, memberUids, todayET, now, players, waPrefs) {

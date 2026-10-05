@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.18.1',
+    date:    '2026-10-05',
+    changes: [
+      'Daily digest now shows bracket state and pending matches instead of standings when a league is in playoff mode.',
+    ],
+  },
+  {
     version: '1.18.0',
     date:    '2026-10-04',
     changes: [

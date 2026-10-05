@@ -554,6 +554,68 @@ function _activityCard(item, allPlayers, myLeagues) {
       }).join('<br>');
       break;
     }
+    case 'bracket_standings': {
+      const league = myLeagues?.find(l => l.lid === item.lid);
+      icon = '🏆';
+      avatarUid = null;
+      title = `Bracket update${league ? ' · ' + escHtml(league.name) : ''}`;
+      const label = s => `<span style="font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--text3);text-transform:uppercase;">${s}</span>`;
+      const bparts = [];
+      // Results today
+      if (item.matchesPlayedToday > 0) {
+        const rounds = item.rounds || {};
+        const allSlots = Object.values(rounds).flatMap(r => Object.values(r.matches || {}));
+        const playedSlots = allSlots.filter(bm => bm.winner && bm.score !== 'BYE');
+        if (playedSlots.length) {
+          bparts.push(label('Results'));
+          for (const bm of playedSlots) {
+            const wName = playerName(bm.winner);
+            const other = bm.playerA === bm.winner ? bm.playerB : bm.playerA;
+            const lName = other ? playerName(other) : '?';
+            const score = bm.score || '';
+            bparts.push(`✅ <b>${escHtml(wName)}</b> def. ${escHtml(lName)}${score ? ' &nbsp;·&nbsp; ' + escHtml(score) : ''}`);
+          }
+        }
+        bparts.push('');
+      }
+      // Bracket by round
+      const rounds = item.rounds || {};
+      const sortedRks = Object.keys(rounds).sort();
+      bparts.push(label('Bracket'));
+      for (const rk of sortedRks) {
+        const round = rounds[rk];
+        const slots = Object.values(round.matches || {}).filter(bm => bm.score !== 'BYE');
+        if (!slots.length) continue;
+        const rl = slots.length === 1 ? 'Final' : slots.length === 2 ? 'Semifinals' : 'Quarterfinals';
+        bparts.push(`<span style="font-size:10px;color:var(--text3);">${rl}</span>`);
+        for (const bm of slots) {
+          const a = bm.playerA ? playerName(bm.playerA) : '?';
+          const b = bm.playerB ? playerName(bm.playerB) : 'TBD';
+          if (bm.winner) {
+            const w = playerName(bm.winner);
+            const other = bm.playerA === bm.winner ? b : a;
+            const sc = bm.score ? ' · ' + escHtml(bm.score) : '';
+            bparts.push(`&nbsp;&nbsp;✅ <b>${escHtml(w)}</b> def. ${escHtml(other)}${sc}`);
+          } else {
+            bparts.push(`&nbsp;&nbsp;⏳ ${escHtml(a)} vs ${escHtml(b)}`);
+          }
+        }
+      }
+      if (item.bracketComplete && item.champion) {
+        bparts.push('');
+        bparts.push(`🏆 <b>Champion: ${escHtml(playerName(item.champion))}</b>`);
+      } else if ((item.pendingMatches || []).length) {
+        bparts.push('');
+        bparts.push(label('Still to play'));
+        for (const pm of item.pendingMatches) {
+          const a = playerName(pm.playerA);
+          const b = playerName(pm.playerB);
+          bparts.push(`📅 ${escHtml(a)} vs ${escHtml(b)}`);
+        }
+      }
+      sub = bparts.join('<br>');
+      break;
+    }
     case 'standings_update': {
       const league = myLeagues?.find(l => l.lid === item.lid);
       icon = '📊';
