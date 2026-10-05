@@ -10,6 +10,13 @@
 
 export const CHANGELOG = [
   {
+    version: '1.18.0',
+    date:    '2026-10-04',
+    changes: [
+      'Bracket matches now advance automatically when results are confirmed — no more manual fixes needed.',
+    ],
+  },
+  {
     version: '1.17.9',
     date:    '2026-10-01',
     adminChanges: [

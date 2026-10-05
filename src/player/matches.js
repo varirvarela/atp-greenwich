@@ -2136,6 +2136,59 @@ async function _finalizeResult(match, resultData, photoUrl, format, sid, lid, al
     });
   }
 
+  // Advance bracket automatically when a bracket match is confirmed
+  if (match.bracketMatch && match.bracketRound && match.bracketMatchKey) {
+    try {
+      const rk       = match.bracketRound;
+      const mk       = match.bracketMatchKey;
+      const winner   = resultData.winner;
+      const scoreStr = resultData.sets
+        ? resultData.sets.map(s => `${s.a}-${s.b}`).join(' ')
+        : (resultData.score && typeof resultData.score === 'object'
+            ? `${resultData.score.a}–${resultData.score.b}`
+            : (resultData.score || ''));
+      const ri     = parseInt(rk.replace('r', ''), 10);
+      const mi     = parseInt(mk.replace('m', ''), 10);
+      const nextRk = 'r' + (ri + 1);
+      const nextMk = 'm' + Math.floor(mi / 2);
+      const side   = mi % 2 === 0 ? 'playerA' : 'playerB';
+
+      const bracketData = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
+      if (bracketData) {
+        const isFinal      = !bracketData.rounds?.[nextRk];
+        const bracketUpd   = {
+          [`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/winner`]: winner,
+          [`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/score`]:  scoreStr,
+        };
+        if (!isFinal) {
+          bracketUpd[`seasons/${sid}/leagues/${lid}/bracket/rounds/${nextRk}/matches/${nextMk}/${side}`] = winner;
+        } else {
+          bracketUpd[`seasons/${sid}/leagues/${lid}/bracket/champion`] = winner;
+          bracketUpd[`seasons/${sid}/leagues/${lid}/bracket/status`]   = 'complete';
+        }
+        await dbMultiUpdate(bracketUpd);
+
+        if (!isFinal) {
+          const updated  = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
+          const nextSlot = updated?.rounds?.[nextRk]?.matches?.[nextMk];
+          if (nextSlot && !nextSlot.mid && nextSlot.playerA && nextSlot.playerB) {
+            const newRef = await dbPush(sRef(sid, lid, 'matches'), {
+              playerA: nextSlot.playerA, playerB: nextSlot.playerB,
+              status: 'scheduled', bracketMatch: true,
+              bracketRound: nextRk, bracketMatchKey: nextMk,
+              createdAt: now,
+            });
+            await dbMultiUpdate({
+              [`seasons/${sid}/leagues/${lid}/bracket/rounds/${nextRk}/matches/${nextMk}/mid`]: newRef.key,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Bracket advance failed (non-fatal):', e);
+    }
+  }
+
   writeActivity('match_confirmed', { sid, lid, mid: match.mid, playerA: uidA, playerB: uidB, winnerId: resultData.winner });
 }
 
