@@ -1439,6 +1439,8 @@ async function renderLeagues(el) {
 
       const waId = el.querySelector(`#gs-waid-${lid}`)?.value.trim() || null;
       updates[`seasons/${sid}/leagues/${lid}/whatsappGroupId`] = waId;
+      updates[`seasons/${sid}/leagues/${lid}/waPrefs/morningPepTalk`] = el.querySelector(`#gs-wa-pep-${lid}`)?.checked ?? true;
+      updates[`seasons/${sid}/leagues/${lid}/waPrefs/dailySchedule`]  = el.querySelector(`#gs-wa-sched-${lid}`)?.checked ?? true;
 
       // Backfill deadline on all unconfirmed group matches so match cards stay in sync
       for (const [mid, m] of Object.entries(league.matches || {})) {
@@ -2111,6 +2113,18 @@ function _renderSeason(sid, season, allPlayers, leagueNotifications = {}) {
                     <label class="admin-input-label">WhatsApp Group ID (optional override)</label>
                     <input id="gs-waid-${lid}" class="admin-input" placeholder="Leave blank to disable WhatsApp for this league"
                       value="${league.whatsappGroupId || ''}"/>
+                  </div>
+                  <div style="grid-column:1/-1;display:flex;gap:16px;flex-wrap:wrap;margin-top:2px;">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                      <input type="checkbox" id="gs-wa-pep-${lid}"
+                        ${(league.waPrefs?.morningPepTalk ?? true) ? 'checked' : ''}/>
+                      WA: include pep talk in morning schedule
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+                      <input type="checkbox" id="gs-wa-sched-${lid}"
+                        ${(league.waPrefs?.dailySchedule ?? true) ? 'checked' : ''}/>
+                      WA: send morning schedule at all
+                    </label>
                   </div>
                 </div>
                 <div style="font-size:11px;font-weight:700;color:var(--text3);

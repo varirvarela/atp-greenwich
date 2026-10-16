@@ -143,7 +143,8 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
   // Return true so the caller knows at least one league had matches today
 
   // WhatsApp morning schedule
-  if (waEnabled(env) && waPrefs.dailySchedule !== false) {
+  const leagueWaPrefs = league.waPrefs || {};
+  if (waEnabled(env) && waPrefs.dailySchedule !== false && leagueWaPrefs.dailySchedule !== false) {
     const leagueName = league.name || lid;
     const header = inBracket ? `🏆 *Today's bracket matches — ${leagueName}*\n` : `📅 *Today's matches — ${leagueName}*\n`;
     let msg = header;
@@ -158,9 +159,11 @@ async function _morningSchedule(db, env, sid, lid, league, matches, todayET, now
       const bracketTag = bracketMatch && !inBracket ? ' 🏆' : '';
       msg += timeStr ? `• ${pA} vs ${pB} at ${timeStr}${bracketTag}\n` : `• ${pA} vs ${pB}${bracketTag}\n`;
     }
-    const encIdx = Math.floor(now / 86400000) % ENCOURAGING_MESSAGES.length;
-    const { text: encText } = ENCOURAGING_MESSAGES[encIdx];
-    msg += `\n_${encText}_`;
+    if (leagueWaPrefs.morningPepTalk !== false) {
+      const encIdx = Math.floor(now / 86400000) % ENCOURAGING_MESSAGES.length;
+      const { text: encText } = ENCOURAGING_MESSAGES[encIdx];
+      msg += `\n_${encText}_`;
+    }
     await sendWA(msg.trim(), env, league.whatsappGroupId);
   }
 
