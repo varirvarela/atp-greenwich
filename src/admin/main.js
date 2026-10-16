@@ -2949,7 +2949,17 @@ async function _createBracketMatchEntries(sid, lid, bracket) {
   const now = Date.now();
   for (const [rk, round] of Object.entries(bracket.rounds || {})) {
     for (const [mk, m] of Object.entries(round.matches || {})) {
-      if (m.mid || m.score === 'BYE' || !m.playerA || !m.playerB) continue;
+      if (m.score === 'BYE' || !m.playerA || !m.playerB) continue;
+      if (m.mid) {
+        // Slot already has a match — sync players in case bracket was corrected
+        const existing = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/matches/${m.mid}`));
+        if (existing && existing.status !== 'confirmed' &&
+            (existing.playerA !== m.playerA || existing.playerB !== m.playerB)) {
+          midUpdates[`seasons/${sid}/leagues/${lid}/matches/${m.mid}/playerA`] = m.playerA;
+          midUpdates[`seasons/${sid}/leagues/${lid}/matches/${m.mid}/playerB`] = m.playerB;
+        }
+        continue;
+      }
       const ref = await dbPush(sRef(sid, lid, 'matches'), {
         playerA: m.playerA, playerB: m.playerB,
         status: 'scheduled', bracketMatch: true,

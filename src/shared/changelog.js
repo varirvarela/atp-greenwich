@@ -10,13 +10,14 @@
 
 export const CHANGELOG = [
   {
-    version: '1.18.3',
+    version: '1.18.4',
     date:    '2026-10-15',
     changes: [],
     adminChanges: [
       'Fixed admin match edit modal getting stuck after confirming a result.',
       'Fixed ELO not updating when confirming matches from the admin panel.',
       'Added per-league WA controls in league settings: toggle morning schedule and pep talk independently.',
+      'Bracket advance now syncs players on existing match entries when a prior result is corrected.',
     ],
   },
   {
