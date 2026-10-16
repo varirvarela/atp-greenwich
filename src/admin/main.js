@@ -2812,7 +2812,7 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
     const result  = { winner, loser, ...(resultScore ? { sets: resultScore } : {}), ...(scoreStr ? { score: scoreStr } : {}) };
     const updates = {
       [base + '/status']:                   'confirmed',
-      [base + '/confirmedAt']:              match.confirmedAt || now,
+      [base + '/confirmedAt']:              now,
       [base + '/adminOverride']:            true,
       [base + '/disputed']:                 null,
       [base + '/result']:                   result,

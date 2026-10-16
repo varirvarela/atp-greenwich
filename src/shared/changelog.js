@@ -10,7 +10,7 @@
 
 export const CHANGELOG = [
   {
-    version: '1.18.4',
+    version: '1.18.5',
     date:    '2026-10-15',
     changes: [],
     adminChanges: [
@@ -18,6 +18,7 @@ export const CHANGELOG = [
       'Fixed ELO not updating when confirming matches from the admin panel.',
       'Added per-league WA controls in league settings: toggle morning schedule and pep talk independently.',
       'Bracket advance now syncs players on existing match entries when a prior result is corrected.',
+      'Admin result corrections now bubble to the top of the feed.',
     ],
   },
   {
