@@ -10,6 +10,15 @@
 
 export const CHANGELOG = [
   {
+    version: '1.18.2',
+    date:    '2026-10-15',
+    changes: [],
+    adminChanges: [
+      'Fixed admin match edit modal getting stuck after confirming a result.',
+      'Fixed ELO not updating when confirming matches from the admin panel.',
+    ],
+  },
+  {
     version: '1.18.1',
     date:    '2026-10-05',
     changes: [

@@ -2809,42 +2809,49 @@ function _showMatchEditModal(match, allPlayers, leagueMap = {}, onDone) {
       const pAData    = allPlayers[match.playerA] || {};
       const pBData    = allPlayers[match.playerB] || {};
       const eloResult = calculateElo(pAData.eloRating||1000, pBData.eloRating||1000, winner===match.playerA ? 'a' : 'b');
-      updates[`players/${match.playerA}/eloRating`] = eloResult.newA;
-      updates[`players/${match.playerB}/eloRating`] = eloResult.newB;
+      updates[`players/${match.playerA}/eloRating`] = eloResult.newRatingA;
+      updates[`players/${match.playerB}/eloRating`] = eloResult.newRatingB;
     }
-    await dbMultiUpdate(updates);
+    try {
+      await dbMultiUpdate(updates);
 
-    // If this is a bracket match, also advance the bracket
-    if (match.bracketMatch && match.bracketRound && match.bracketMatchKey) {
-      const sid = match.sid, lid = match.lid;
-      const rk  = match.bracketRound, mk = match.bracketMatchKey;
-      const ri  = parseInt(rk.replace('r', ''), 10);
-      const mi  = parseInt(mk.replace('m', ''), 10);
-      const nextRk = 'r' + (ri + 1);
-      const nextMk = 'm' + Math.floor(mi / 2);
-      const side   = mi % 2 === 0 ? 'playerA' : 'playerB';
-      const bracketData = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
-      if (bracketData) {
-        const isFinal = !bracketData.rounds?.[nextRk];
-        const bracketUpdates = {
-          [`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/winner`]: winner,
-          [`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/score`]:  scoreStr,
-        };
-        if (!isFinal) {
-          bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${nextRk}/matches/${nextMk}/${side}`] = winner;
-        } else {
-          bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/champion`] = winner;
-          bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/status`]   = 'complete';
+      // If this is a bracket match, also advance the bracket
+      if (match.bracketMatch && match.bracketRound && match.bracketMatchKey) {
+        const sid = match.sid, lid = match.lid;
+        const rk  = match.bracketRound, mk = match.bracketMatchKey;
+        const ri  = parseInt(rk.replace('r', ''), 10);
+        const mi  = parseInt(mk.replace('m', ''), 10);
+        const nextRk = 'r' + (ri + 1);
+        const nextMk = 'm' + Math.floor(mi / 2);
+        const side   = mi % 2 === 0 ? 'playerA' : 'playerB';
+        const bracketData = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
+        if (bracketData) {
+          const isFinal = !bracketData.rounds?.[nextRk];
+          const bracketUpdates = {
+            [`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/winner`]: winner,
+            [`seasons/${sid}/leagues/${lid}/bracket/rounds/${rk}/matches/${mk}/score`]:  scoreStr,
+          };
+          if (!isFinal) {
+            bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/rounds/${nextRk}/matches/${nextMk}/${side}`] = winner;
+          } else {
+            bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/champion`] = winner;
+            bracketUpdates[`seasons/${sid}/leagues/${lid}/bracket/status`]   = 'complete';
+          }
+          await dbMultiUpdate(bracketUpdates);
+          const updatedBracket = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
+          if (updatedBracket) await _createBracketMatchEntries(sid, lid, updatedBracket);
         }
-        await dbMultiUpdate(bracketUpdates);
-        const updatedBracket = await dbGet(dbRef(`seasons/${sid}/leagues/${lid}/bracket`));
-        if (updatedBracket) await _createBracketMatchEntries(sid, lid, updatedBracket);
       }
-    }
 
-    overlay.remove();
-    toast(isTeam ? 'Match saved' : 'Match saved — ELO updated', 'success');
-    onDone();
+      overlay.remove();
+      toast(isTeam ? 'Match saved' : 'Match saved — ELO updated', 'success');
+      onDone();
+    } catch (err) {
+      console.error('Save match error:', err);
+      toast('Save failed — check console', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Result';
+    }
   });
 }
 
